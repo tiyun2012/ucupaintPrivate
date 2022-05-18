@@ -10,7 +10,7 @@ class YPaintPreferences(AddonPreferences):
     # when defining this in a submodule of a python package.
     bl_idname = __package__
 
-    auto_save : EnumProperty(
+    auto_save = EnumProperty(
             name = 'Auto Save/Pack Images',
             description = 'Auto save/pack images when saving blend',
             items = (('FORCE_ALL', 'Force All Images', ''),
@@ -19,30 +19,30 @@ class YPaintPreferences(AddonPreferences):
                      ),
             default = 'ONLY_DIRTY')
 
-    default_new_image_size : IntProperty(
+    default_new_image_size = IntProperty(
             name = 'Default New Image Size',
             description = 'Default new image size',
             default = 1024,
             min=64, max=4096)
 
-    image_atlas_size : IntProperty(
+    image_atlas_size = IntProperty(
             name = 'Image Atlas Size',
             description = 'Image Atlas Size',
             default = 4096,
             min=2048, max=8192)
 
-    hdr_image_atlas_size : IntProperty(
+    hdr_image_atlas_size = IntProperty(
             name = 'HDR Image Atlas Size',
             description = 'HDR Image Atlas Size',
             default = 2048,
             min=1024, max=4096)
 
-    unique_image_atlas_per_yp : BoolProperty(
+    unique_image_atlas_per_yp = BoolProperty(
             name = 'Use unique Image Atlas per ' + get_addon_title() + ' tree',
             description = 'Try to use different image atlas per ' + get_addon_title() + ' tree',
             default = True)
 
-    developer_mode : BoolProperty(
+    developer_mode = BoolProperty(
             name = 'Developer Mode',
             description = 'Developer mode will shows several menu intented for developer only',
             default = False)

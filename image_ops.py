@@ -453,7 +453,7 @@ class YSaveAllBakedImages(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     # Define this to tell 'fileselect_add' that we want a directoy
-    directory : bpy.props.StringProperty(
+    directory = bpy.props.StringProperty(
         name="Outdir Path",
         description="Where I will save my stuff"
         # subtype='DIR_PATH' is not needed to specify the selection mode.
@@ -562,13 +562,13 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
     bl_label = "Save As Image"
     bl_options = {'REGISTER', 'UNDO'}
 
-    filter_glob : StringProperty(
+    filter_glob = StringProperty(
             default="*.bmp;*.rgb;*.png;*.jpg;*.jp2;*.tga;*.cin;*.dpx;*.exr;*.hdr;*.tif",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
             )
 
-    file_format : EnumProperty(
+    file_format = EnumProperty(
             name = 'File Format',
             items = (
                     ('BMP', 'BMP', '', 'IMAGE_DATA', 0),
@@ -590,9 +590,9 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
             )
 
     # File browser filter
-    filter_folder : BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
-    filter_image : BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
-    display_type : EnumProperty(
+    filter_folder = BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
+    filter_image = BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
+    display_type = EnumProperty(
             items = (('FILE_DEFAULTDISPLAY', 'Default', ''),
                      ('FILE_SHORTDISLPAY', 'Short List', ''),
                      ('FILE_LONGDISPLAY', 'Long List', ''),
@@ -600,23 +600,23 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
             default = 'FILE_IMGDISPLAY',
             options={'HIDDEN', 'SKIP_SAVE'})
 
-    copy : BoolProperty(name='Copy',
+    copy = BoolProperty(name='Copy',
             description = 'Create a new image file without modifying the current image in Blender',
             default = False)
 
-    relative : BoolProperty(name='Relative Path',
+    relative = BoolProperty(name='Relative Path',
             description = 'Select the file relative to the blend file',
             default = True)
 
-    color_mode : EnumProperty(
+    color_mode = EnumProperty(
             name = 'Color Mode',
             items = color_mode_items)
 
-    color_depth : EnumProperty(
+    color_depth = EnumProperty(
             name = 'Color Depth',
             items = color_depth_items)
 
-    tiff_codec : EnumProperty(
+    tiff_codec = EnumProperty(
             name = 'Compression',
             items = (
                 ('NONE', 'None', ''),
@@ -627,7 +627,7 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
             default = 'DEFLATE'
             )
 
-    exr_codec : EnumProperty(
+    exr_codec = EnumProperty(
             name = 'Codec',
             items = (
                 ('NONE', 'None', ''),
@@ -641,7 +641,7 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
             default = 'ZIP'
             )
 
-    jpeg2k_codec : EnumProperty(
+    jpeg2k_codec = EnumProperty(
             name = 'Codec',
             items = (
                 ('JP2', 'JP2', ''),
@@ -650,20 +650,20 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
             default = 'JP2'
             )
 
-    compression : IntProperty(name='Compression', default=15, min=0, max=100, subtype='PERCENTAGE')
-    quality : IntProperty(name='Quality', default=90, min=0, max=100, subtype='PERCENTAGE')
+    compression = IntProperty(name='Compression', default=15, min=0, max=100, subtype='PERCENTAGE')
+    quality = IntProperty(name='Quality', default=90, min=0, max=100, subtype='PERCENTAGE')
 
-    use_jpeg2k_cinema_48 : BoolProperty(name='Cinema 48', default=False)
-    use_jpeg2k_cinema_preset : BoolProperty(name='Cinema', default=False)
-    use_jpeg2k_ycc : BoolProperty(name='YCC', default=False)
-    use_cineon_log : BoolProperty(name='Log', default=False)
-    use_zbuffer : BoolProperty(name='Log', default=False)
+    use_jpeg2k_cinema_48 = BoolProperty(name='Cinema 48', default=False)
+    use_jpeg2k_cinema_preset = BoolProperty(name='Cinema', default=False)
+    use_jpeg2k_ycc = BoolProperty(name='YCC', default=False)
+    use_cineon_log = BoolProperty(name='Log', default=False)
+    use_zbuffer = BoolProperty(name='Log', default=False)
 
     # Option to unpack image if image is packed
-    unpack : BoolProperty(default=False)
+    unpack = BoolProperty(default=False)
 
     # Flag for float image
-    is_float : BoolProperty(default=False)
+    is_float = BoolProperty(default=False)
 
     @classmethod
     def poll(cls, context):
