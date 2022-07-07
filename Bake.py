@@ -335,6 +335,12 @@ class YTransferSomeLayerUV(bpy.types.Operator):
                 from_uv = uv_layers.get(self.from_uv_map)
                 uv_layers.remove(from_uv)
 
+        # Check height channel uv
+        height_ch = get_root_height_channel(yp)
+        if height_ch and height_ch.main_uv == self.from_uv_map:
+            height_ch.main_uv = self.uv_map
+            #height_ch.enable_smooth_bump = height_ch.enable_smooth_bump
+
         # Refresh mapping and stuff
         yp.active_layer_index = yp.active_layer_index
 
@@ -577,6 +583,185 @@ class YResizeImage(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class YBakeChannelToVcol(bpy.types.Operator):
+    """Bake Channel to Vertex Color"""
+    bl_idname = "node.y_bake_channel_to_vcol"
+    bl_label = "Bake channel to vertex color"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    vcol_name = StringProperty(
+            name='Target Vertex Color Name', 
+            description="Target vertex color name, it will create one if it doesn't exists",
+            default='')
+    
+    add_emission = BoolProperty(
+            name='Add Emission', 
+            description='Add the result with Emission Channel', 
+            default=False)
+
+    emission_multiplier = FloatProperty(
+            name='Emission Multiplier',
+            description='Emission multiplier so the emission can be more visible on the result',
+            default=1.0, min=0.0)
+
+    #force_first_index : BoolProperty(
+    #        name='Force First Index', 
+    #        description="Force target vertex color to be first on the vertex colors list (useful for exporting)",
+    #        default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node() and context.object.type == 'MESH'
+
+    def invoke(self, context, event):
+        node = get_active_ypaint_node()
+        yp = node.node_tree.yp
+        channel = yp.channels[yp.active_channel_index]
+
+        self.vcol_name = 'Baked ' + channel.name
+
+        # Add emission will only availabel if it's on Color channel
+        self.show_emission_option = False
+        if channel.name == 'Color':
+            for ch in yp.channels:
+                if ch.name == 'Emission':
+                    self.show_emission_option = True
+
+        return context.window_manager.invoke_props_dialog(self, width=320)
+
+    def check(self, context):
+        return True
+
+    def draw(self, context):
+        if is_greater_than_280():
+            row = self.layout.split(factor=0.4)
+        else: row = self.layout.split(percentage=0.4)
+        col = row.column(align=True)
+
+        col.label(text='Target Vertex Color:')
+        if self.show_emission_option:
+            col.label(text='Add Emission:')
+            col.label(text='Emission Multiplier:')
+        #col.label(text='Force First Index:')
+
+        col = row.column(align=True)
+
+        col.prop(self, 'vcol_name', text='')
+        if self.show_emission_option:
+            col.prop(self, 'add_emission', text='')
+            col.prop(self, 'emission_multiplier', text='')
+        #col.prop(self, 'force_first_index', text='')
+
+    def execute(self, context):
+        obj = context.object
+        mat = get_active_material()
+        node = get_active_ypaint_node()
+        tree = node.node_tree
+        yp = tree.yp
+        channel = yp.channels[yp.active_channel_index]
+
+        if not is_greater_than_292():
+            self.report({'ERROR'}, "You need at least Blender 2.92 to use this feature!")
+            return {'CANCELLED'}
+
+        #if not obj.mode != 'OBJECT':
+        #    self.report({'ERROR'}, "This operator only works on object mode!")
+        #    return {'CANCELLED'}
+
+        book = remember_before_bake(yp)
+
+        # Get all objects using material
+        objs = [obj]
+        meshes = [obj.data]
+        if mat.users > 1:
+            # Emptying the lists again in case active object is problematic
+            objs = []
+            meshes = []
+            for ob in get_scene_objects():
+                if ob.type != 'MESH': continue
+                if is_greater_than_280() and ob.hide_viewport: continue
+                if ob.hide_render: continue
+                if len(get_uv_layers(ob)) == 0: continue
+                if len(ob.data.polygons) == 0: continue
+                for i, m in enumerate(ob.data.materials):
+                    if m == mat:
+                        ob.active_material_index = i
+                        if ob not in objs and ob.data not in meshes:
+                            objs.append(ob)
+                            meshes.append(ob.data)
+
+        # Check vertex color
+        for ob in objs:
+            vcols = get_vertex_colors(ob)
+            vcol = vcols.get(self.vcol_name)
+
+            # Set index to first so new vcol will copy their value
+            if len(vcols) > 0:
+                first_vcol = vcols[0]
+                set_active_vertex_color(ob, first_vcol)
+
+            if not vcol:
+                try: 
+                    vcol = new_vertex_color(ob, self.vcol_name)
+                except Exception as e: print(e)
+
+            # NOTE: This implementation is unfinished since this only works if target vertex color is newly created
+            #if self.force_first_index:
+            #    first_vcol = vcols[0]
+            #    if first_vcol != vcol:
+            #        # Rename vcol
+            #        vcol.name = '___TEMP____'
+            #        first_vcol_name = first_vcol.name
+            #        first_vcol.name = self.vcol_name
+            #        vcol.name = first_vcol_name
+            #        vcol = first_vcol
+
+            set_active_vertex_color(ob, vcol)
+
+        # Multi materials setup
+        ori_mat_ids = {}
+        for ob in objs:
+
+            # Need to assign all polygon to active material if there are multiple materials
+            ori_mat_ids[ob.name] = []
+
+            if len(ob.data.materials) > 1:
+
+                active_mat_id = [i for i, m in enumerate(ob.data.materials) if m == mat][0]
+                for p in ob.data.polygons:
+
+                    # Set active mat
+                    ori_mat_ids[ob.name].append(p.material_index)
+                    p.material_index = active_mat_id
+
+        # Prepare bake settings
+        prepare_bake_settings(book, objs, yp, disable_problematic_modifiers=True, force_use_cpu=True, bake_target='VERTEX_COLORS')
+
+        # Get extra channel
+        extra_channel = None
+        if self.show_emission_option and self.add_emission:
+            extra_channel = yp.channels.get('Emission')
+
+        # Bake channel
+        bake_to_vcol(mat, node, channel, extra_channel, self.emission_multiplier)
+        #return {'FINISHED'}
+
+        # Recover bake settings
+        recover_bake_settings(book, yp)
+
+        for ob in objs:
+            # Recover material index
+            if ori_mat_ids[ob.name]:
+                for i, p in enumerate(ob.data.polygons):
+                    if ori_mat_ids[ob.name][i] != p.material_index:
+                        p.material_index = ori_mat_ids[ob.name][i]
+
+        # Remap vertex color indices
+        #for ob in objs:
+        #    pass
+
+        return {'FINISHED'}
+
 class YBakeChannels(bpy.types.Operator):
     """Bake Channels to Image(s)"""
     bl_idname = "node.y_bake_channels"
@@ -730,9 +915,7 @@ class YBakeChannels(bpy.types.Operator):
         if BL28_HACK and height_ch:
         #if is_greater_than_280():
 
-            if len(yp.uvs) > MAX_VERTEX_DATA - len(obj.data.vertex_colors) and is_greater_than_280():
-                #self.report({'ERROR'}, "Maximum vertex colors reached! Need at least " + str(len(uvs)) + " vertex color(s)!")
-                #return {'CANCELLED'}
+            if len(yp.uvs) > MAX_VERTEX_DATA - len(get_vertex_colors(obj)) and is_greater_than_280() and not is_greater_than_320():
                 self.report({'WARNING'}, "Maximum vertex colors reached! Need at least " + str(len(yp.uvs)) + " vertex color(s) to bake proper normal!")
             else:
                 tangent_sign_calculation = True
@@ -2549,6 +2732,7 @@ def register():
     bpy.utils.register_class(YTransferLayerUV)
     bpy.utils.register_class(YResizeImage)
     bpy.utils.register_class(YBakeChannels)
+    bpy.utils.register_class(YBakeChannelToVcol)
     bpy.utils.register_class(YMergeLayer)
     bpy.utils.register_class(YMergeMask)
     bpy.utils.register_class(YBakeTempImage)
@@ -2559,6 +2743,7 @@ def unregister():
     bpy.utils.unregister_class(YTransferLayerUV)
     bpy.utils.unregister_class(YResizeImage)
     bpy.utils.unregister_class(YBakeChannels)
+    bpy.utils.unregister_class(YBakeChannelToVcol)
     bpy.utils.unregister_class(YMergeLayer)
     bpy.utils.unregister_class(YMergeMask)
     bpy.utils.unregister_class(YBakeTempImage)

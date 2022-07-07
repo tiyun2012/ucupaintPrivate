@@ -1509,7 +1509,7 @@ class YFixMissingUV(bpy.types.Operator):
         height_ch = get_root_height_channel(yp)
         if height_ch and height_ch.main_uv == self.source_uv_name:
             height_ch.main_uv = self.target_uv_name
-            height_ch.enable_smooth_bump = height_ch.enable_smooth_bump
+            #height_ch.enable_smooth_bump = height_ch.enable_smooth_bump
 
         return {'FINISHED'}
 
@@ -1713,8 +1713,27 @@ class YDuplicateYPNodes(bpy.types.Operator):
         return {'FINISHED'}
 
 def fix_missing_vcol(obj, name, src):
-    vcol = obj.data.vertex_colors.new(name=name)
+
+    ref_vcol = None
+
+    if is_greater_than_320():
+        # Try to get reference vcol
+        mat = get_active_material()
+        objs = get_all_objects_with_same_materials(mat)
+
+        for o in objs:
+            ovcols = get_vertex_colors(o)
+            if name in ovcols:
+                ref_vcol = ovcols.get(name)
+                break
+
+    if ref_vcol: vcol = new_vertex_color(obj, name, ref_vcol.data_type, ref_vcol.domain)
+    else: vcol = new_vertex_color(obj, name)
+
     set_source_vcol_name(src, name)
+
+    # Default recovered missing vcol is black
+    set_obj_vertex_colors(obj, vcol.name, (0.0, 0.0, 0.0, 0.0))
 
 def fix_missing_img(name, src, is_mask=False):
     img = bpy.data.images.new(name=name, 
@@ -1741,6 +1760,32 @@ class YFixMissingData(bpy.types.Operator):
         obj = context.object
         mat = obj.active_material
 
+        # Fix missing sources
+        for i, layer in reversed(list(enumerate(yp.layers))):
+            src = get_layer_source(layer)
+
+            # Delete layer if source is not found
+            if not src:
+                Layer.remove_layer(yp, i)
+                continue
+
+            # Delete mask if mask source is not found
+            for j, mask in reversed(list(enumerate(layer.masks))):
+                mask_src = get_mask_source(mask)
+                if not mask_src:
+                    Mask.remove_mask(layer, mask, obj)
+
+            # Disable override if channel source is not found
+            for ch in layer.channels:
+                ch_src = get_channel_source(ch, layer)
+                if not ch_src:
+                    if ch.override: ch.override = False
+                    if ch.override_1: ch.override_1 = False
+
+        if yp.active_layer_index > len(yp.layers):
+            yp.active_layer_index = len(yp.layers)-1
+
+        # Fix missing images
         for layer in yp.layers:
             
             if layer.type in {'IMAGE' , 'VCOL'}:
@@ -1748,7 +1793,6 @@ class YFixMissingData(bpy.types.Operator):
 
                 if layer.type == 'IMAGE' and not src.image:
                     fix_missing_img(layer.name, src, False)
-
 
             for mask in layer.masks:
                 if mask.type in {'IMAGE' , 'VCOL'}:
@@ -1775,6 +1819,8 @@ class YFixMissingData(bpy.types.Operator):
 
         # Fix missing vcols
         need_color_id_vcol = False
+        ref_vcol = None
+
         for obj in objs:
             for layer in yp.layers:
                 src = get_layer_source(layer)
@@ -2379,8 +2425,8 @@ def update_layer_index(self, context):
     #yp.need_temp_uv_refresh = False
 
     # Update active vertex color
-    if vcol and obj.data.vertex_colors.active != vcol:
-        obj.data.vertex_colors.active = vcol
+    if vcol and get_active_vertex_color(obj) != vcol:
+        set_active_vertex_color(obj, vcol)
 
     #if obj.type == 'MESH':
         # Update tangent sign if height channel and tangent sign hack is enabled
@@ -3266,6 +3312,10 @@ class YPaintMaterialProps(bpy.types.PropertyGroup):
 class YPaintTimer(bpy.types.PropertyGroup):
     time = StringProperty(default='')
 
+class YPaintWMProps(bpy.types.PropertyGroup):
+    clipboard_tree = StringProperty(default='')
+    clipboard_layer = StringProperty(default='')
+
 class YPaintSceneProps(bpy.types.PropertyGroup):
     last_object = StringProperty(default='')
     last_mode = StringProperty(default='')
@@ -3391,6 +3441,7 @@ def register():
     bpy.utils.register_class(YPaint)
     bpy.utils.register_class(YPaintMaterialProps)
     bpy.utils.register_class(YPaintTimer)
+    bpy.utils.register_class(YPaintWMProps)
     bpy.utils.register_class(YPaintSceneProps)
     bpy.utils.register_class(YPaintObjectProps)
     #bpy.utils.register_class(YPaintMeshProps)
@@ -3399,6 +3450,7 @@ def register():
     bpy.types.ShaderNodeTree.yp = PointerProperty(type=YPaint)
     bpy.types.Material.yp = PointerProperty(type=YPaintMaterialProps)
     bpy.types.WindowManager.yptimer = PointerProperty(type=YPaintTimer)
+    bpy.types.WindowManager.ypprops = PointerProperty(type=YPaintWMProps)
     bpy.types.Scene.yp = PointerProperty(type=YPaintSceneProps)
     bpy.types.Object.yp = PointerProperty(type=YPaintObjectProps)
     #bpy.types.Mesh.yp = PointerProperty(type=YPaintMeshProps)
@@ -3436,6 +3488,7 @@ def unregister():
     bpy.utils.unregister_class(YPaint)
     bpy.utils.unregister_class(YPaintMaterialProps)
     bpy.utils.unregister_class(YPaintTimer)
+    bpy.utils.unregister_class(YPaintWMProps)
     bpy.utils.unregister_class(YPaintSceneProps)
     bpy.utils.unregister_class(YPaintObjectProps)
     #bpy.utils.unregister_class(YPaintMeshProps)

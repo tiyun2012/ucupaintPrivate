@@ -429,6 +429,7 @@ def enable_layer_source_tree(layer, rearrange=False):
         source_ref = layer_tree.nodes.get(layer.source)
         linear_ref = layer_tree.nodes.get(layer.linear)
         flip_y_ref = layer_tree.nodes.get(layer.flip_y)
+        divider_alpha_ref = layer_tree.nodes.get(layer.divider_alpha)
         #mapping_ref = layer_tree.nodes.get(layer.mapping)
 
         # Create source tree
@@ -452,6 +453,10 @@ def enable_layer_source_tree(layer, rearrange=False):
             flip_y = new_node(source_tree, layer, 'flip_y', flip_y_ref.bl_idname)
             copy_node_props(flip_y_ref, flip_y)
 
+        if divider_alpha_ref:
+            divider_alpha = new_node(source_tree, layer, 'divider_alpha', divider_alpha_ref.bl_idname)
+            copy_node_props(divider_alpha_ref, divider_alpha)
+
         #mapping = new_node(source_tree, layer, 'mapping', 'ShaderNodeMapping')
         #if mapping_ref: copy_node_props(mapping_ref, mapping)
 
@@ -472,6 +477,7 @@ def enable_layer_source_tree(layer, rearrange=False):
         layer_tree.nodes.remove(source_ref)
         if linear_ref: layer_tree.nodes.remove(linear_ref)
         if flip_y_ref: layer_tree.nodes.remove(flip_y_ref)
+        if divider_alpha_ref: layer_tree.nodes.remove(divider_alpha_ref)
         #if mapping_ref: layer_tree.nodes.remove(mapping_ref)
     
         # Bring modifiers to source tree
@@ -582,6 +588,7 @@ def disable_layer_source_tree(layer, rearrange=True, force=False):
             source_ref = source_group.node_tree.nodes.get(layer.source)
             linear_ref = source_group.node_tree.nodes.get(layer.linear)
             flip_y_ref = source_group.node_tree.nodes.get(layer.flip_y)
+            divider_alpha_ref = source_group.node_tree.nodes.get(layer.divider_alpha)
             #mapping_ref = source_group.node_tree.nodes.get(layer.mapping)
 
             # Create new source
@@ -595,6 +602,10 @@ def disable_layer_source_tree(layer, rearrange=True, force=False):
             if flip_y_ref:
                 flip_y = new_node(layer_tree, layer, 'flip_y', flip_y_ref.bl_idname)
                 copy_node_props(flip_y_ref, flip_y)
+
+            if divider_alpha_ref:
+                divider_alpha = new_node(layer_tree, layer, 'divider_alpha', divider_alpha_ref.bl_idname)
+                copy_node_props(divider_alpha_ref, divider_alpha)
 
             #mapping = new_node(layer_tree, layer, 'mapping', 'ShaderNodeMapping')
             #if mapping_ref: copy_node_props(mapping_ref, mapping)
@@ -1001,8 +1012,9 @@ def remove_tangent_sign_vcol(obj, uv_name):
                 objs.append(ob)
 
     for ob in objs:
-        vcol = ob.data.vertex_colors.get(TANGENT_SIGN_PREFIX + uv_name)
-        if vcol: vcol = ob.data.vertex_colors.remove(vcol)
+        vcols = get_vertex_colors(ob)
+        vcol = vcols.get(TANGENT_SIGN_PREFIX + uv_name)
+        if vcol: vcol = vcols.remove(vcol)
 
 def recover_tangent_sign_process(ori_obj, ori_mode, ori_selects):
 
@@ -1051,9 +1063,11 @@ def actual_refresh_tangent_sign_vcol(obj, uv_name):
         uv_layers.active = uv_layer
 
         # Get vertex color
-        vcol = obj.data.vertex_colors.get(TANGENT_SIGN_PREFIX + uv_name)
+        vcols = get_vertex_colors(obj)
+        vcol = vcols.get(TANGENT_SIGN_PREFIX + uv_name)
         if not vcol:
-            try: vcol = obj.data.vertex_colors.new(name=TANGENT_SIGN_PREFIX + uv_name)
+            try: 
+                vcol = new_vertex_color(obj, TANGENT_SIGN_PREFIX + uv_name)
             except: 
                 recover_tangent_sign_process(ori_obj, ori_mode, ori_selects)
                 return None
@@ -1072,7 +1086,7 @@ def actual_refresh_tangent_sign_vcol(obj, uv_name):
             obj.data.calc_tangents()
 
             # Get vcol again after calculate tangent to prevent error
-            vcol = obj.data.vertex_colors.get(TANGENT_SIGN_PREFIX + uv_name)
+            vcol = vcols.get(TANGENT_SIGN_PREFIX + uv_name)
 
             # Set tangent sign to vertex color
             i = 0
@@ -1135,7 +1149,8 @@ def actual_refresh_tangent_sign_vcol(obj, uv_name):
             temp_ob.data.calc_tangents()
 
             # Set tangent sign to vertex color
-            temp_vcol = temp_ob.data.vertex_colors.get(TANGENT_SIGN_PREFIX + uv_name)
+            tvcols = get_vertex_colors(temp_ob)
+            temp_vcol = tvcols.get(TANGENT_SIGN_PREFIX + uv_name)
             i = 0
             for poly in temp_ob.data.polygons:
                 for idx in poly.loop_indices:
@@ -1217,7 +1232,8 @@ def actual_refresh_tangent_sign_vcol(obj, uv_name):
         recover_tangent_sign_process(ori_obj, ori_mode, ori_selects)
 
         # Get vcol again to make sure the data is consistent
-        vcol = obj.data.vertex_colors.get(TANGENT_SIGN_PREFIX + uv_name)
+        vcols = get_vertex_colors(obj)
+        vcol = vcols.get(TANGENT_SIGN_PREFIX + uv_name)
 
         return vcol
 

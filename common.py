@@ -355,7 +355,17 @@ math_method_items = (
     ("DIVIDE", "Divide", ""),
     ("POWER", "Power", ""),
     ("LOGARITHM", "Logarithm", ""),
-)
+    )
+
+vcol_domain_items = (
+    ('POINT', 'Vertex', ''),
+    ('CORNER', 'Face Corner', ''),
+    )
+
+vcol_data_type_items = (
+    ('FLOAT_COLOR', 'Color', ''),
+    ('BYTE_COLOR', 'Byte Color', ''),
+    )
 
 TEXCOORD_IO_PREFIX = 'Texcoord '
 PARALLAX_MIX_PREFIX = 'Parallax Mix '
@@ -401,6 +411,11 @@ def is_greater_than_292():
 
 def is_greater_than_300():
     if bpy.app.version >= (3, 00, 0):
+        return True
+    return False
+
+def is_greater_than_320():
+    if bpy.app.version >= (3, 2, 0):
         return True
     return False
 
@@ -934,9 +949,11 @@ def is_vcol_being_used(tree, vcol_name, exception_node=None):
 
     return False
 
-def remove_node(tree, entity, prop, remove_data=True, obj=None, parent=None):
+def remove_node(tree, entity, prop, remove_data=True, parent=None):
     if not hasattr(entity, prop): return
+    if not tree: return
     #if prop not in entity: return
+
 
     scene = bpy.context.scene
     node = tree.nodes.get(getattr(entity, prop))
@@ -951,6 +968,7 @@ def remove_node(tree, entity, prop, remove_data=True, obj=None, parent=None):
         if remove_data:
             # Remove image data if the node is the only user
             if node.bl_idname == 'ShaderNodeTexImage':
+
                 image = node.image
                 if image:
                     if ((scene.tool_settings.image_paint.canvas == image and image.users == 2) or
@@ -958,29 +976,37 @@ def remove_node(tree, entity, prop, remove_data=True, obj=None, parent=None):
                         bpy.data.images.remove(image)
 
             elif node.bl_idname == 'ShaderNodeGroup':
+
                 if node.node_tree and node.node_tree.users == 1:
                     remove_tree_inside_tree(node.node_tree)
                     bpy.data.node_groups.remove(node.node_tree)
 
-            elif (obj and obj.type == 'MESH' #and obj.active_material and obj.active_material.users == 1
-                    and hasattr(entity, 'type') and entity.type == 'VCOL' and node.bl_idname == get_vcol_bl_idname()):
-                mat = obj.active_material
-                vcol_name = get_source_vcol_name(node)
-                vcol = obj.data.vertex_colors.get(vcol_name)
+            elif hasattr(entity, 'type') and entity.type == 'VCOL' and node.bl_idname == get_vcol_bl_idname():
+                
+                mat = get_active_material()
+                objs = get_all_objects_with_same_materials(mat)
 
-                if vcol:
+                for obj in objs:
+                    if obj.type != 'MESH': continue
 
-                    # Check if vcol is being used somewhere else
-                    obs = get_all_objects_with_same_materials(mat, True)
-                    for o in obs:
-                        other_users_found = False
-                        for m in o.data.materials:
-                            if m.node_tree and is_vcol_being_used(m.node_tree, vcol_name, node):
-                                other_users_found = True
-                                break
-                        if not other_users_found:
-                            vc = o.data.vertex_colors.get(vcol_name)
-                            if vc: o.data.vertex_colors.remove(vc)
+                    mat = obj.active_material
+                    vcol_name = get_source_vcol_name(node)
+                    vcols = get_vertex_colors(obj)
+                    vcol = vcols.get(vcol_name)
+
+                    if vcol:
+
+                        # Check if vcol is being used somewhere else
+                        obs = get_all_objects_with_same_materials(mat, True)
+                        for o in obs:
+                            other_users_found = False
+                            for m in o.data.materials:
+                                if m.node_tree and is_vcol_being_used(m.node_tree, vcol_name, node):
+                                    other_users_found = True
+                                    break
+                            if not other_users_found:
+                                vc = vcols.get(vcol_name)
+                                if vc: vcols.remove(vc)
 
         # Remove the node itself
         #print('Node ' + prop + ' from ' + str(entity) + ' removed!')
@@ -1086,7 +1112,7 @@ def get_layer_ids_with_specific_segment(yp, segment):
     for i, layer in enumerate(yp.layers):
         if layer.type == 'IMAGE':
             source = get_layer_source(layer)
-            if (source.image and source.image.yia.is_image_atlas and 
+            if (source and source.image and source.image.yia.is_image_atlas and 
                 any([s for s in source.image.yia.segments if s == segment]) and segment.name == layer.segment_name):
                     ids.append(i)
 
@@ -1581,13 +1607,18 @@ def get_mask_tree(mask, ignore_group=False):
     if ignore_group:
         return layer_tree
 
-    group_node = layer_tree.nodes.get(mask.group_node)
+    if layer_tree:
+        group_node = layer_tree.nodes.get(mask.group_node)
+    else: return None
+
     if not group_node or group_node.type != 'GROUP': return layer_tree
     return group_node.node_tree
 
 def get_mask_source(mask):
     tree = get_mask_tree(mask)
-    return tree.nodes.get(mask.source)
+    if tree:
+        return tree.nodes.get(mask.source)
+    return None
 
 def get_mask_mapping(mask):
     tree = get_mask_tree(mask, True)
@@ -1625,6 +1656,7 @@ def get_channel_source(ch, layer=None, tree=None):
     return None
 
 def get_channel_source_1(ch, layer=None, tree=None):
+    yp = ch.id_data.yp
     if not layer:
         m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', ch.path_from_id())
         if not m : return None
@@ -1695,14 +1727,15 @@ def change_vcol_name(yp, obj, src, new_name, layer=None):
 
     # Get vertex color from node
     ori_name = get_source_vcol_name(src)
-    vcol = obj.data.vertex_colors.get(get_source_vcol_name(src))
+    vcols = get_vertex_colors(obj)
+    vcol = vcols.get(get_source_vcol_name(src))
 
     if layer:
         # Temporarily change its name to temp name so it won't affect unique name
         vcol.name = '___TEMP___'
 
         # Get unique name
-        layer.name = get_unique_name(new_name, obj.data.vertex_colors) 
+        layer.name = get_unique_name(new_name, vcols) 
         new_name = layer.name
 
     # Set vertex color name and attribute node
@@ -1713,7 +1746,8 @@ def change_vcol_name(yp, obj, src, new_name, layer=None):
     objs = get_all_objects_with_same_materials(obj.active_material, True)
     for o in objs:
         if o != obj:
-            other_v = o.data.vertex_colors.get(ori_name)
+            ovcols = get_vertex_colors(o)
+            other_v = ovcols.get(ori_name)
             if other_v: other_v.name = new_name
 
     # Also replace vertex color name on another entity
@@ -1784,17 +1818,18 @@ def set_obj_vertex_colors(obj, vcol_name, color):
         ori_mode = obj.mode
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    vcol = obj.data.vertex_colors.get(vcol_name)
+    vcols = get_vertex_colors(obj)
+    vcol = vcols.get(vcol_name)
     if not vcol: return
 
-    if is_greater_than_280():
-        col = color
-    else: 
-        col = (color[0], color[1], color[2])
+    ones = numpy.ones(len(vcol.data))
 
-    for poly in obj.data.polygons:
-        for loop_index in poly.loop_indices:
-            vcol.data[loop_index].color = col
+    if is_greater_than_280():
+        vcol.data.foreach_set( "color",
+            numpy.array((color[0] * ones, color[1] * ones, color[2] * ones, color[3] * ones)).T.ravel())
+    else:
+        vcol.data.foreach_set( "color",
+            numpy.array((color[0] * ones, color[1] * ones, color[2] * ones)).T.ravel())
 
     if ori_mode:
         bpy.ops.object.mode_set(mode=ori_mode)
@@ -3349,6 +3384,41 @@ def get_uv_layers(obj):
 
     return uv_layers
 
+def get_vertex_colors(obj):
+    if not obj or obj.type != 'MESH': return []
+
+    if not is_greater_than_320():
+        return obj.data.vertex_colors
+
+    return obj.data.color_attributes
+
+def get_active_vertex_color(obj):
+    if not obj or obj.type != 'MESH': return None
+
+    if not is_greater_than_320():
+        return obj.data.vertex_colors.active
+
+    return obj.data.color_attributes.active_color
+
+def set_active_vertex_color(obj, vcol):
+    try:
+        if is_greater_than_320():
+            obj.data.color_attributes.active_color = vcol
+            # HACK: Baking to vertex color still use active legacy vertex colors data
+            if hasattr(obj.data, 'vertex_colors'):
+                v = obj.data.vertex_colors.get(vcol.name)
+                obj.data.vertex_colors.active = v
+        else: obj.data.vertex_colors.active = vcol
+    except Exception as e: print(e)
+
+def new_vertex_color(obj, name, data_type='BYTE_COLOR', domain='CORNER'):
+    if not obj or obj.type != 'MESH': return None
+
+    if not is_greater_than_320():
+        return obj.data.vertex_colors.new(name=name)
+
+    return obj.data.color_attributes.new(name, data_type, domain)
+
 def get_default_uv_name(obj, yp=None):
     uv_layers = get_uv_layers(obj)
     uv_name = ''
@@ -3388,6 +3458,8 @@ def get_active_image_and_stuffs(obj, yp):
     src_of_img = None
     mapping = None
 
+    vcols = get_vertex_colors(obj)
+
     layer = yp.layers[yp.active_layer_index]
     tree = get_tree(layer)
 
@@ -3403,11 +3475,11 @@ def get_active_image_and_stuffs(obj, yp):
             elif mask.type == 'VCOL' and obj.type == 'MESH':
                 # If source is empty, still try to get vertex color
                 if get_source_vcol_name(source) == '':
-                    vcol = obj.data.vertex_colors.get(mask.name)
+                    vcol = vcols.get(mask.name)
                     if vcol: set_source_vcol_name(source, vcol.name)
-                else: vcol = obj.data.vertex_colors.get(get_source_vcol_name(source))
+                else: vcol = vcols.get(get_source_vcol_name(source))
             elif mask.type == 'COLOR_ID' and obj.type == 'MESH':
-                vcol = obj.data.vertex_colors.get(COLOR_ID_VCOL_NAME)
+                vcol = vcols.get(COLOR_ID_VCOL_NAME)
 
     for ch in layer.channels:
         if ch.active_edit and ch.override and ch.override_type != 'DEFAULT':
@@ -3421,14 +3493,15 @@ def get_active_image_and_stuffs(obj, yp):
                 mapping = get_layer_mapping(layer)
 
             elif ch.override_type == 'VCOL' and obj.type == 'MESH':
-                vcol = obj.data.vertex_colors.get(get_source_vcol_name(source))
+                vcol = vcols.get(get_source_vcol_name(source))
 
         if ch.active_edit_1 and ch.override_1 and ch.override_1_type != 'DEFAULT':
             source = tree.nodes.get(ch.source_1)
 
-            if ch.override_type == 'IMAGE':
+            if ch.override_1_type == 'IMAGE':
                 uv_name = layer.uv_name
-                image = source.image
+                source_1 = get_channel_source_1(ch)
+                image = source_1.image
                 src_of_img = ch
                 mapping = get_layer_mapping(layer)
 
@@ -3441,7 +3514,7 @@ def get_active_image_and_stuffs(obj, yp):
 
     if not vcol and layer.type == 'VCOL' and obj.type == 'MESH':
         source = get_layer_source(layer, tree)
-        vcol = obj.data.vertex_colors.get(get_source_vcol_name(source))
+        vcol = vcols.get(get_source_vcol_name(source))
 
     return image, uv_name, src_of_img, mapping, vcol
 
@@ -3646,7 +3719,8 @@ def get_source_vcol_name(src):
 
 def get_vcol_from_source(obj, src):
     name = get_source_vcol_name(src)
-    return obj.data.vertex_colors.get(name)
+    vcols = get_vertex_colors(obj)
+    return vcols.get(name)
 
 def get_layer_vcol(obj, layer):
     src = get_layer_source(layer)
@@ -3654,12 +3728,13 @@ def get_layer_vcol(obj, layer):
 
 def check_colorid_vcol(objs):
     for o in objs:
-        if COLOR_ID_VCOL_NAME not in o.data.vertex_colors:
+        vcols = get_vertex_colors(o)
+        if COLOR_ID_VCOL_NAME not in vcols:
             try:
-                vcol = o.data.vertex_colors.new(name=COLOR_ID_VCOL_NAME)
+                vcol = new_vertex_color(o, COLOR_ID_VCOL_NAME)
                 set_obj_vertex_colors(o, vcol.name, (0.0, 0.0, 0.0, 1.0))
-                #o.data.vertex_colors.active = vcol
-            except: pass
+                #set_active_vertex_color(o, vcol)
+            except Exception as e: print(e)
 
 def is_colorid_already_being_used(yp, color_id):
     for l in yp.layers:
