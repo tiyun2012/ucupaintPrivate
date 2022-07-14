@@ -303,16 +303,6 @@ def create_new_yp_channel(group_tree, name, channel_type, non_color=True, enable
     # Get last index
     last_index = len(yp.channels)-1
 
-    # Get IO index
-    #io_index = last_index
-    #for ch in yp.channels:
-    #    if ch.type == 'RGB' and ch.enable_alpha:
-    #        io_index += 1
-    #    if ch.type == 'NORMAL' and ch.enable_parallax:
-    #        io_index += 1
-
-    #channel.io_index = io_index
-
     # Link new channel
     create_yp_channel_nodes(group_tree, channel, last_index)
 
@@ -328,14 +318,6 @@ def create_new_yp_channel(group_tree, name, channel_type, non_color=True, enable
     yp.halt_reconnect = False
 
     return channel
-
-#def update_quick_setup_type(self, context):
-#    if self.type == 'PRINCIPLED':
-#        self.roughness = True
-#        self.normal = True
-#    elif self.type == 'DIFFUSE':
-#        self.roughness = False
-#        self.normal = False
 
 def get_closest_bsdf(node, valid_types=['BSDF_PRINCIPLED', 'BSDF_DIFFUSE', 'EMISSION']):
     for inp in node.inputs:
@@ -1343,33 +1325,8 @@ class YRemoveYPaintChannel(bpy.types.Operator):
         for mod in channel.modifiers:
             Modifier.delete_modifier_nodes(group_tree, mod)
 
-        # Remove channel from tree
-        #inputs.remove(inputs[channel.io_index])
-        #outputs.remove(outputs[channel.io_index])
-
-        #shift = 1
-
-        #if channel.type == 'RGB' and channel.enable_alpha:
-        #    inputs.remove(inputs[channel.io_index])
-        #    outputs.remove(outputs[channel.io_index])
-
-        #    shift = 2
-
-        #if channel.type == 'NORMAL' and channel.enable_parallax:
-        #    inputs.remove(inputs[channel.io_index])
-        #    outputs.remove(outputs[channel.io_index])
-
-        #    shift = 2
-
-        ## Shift IO index
-        #for ch in yp.channels:
-        #    if ch.io_index > channel.io_index:
-        #        ch.io_index -= shift
-
         # Remove channel
         yp.channels.remove(channel_idx)
-        #ypup.channels.remove(channel_idx)
-        #yp.temp_channels.remove(channel_idx)
 
         # Check consistency of mask multiply nodes
         for t in yp.layers:
@@ -2133,7 +2090,7 @@ def update_channel_name(self, context):
         group_tree.outputs[self.io_index+shift].name = self.name + io_suffix['ALPHA']
         shift += 1
 
-    if self.type == 'NORMAL': # and self.enable_parallax:
+    if self.type == 'NORMAL':
         group_tree.inputs[self.io_index+shift].name = self.name + io_suffix['HEIGHT']
         group_tree.outputs[self.io_index+shift].name = self.name + io_suffix['HEIGHT']
 
@@ -2213,26 +2170,34 @@ def get_preview(mat, output=None, advanced=False):
 
     return preview
 
+def set_srgb_view_transform():
+    scene = bpy.context.scene
+
+    # Set view transform to srgb
+    if scene.yp.ori_view_transform == '':
+        scene.yp.ori_view_transform = scene.view_settings.view_transform
+        if is_greater_than_280():
+            scene.view_settings.view_transform = 'Standard'
+        else: scene.view_settings.view_transform = 'Default'
+
 def remove_preview(mat, advanced=False):
     nodes = mat.node_tree.nodes
     preview = nodes.get(EMISSION_VIEWER)
+    scene = bpy.context.scene
 
     if preview: 
         simple_remove_node(mat.node_tree, preview)
-        #if advanced:
-        #    # Recover blend method
-        #    if is_greater_than_280():
-        #        mat.blend_method = mat.yp.ori_blend_method
-        #    else:
-        #        mat.game_settings.alpha_blend = mat.yp.ori_blend_method
-        #    mat.yp.ori_blend_method = ''
-
         bsdf = nodes.get(mat.yp.ori_bsdf)
         output = get_active_mat_output_node(mat.node_tree)
         mat.yp.ori_bsdf = ''
 
         if bsdf and output:
             mat.node_tree.links.new(bsdf.outputs[0], output.inputs[0])
+
+        # Recover view transform
+        if scene.yp.ori_view_transform != '':
+            scene.view_settings.view_transform = scene.yp.ori_view_transform
+            scene.yp.ori_view_transform = ''
 
 #def update_merge_mask_mode(self, context):
 #    if not self.layer_preview_mode:
@@ -2287,13 +2252,17 @@ def update_layer_preview_mode(self, context):
         layer = yp.layers[yp.active_layer_index]
     except: return
 
-    if yp.preview_mode:
+    if yp.preview_mode and yp.layer_preview_mode:
         yp.preview_mode = False
 
     check_all_channel_ios(yp)
 
     # Get preview node
     if self.layer_preview_mode:
+
+        # Set view transform to srgb so color picker won't pick wrong color
+        set_srgb_view_transform()
+
         output = get_active_mat_output_node(mat.node_tree)
         if self.layer_preview_mode_type in {'ALPHA', 'SPECIFIC_MASK'}:
             preview = get_preview(mat, output, False)
@@ -2326,7 +2295,6 @@ def update_layer_preview_mode(self, context):
 
     else:
         remove_preview(mat)
-        #reconnect_yp_nodes(tree)
 
 def update_preview_mode(self, context):
     try:
@@ -2338,10 +2306,13 @@ def update_preview_mode(self, context):
         channel = yp.channels[index]
     except: return
 
-    if yp.layer_preview_mode:
+    if yp.layer_preview_mode and yp.preview_mode:
         yp.layer_preview_mode = False
 
     if self.preview_mode:
+        # Set view transform to srgb so color picker won't pick wrong color
+        set_srgb_view_transform()
+
         output = get_active_mat_output_node(mat.node_tree)
         preview = get_preview(mat, output)
         if not preview: return
@@ -2378,8 +2349,21 @@ def update_active_yp_channel(self, context):
     if yp.use_baked:
         baked = tree.nodes.get(ch.baked)
         if baked and baked.image:
-            update_image_editor_image(context, baked.image)
-            context.scene.tool_settings.image_paint.canvas = baked.image
+            baked_image = baked.image
+            if ch.type == 'NORMAL':
+
+                baked_disp = tree.nodes.get(ch.baked_disp)
+                baked_normal_overlay = tree.nodes.get(ch.baked_normal_overlay)
+
+                if baked_disp:
+                    cur_image = get_first_image_editor_image(context)
+                    if cur_image == baked.image and baked_disp.image:
+                        baked_image = baked_disp.image
+                    elif cur_image == baked_disp.image and baked_normal_overlay and baked_normal_overlay.image:
+                        baked_image = baked_normal_overlay.image
+
+            update_image_editor_image(context, baked_image)
+            context.scene.tool_settings.image_paint.canvas = baked_image
         else:
             update_image_editor_image(context, None)
             context.scene.tool_settings.image_paint.canvas = None
@@ -2544,17 +2528,6 @@ def update_channel_parallax(self, context):
 
     # Update channel io
     check_all_channel_ios(yp)
-
-    #if self.enable_parallax:
-
-    #    # Get alpha index
-    #    #index = self.io_index+1
-    #    io_name = self.name + io_suffix['HEIGHT']
-
-    #    # Set node default_value
-    #    node = get_active_ypaint_node()
-    #    #node.inputs[io_name].default_value = 0.5
-    #    node.inputs[io_name].default_value = 0.0
 
 #def update_displacement_height_ratio(self, context):
 #
@@ -3320,6 +3293,7 @@ class YPaintWMProps(bpy.types.PropertyGroup):
 class YPaintSceneProps(bpy.types.PropertyGroup):
     last_object = StringProperty(default='')
     last_mode = StringProperty(default='')
+    ori_view_transform = StringProperty(default='')
 
 class YPaintObjectProps(bpy.types.PropertyGroup):
     ori_subsurf_render_levels = IntProperty(default=1)

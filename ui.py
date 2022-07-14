@@ -796,10 +796,6 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                 else:
                     brow.label(text='', icon_value=lib.custom_icons['texture'].icon_id)
 
-                #brow = bcol.row(align=True)
-                #brow.label(text='', icon_value=lib.get_icon('input'))
-                #brow.label(text='Displacement:')
-                #brow.prop(channel, 'enable_parallax', text='')
                 if chui.expand_smooth_bump_settings and channel.enable_smooth_bump:
                     brow = bcol.row(align=True)
                     brow.label(text='', icon='BLANK1')
@@ -813,8 +809,6 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                     brow.prop_search(channel, "main_uv", context.object.data, "uv_layers", text='', icon='GROUP_UVS')
 
                 brow = bcol.row(align=True)
-                #brow.active = channel.enable_parallax and (
-                #        not yp.use_baked or not channel.enable_subdiv_setup or channel.subdiv_adaptive)
                 brow.active = not yp.use_baked or ((not channel.enable_subdiv_setup or channel.subdiv_adaptive) and not yp.enable_baked_outside)
 
                 #if custom_icon_enable:
@@ -828,10 +822,11 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                 #brow.label(text='', icon_value=lib.get_icon('input'))
 
                 brow.label(text='Parallax:')
-                #if channel.enable_parallax:
                 if not chui.expand_parallax_settings and channel.enable_parallax:
-                    brow.prop(channel, 'parallax_num_of_layers', text='')
+                    if ypup.parallax_without_baked:
+                        brow.prop(channel, 'parallax_num_of_layers', text='')
                     brow.prop(channel, 'baked_parallax_num_of_layers', text='')
+                brow.active = ypup.parallax_without_baked or yp.use_baked
                 brow.prop(channel, 'enable_parallax', text='')
 
                 if chui.expand_parallax_settings:
@@ -840,15 +835,18 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                     brow.label(text='', icon='BLANK1')
                     bbox = brow.box()
                     bbcol = bbox.column() #align=True)
-                    bbcol.active = channel.enable_parallax and (
+                    bbcol.active = is_parallax_enabled(channel) and (
                             not yp.use_baked or not channel.enable_subdiv_setup or channel.subdiv_adaptive)
 
-                    brow = bbcol.row(align=True)
-                    brow.label(text='Steps:')
-                    brow.prop(channel, 'parallax_num_of_layers', text='')
+                    if ypup.parallax_without_baked:
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Steps:')
+                        brow.prop(channel, 'parallax_num_of_layers', text='')
 
                     brow = bbcol.row(align=True)
-                    brow.label(text='Steps (Baked):')
+                    if ypup.parallax_without_baked:
+                        brow.label(text='Steps (Baked):')
+                    else: brow.label(text='Steps:')
                     brow.prop(channel, 'baked_parallax_num_of_layers', text='')
 
                     brow = bbcol.row(align=True)
@@ -865,40 +863,6 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                     brow = bbcol.row(align=True)
                     brow.label(text='Main UV: ' + channel.main_uv)
 
-                #if channel.enable_parallax:
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Height Ratio:')
-                    #brow.prop(channel, 'displacement_height_ratio', text='')
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Reference Plane:')
-                    #brow.prop(channel, 'displacement_ref_plane', text='')
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Number of Samples:')
-                    #brow.prop(channel, 'parallax_num_of_layers', text='')
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Linear Samples:')
-                    #brow.prop(channel, 'parallax_num_of_linear_samples', text='')
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Binary Samples:')
-                    #brow.prop(channel, 'parallax_num_of_binary_samples', text='')
-
-                    #brow = bcol.row(align=True)
-                    #brow.label(text='', icon_value=lib.get_icon('input'))
-                    #brow.label(text='Rim Hack:')
-                    #if channel.parallax_rim_hack:
-                    #    brow.prop(channel, 'parallax_rim_hack_hardness', text='')
-                    #brow.prop(channel, 'parallax_rim_hack', text='')
-
                 brow = bcol.row(align=True)
                 #brow.label(text='', icon_value=lib.get_icon('input'))
 
@@ -907,8 +871,6 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                     icon_value = lib.custom_icons["uncollapsed_input"].icon_id
                 else: icon_value = lib.custom_icons["collapsed_input"].icon_id
                 brow.prop(chui, 'expand_subdiv_settings', text='', emboss=False, icon_value=icon_value)
-                #else:
-                #    brow.prop(chui, 'expand_subdiv_settings', text='', emboss=True, icon_value=lib.get_icon('input'))
 
                 brow.label(text='Displacement Setup:')
                 brow.active = yp.use_baked
@@ -916,48 +878,22 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
 
                 if chui.expand_subdiv_settings:
 
-                    #subsurf = get_subsurf_modifier(context.object)
-                    #displace = get_displace_modifier(context.object)
-
                     brow = bcol.row(align=True)
                     brow.label(text='', icon='BLANK1')
                     bbox = brow.box()
                     bbcol = bbox.column() #align=True)
                     bbcol.active = yp.use_baked
 
-                    #if subsurf:
-                    #    brow = bbcol.row(align=True)
-                    #    brow.label(text='Type:')
-                    #    brow.prop(subsurf, 'subdivision_type', expand=True)
-
                     brow = bbcol.row(align=True)
                     brow.label(text='Adaptive (Cycles Only):')
                     brow.prop(channel, 'subdiv_adaptive', text='')
-
-                    #brow = bbcol.row(align=True)
-                    #brow.label(text='Type:')
-                    #brow.prop(channel, 'subdiv_standard_type', expand=True)
-
-                    #if not channel.enable_subdiv_setup or channel.subdiv_adaptive:
-                    #brow = bbcol.row(align=True)
-                    #if channel.subdiv_adaptive:
-                    #    brow.label(text='Viewport Level:')
-                    #else: brow.label(text='Setup Off Level:')
-                    #brow.prop(channel, 'subdiv_off_level', text='')
 
                     if channel.subdiv_adaptive:
                         brow = bbcol.row(align=True)
                         brow.label(text='Global Dicing:')
                         brow.prop(channel, 'subdiv_global_dicing', text='')
 
-                        #brow = bbcol.row(align=True)
-                        #brow.label(text='Dicing Scale:')
-                        #brow.prop(context.object.cycles, 'dicing_rate', text='')
                     else:
-                    #if channel.enable_subdiv_setup and not channel.subdiv_adaptive:
-                        #brow = bbcol.row(align=True)
-                        #brow.label(text='Setup On Level:')
-                        #brow.prop(channel, 'subdiv_on_level', text='')
 
                         brow = bbcol.row(align=True)
                         brow.label(text='Max Polygons:')
@@ -1499,7 +1435,10 @@ def draw_layer_channels(context, layout, layer, layer_tree, image): #, custom_ic
                 srow.prop(ch, 'normal_map_type', text='')
                 if not chui.expand_bump_settings:
                     if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
-                        srow.prop(ch, 'bump_distance', text='')
+                        # Solid color with transition bump always have bump distance value of 0
+                        ssrow = srow.row(align=True)
+                        ssrow.active = is_bump_distance_relevant(layer, ch)
+                        ssrow.prop(ch, 'bump_distance', text='')
                     else:
                         srow.prop(ch, 'normal_strength', text='')
 
@@ -1529,7 +1468,9 @@ def draw_layer_channels(context, layout, layer, layer_tree, image): #, custom_ic
                     #brow.active = not ch.enable_transition_bump or ch.normal_map_type != 'NORMAL_MAP'
                     if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
                         brow = cccol.row(align=True)
+                        brow.active = layer.type != 'COLOR' or not ch.enable_transition_bump
                         brow.label(text='Max Height:') #, icon_value=lib.get_icon('input'))
+                        brow.active == is_bump_distance_relevant(layer, ch)
                         brow.prop(ch, 'bump_distance', text='')
 
                     if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}: 
@@ -2235,8 +2176,7 @@ def draw_layers_ui(context, layout, node): #, custom_icon_enable):
 
     # Check if parallax is enabled
     height_root_ch = get_root_height_channel(yp)
-    if height_root_ch: enable_parallax = height_root_ch.enable_parallax
-    else: enable_parallax = False
+    enable_parallax = is_parallax_enabled(height_root_ch)
 
     # Check duplicated layers (indicated by more than one users)
     if len(yp.layers) > 0:
