@@ -471,11 +471,11 @@ class YVcolEditorProps(bpy.types.PropertyGroup):
     ori_blending_mode = StringProperty(default='')
     ori_brush = StringProperty(default='')
 
-    ori_texpaint_blending_mode : StringProperty(default='')
-    ori_texpaint_brush : StringProperty(default='')
+    ori_texpaint_blending_mode = StringProperty(default='')
+    ori_texpaint_brush = StringProperty(default='')
 
-    ori_sculpt_blending_mode : StringProperty(default='')
-    ori_sculpt_brush : StringProperty(default='')
+    ori_sculpt_blending_mode = StringProperty(default='')
+    ori_sculpt_brush = StringProperty(default='')
 
 def register():
     bpy.utils.register_class(VIEW3D_PT_y_vcol_editor_ui)
