@@ -351,6 +351,11 @@ class YSelectMaterialPolygons(bpy.types.Operator):
             description="It will create one if other objects does not have it.\nIf empty, it will use whatever current active uv map for each objects", 
             default='')
 
+    set_canvas_to_empty = BoolProperty(
+            name='Set Image Editor to empty',
+            description="Set image editor & canvas image to empty, so it's easier to see",
+            default=True)
+
     uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
 
     @classmethod
@@ -390,6 +395,7 @@ class YSelectMaterialPolygons(bpy.types.Operator):
             self.layout.prop(self, "new_uv_name")
         else:
             self.layout.prop_search(self, "uv_map", self, "uv_map_coll", icon='GROUP_UVS')
+        self.layout.prop(self, "set_canvas_to_empty")
 
     def execute(self, context):
         if not is_greater_than_280():
@@ -440,6 +446,122 @@ class YSelectMaterialPolygons(bpy.types.Operator):
                 else: p.select = False
 
         bpy.ops.object.mode_set(mode='EDIT')
+
+        if self.set_canvas_to_empty:
+            update_image_editor_image(context, None)
+            context.scene.tool_settings.image_paint.canvas = None
+
+        return {'FINISHED'}
+
+class YRenameUVMaterial(bpy.types.Operator):
+    bl_idname = "material.y_rename_uv_using_the_same_material"
+    bl_label = "Rename UV that using same Material"
+    bl_description = "Rename UV on objects that used the same material"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    uv_map = StringProperty(
+            name='Target UV Map', 
+            description="Target UV Map that will be renamed", 
+            default='')
+
+    uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
+
+    new_uv_name = StringProperty(
+            name='New UV Name', 
+            description="New name of for the UV", 
+            default='UVMap')
+
+    @classmethod
+    def poll(cls, context):
+        return context.object
+
+    def invoke(self, context, event):
+        obj = context.object
+
+        # Always set new uv to false to avoid unwanted new uv
+        self.new_uv_name = get_unique_name(self.new_uv_name, get_uv_layers(obj))
+
+        node = get_active_ypaint_node()
+        if node: yp = node.node_tree.yp
+        else: yp = None
+
+        # UV Map collections update
+        self.uv_map = get_default_uv_name(obj, yp)
+
+        self.uv_map_coll.clear()
+        for uv in get_uv_layers(obj):
+            if not uv.name.startswith(TEMP_UV):
+                self.uv_map_coll.add().name = uv.name
+
+        return context.window_manager.invoke_props_dialog(self, width=400)
+
+    def check(self, context):
+        return True
+
+    def draw(self, context):
+        self.layout.prop_search(self, "uv_map", self, "uv_map_coll", icon='GROUP_UVS')
+        self.layout.prop(self, "new_uv_name")
+
+    def execute(self, context):
+        if self.new_uv_name == '' or self.uv_map == '':
+            self.report({'ERROR'}, "Name cannot be empty!")
+            return {'CANCELLED'}
+
+        obj = context.object
+        mat = get_active_material()
+
+        # Check all uv names available on all objects
+        #uvls = []
+        #for obj in bpy.data.objects:
+        #    if obj.type == 'MESH' and any([m for m in obj.data.materials if mat == m]):
+        #        for uvl in get_uv_layers(obj):
+        #            if uvl not in uvls:
+        #                uvls.append(uvl)
+
+        #new_uv_name = get_unique_name(self.new_uv_name, uvls)
+
+        new_uv_name = self.new_uv_name
+
+        for obj in bpy.data.objects:
+            if obj.type == 'MESH' and any([m for m in obj.data.materials if mat == m]):
+                uv_layers = get_uv_layers(obj)
+                new_uvl = uv_layers.get(new_uv_name)
+                if not new_uvl:
+                    uvl = uv_layers.get(self.uv_map)
+                    if not uvl:
+                        uvl = uv_layers.new(name=new_uv_name)
+                    else:
+                        uvl.name = new_uv_name
+
+        # Dealing with yp
+        node = get_active_ypaint_node()
+        if node: yp = node.node_tree.yp
+        else: yp = None
+
+        if yp:
+            # Check baked images uv
+            if yp.baked_uv_name == self.uv_map:
+                yp.baked_uv_name = new_uv_name
+
+            # Check baked normal channel
+            for ch in yp.channels:
+                baked_normal = node.node_tree.nodes.get(ch.baked_normal)
+                if baked_normal and baked_normal.uv_map == self.uv_map:
+                    baked_normal.uv_map = new_uv_name
+
+            # Check layer and masks uv
+            for layer in yp.layers:
+                if layer.uv_name == self.uv_map:
+                    layer.uv_name = new_uv_name
+
+                for mask in layer.masks:
+                    if mask.uv_name == self.uv_map:
+                        mask.uv_name = new_uv_name
+
+            # Check height channel uv
+            height_ch = get_root_height_channel(yp)
+            if height_ch and height_ch.main_uv == self.uv_map:
+                height_ch.main_uv = new_uv_name
 
         return {'FINISHED'}
 
@@ -2349,8 +2471,7 @@ def update_active_yp_channel(self, context):
     tree = self.id_data
     yp = tree.yp
     ch = yp.channels[yp.active_channel_index]
-    
-    #if yp.preview_mode: yp.preview_mode = True
+
     if yp.preview_mode: update_preview_mode(yp, context)
     if yp.layer_preview_mode: update_layer_preview_mode(yp, context)
 
@@ -2407,37 +2528,20 @@ def update_layer_index(self, context):
 
     # Get active image
     image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, yp)
-    #print(image)
 
-    # Update image editor
-    #if ypui.disable_auto_temp_uv_update and mapping and is_transformed(mapping):
-    #    update_tool_canvas_image(context, None)
-    #    yp.need_temp_uv_refresh = True
-    #else: 
     update_tool_canvas_image(context, image)
-    #yp.need_temp_uv_refresh = False
 
     # Update active vertex color
     if vcol and get_active_vertex_color(obj) != vcol:
         set_active_vertex_color(obj, vcol)
 
-    #if obj.type == 'MESH':
-        # Update tangent sign if height channel and tangent sign hack is enabled
-        #if height_ch and yp.enable_tangent_sign_hacks:
-        #    for uv in yp.uvs:
-        #        refresh_tangent_sign_vcol(obj, uv.name)
-
-    refresh_temp_uv(obj, src_of_img)
-
-    # Make sure halt update is kept off if error happens
-    #if yp.halt_update: 
-    #    yp.halt_update = False
-
-    #yp.need_temp_uv_refresh = False
+    mat = get_active_material()
+    objs = get_all_objects_with_same_materials(mat, selected_only=True)
+    for ob in objs:
+        refresh_temp_uv(ob, src_of_img)
+    #refresh_temp_uv(obj, src_of_img)
 
     update_image_editor_image(context, image)
-
-    #print('INFO: Active layer is updated at {:0.2f}'.format((time.time() - T) * 1000), 'ms!')
 
 def update_channel_colorspace(self, context):
     group_tree = self.id_data
@@ -3302,6 +3406,7 @@ class YPaintSceneProps(bpy.types.PropertyGroup):
     last_object = StringProperty(default='')
     last_mode = StringProperty(default='')
     ori_view_transform = StringProperty(default='')
+    edit_image_editor_area_index = IntProperty(default=-1)
 
 class YPaintObjectProps(bpy.types.PropertyGroup):
     ori_subsurf_render_levels = IntProperty(default=1)
@@ -3359,21 +3464,51 @@ def ypaint_last_object_update(scene):
         node = get_active_ypaint_node()
 
         # Refresh layer index to update editor image
-        if node and len(node.node_tree.yp.layers) > 0 :
-            #node.node_tree.yp.active_layer_index = node.node_tree.yp.active_layer_index
-            image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, node.node_tree.yp)
-            #print(image)
-            #if image:
-            update_image_editor_image(bpy.context, image)
-            scene.tool_settings.image_paint.canvas = image
+        if node:
+            yp = node.node_tree.yp
+            if yp.use_baked and len(yp.channels) > 0:
+                update_active_yp_channel(yp, bpy.context)
+
+            elif len(yp.layers) > 0 :
+                image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, yp)
+                update_image_editor_image(bpy.context, image)
+                scene.tool_settings.image_paint.canvas = image
 
     if obj.type == 'MESH' and scene.yp.last_object == obj.name and scene.yp.last_mode != obj.mode:
 
+        node = get_active_ypaint_node()
+        yp = node.node_tree.yp if node else None
+
         if obj.mode == 'TEXTURE_PAINT' or scene.yp.last_mode == 'TEXTURE_PAINT':
-            node = get_active_ypaint_node()
-            if node and len(node.node_tree.yp.layers) > 0 :
-                image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, node.node_tree.yp)
+            if yp and len(yp.layers) > 0 :
+                image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, yp)
                 refresh_temp_uv(obj, src_of_img)
+
+        # Into edit mode
+        if obj.mode == 'EDIT' and scene.yp.last_mode != 'EDIT':
+            # Remember the space
+            space, area_index = get_first_unpinned_image_editor_space(bpy.context, return_index=True)
+            if space and area_index != -1:
+                scene.yp.edit_image_editor_area_index = area_index
+
+            # Trigger updating active index to update image
+            #if yp: 
+            #    if yp.use_baked:
+            #        yp.active_channel_index = yp.active_channel_index
+            #    else: yp.active_layer_index = yp.active_layer_index
+
+        # Out of edit mode
+        if obj.mode != 'EDIT' and scene.yp.last_mode == 'EDIT':
+            space = get_edit_image_editor_space(bpy.context)
+            if space:
+                space.use_image_pin = False
+            scene.yp.edit_image_editor_area_index = -1
+
+            # Trigger updating active index to update image
+            #if yp: 
+            #    if yp.use_baked:
+            #        yp.active_channel_index = yp.active_channel_index
+            #    else: yp.active_layer_index = yp.active_layer_index
 
         scene.yp.last_mode = obj.mode
 
@@ -3402,6 +3537,7 @@ def ypaint_force_update_on_anim(scene):
 
 def register():
     bpy.utils.register_class(YSelectMaterialPolygons)
+    bpy.utils.register_class(YRenameUVMaterial)
     bpy.utils.register_class(YQuickYPaintNodeSetup)
     bpy.utils.register_class(YNewYPaintNode)
     bpy.utils.register_class(YPaintNodeInputCollItem)
@@ -3449,6 +3585,7 @@ def register():
 
 def unregister():
     bpy.utils.unregister_class(YSelectMaterialPolygons)
+    bpy.utils.unregister_class(YRenameUVMaterial)
     bpy.utils.unregister_class(YQuickYPaintNodeSetup)
     bpy.utils.unregister_class(YNewYPaintNode)
     bpy.utils.unregister_class(YPaintNodeInputCollItem)

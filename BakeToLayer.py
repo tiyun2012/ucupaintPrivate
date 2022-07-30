@@ -575,7 +575,8 @@ class YBakeToLayer(bpy.types.Operator):
 
         if self.type.startswith('OTHER_OBJECT_'):
             col.label(text='Cage Extrusion:')
-            col.label(text='Max Ray Distance:')
+            if hasattr(bpy.context.scene.render.bake, 'max_ray_distance'):
+                col.label(text='Max Ray Distance:')
         elif self.type == 'AO':
             col.label(text='AO Distance:')
             col.label(text='')
@@ -632,7 +633,8 @@ class YBakeToLayer(bpy.types.Operator):
 
         if self.type.startswith('OTHER_OBJECT_'):
             col.prop(self, 'cage_extrusion', text='')
-            col.prop(self, 'max_ray_distance', text='')
+            if hasattr(bpy.context.scene.render.bake, 'max_ray_distance'):
+                col.prop(self, 'max_ray_distance', text='')
         elif self.type == 'AO':
             col.prop(self, 'ao_distance', text='')
             col.prop(self, 'only_local')
@@ -765,7 +767,7 @@ class YBakeToLayer(bpy.types.Operator):
         # Get other objects for other object baking
         other_objs = []
         if self.type.startswith('OTHER_OBJECT_'):
-            other_objs = [o for o in context.selected_objects if o not in objs and mat not in o.data.materials]
+            other_objs = [o for o in context.selected_objects if o not in objs and mat.name not in o.data.materials]
 
             # Try to get other_objects from bake info
             if overwrite_img:
@@ -1829,10 +1831,6 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         if self.mask and self.mask.enable_blur_vector:
             samples = 4096 if is_greater_than_300() else 128
 
-        prepare_bake_settings(book, objs, yp, samples=samples, margin=self.margin, 
-                uv_map=self.uv_map, bake_type='EMIT', force_use_cpu=self.force_use_cpu
-                )
-
         # Preview setup
         ori_channel_index = yp.active_channel_index
         ori_preview_mode = yp.preview_mode
@@ -1871,6 +1869,10 @@ class YDuplicateLayerToImage(bpy.types.Operator):
                 if m.type in {'SOLIDIFY', 'MIRROR', 'ARRAY'}:
                     m.show_render = False
 
+        prepare_bake_settings(book, objs, yp, samples=samples, margin=self.margin, 
+                uv_map=self.uv_map, bake_type='EMIT', force_use_cpu=self.force_use_cpu
+                )
+
         #return {'FINISHED'}
 
         # Create bake nodes
@@ -1885,7 +1887,6 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         mat.node_tree.nodes.active = tex
 
         # Bake!
-        #bpy.ops.object.bake_image()
         bpy.ops.object.bake()
 
         if use_fxaa: fxaa_image(image, False, self.force_use_cpu)
@@ -1952,6 +1953,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             layer_tree = get_tree(self.layer)
             check_mask_mix_nodes(self.layer, layer_tree)
             check_mask_source_tree(self.layer) #, bump_ch)
+            mask = self.layer.masks[self.index+1]
 
             if segment:
                 ImageAtlas.set_segment_mapping(mask, segment, image)
@@ -1968,6 +1970,9 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         # Remove temp bake nodes
         simple_remove_node(mat.node_tree, tex)
 
+        # Recover bake settings
+        recover_bake_settings(book, yp)
+
         # Recover modifiers
         for obj in objs:
             # Recover modifiers
@@ -1979,9 +1984,6 @@ class YDuplicateLayerToImage(bpy.types.Operator):
                 if i >= len(ori_viewport_mods[obj.name]): break
                 if ori_viewport_mods[obj.name][i] != m.show_render:
                     m.show_viewport = ori_viewport_mods[obj.name][i]
-
-        # Recover bake settings
-        recover_bake_settings(book, yp)
 
         # Recover preview
         yp.active_channel_index = ori_channel_index

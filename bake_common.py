@@ -33,7 +33,7 @@ def remember_before_bake(yp=None):
         book['ori_tile_x'] = scene.render.tile_x
         book['ori_tile_y'] = scene.render.tile_y
     book['ori_use_selected_to_active'] = scene.render.bake.use_selected_to_active
-    if is_greater_than_280():
+    if hasattr(scene.render.bake, 'max_ray_distance'):
         book['ori_max_ray_distance'] = scene.render.bake.max_ray_distance
     book['ori_cage_extrusion'] = scene.render.bake.cage_extrusion
     book['ori_use_cage'] = scene.render.bake.use_cage
@@ -84,6 +84,10 @@ def remember_before_bake(yp=None):
         book['ori_hide_objs'] = [o for o in scene.objects if o.hide]
         book['ori_scene_layers'] = [i for i in range(20) if scene.layers[i]]
 
+    # Remember image editor images
+    book['editor_images'] = [a.spaces[0].image for a in bpy.context.screen.areas if a.type == 'IMAGE_EDITOR']
+    book['editor_pins'] = [a.spaces[0].use_image_pin for a in bpy.context.screen.areas if a.type == 'IMAGE_EDITOR']
+
     # Remember world settings
     if is_greater_than_280() and scene.world:
         book['ori_distance'] = scene.world.light_settings.distance
@@ -116,7 +120,7 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
     #scene.render.bake.use_clear = True
     scene.render.bake.use_clear = False
     scene.render.bake.use_selected_to_active = use_selected_to_active
-    if is_greater_than_280():
+    if hasattr(scene.render.bake, 'max_ray_distance'):
         scene.render.bake.max_ray_distance = max_ray_distance
     scene.render.bake.cage_extrusion = cage_extrusion
     scene.render.bake.use_cage = False
@@ -275,7 +279,7 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False):
     if hasattr(scene.render.bake, 'target'):
         scene.render.bake.target = book['ori_bake_target']
     scene.render.bake.use_selected_to_active = book['ori_use_selected_to_active']
-    if is_greater_than_280():
+    if hasattr(scene.render.bake, 'max_ray_distance'):
         scene.render.bake.max_ray_distance = book['ori_max_ray_distance']
     scene.render.bake.cage_extrusion = book['ori_cage_extrusion']
     scene.render.bake.use_cage = book['ori_use_cage']
@@ -369,6 +373,14 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False):
             else: o.hide_select = False
         for i in range(20):
             scene.layers[i] = i in book['ori_scene_layers']
+
+    # Recover image editors
+    for i, area in enumerate([a for a in bpy.context.screen.areas if a.type == 'IMAGE_EDITOR']):
+        # Some image can be deleted after baking process so use try except
+        try: area.spaces[0].image = book['editor_images'][i]
+        except: area.spaces[0].image = None
+
+        area.spaces[0].use_image_pin = book['editor_pins'][i]
 
     # Recover active object
 

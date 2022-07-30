@@ -767,31 +767,50 @@ def copy_node_props(source, dest, extras = []):
         dest.outputs[i].default_value = outp.default_value 
 
 def update_image_editor_image(context, image):
-    for area in context.screen.areas:
+    obj = context.object
+    scene = context.scene
+
+    if obj.mode == 'EDIT':
+        space = get_edit_image_editor_space(context)
+        if space:
+            space.use_image_pin = True
+            space.image = image
+    else:
+        space = get_first_unpinned_image_editor_space(context)
+        if space: 
+            space.image = image
+            # Hack for Blender 2.8 which keep pinning image automatically
+            space.use_image_pin = False
+
+def get_edit_image_editor_space(context):
+    scene = context.scene
+    area_index = scene.yp.edit_image_editor_area_index
+    if area_index >= 0 and area_index < len(context.screen.areas):
+        area = context.screen.areas[area_index]
         if area.type == 'IMAGE_EDITOR':
-            # UV Editing screen has special pin, so it will always show correct image
-            if context.screen.name == 'UV Editing':
-                area.spaces[0].use_image_pin = True
-                area.spaces[0].image = image
+            return area.spaces[0]
+
+    return None
+
+def get_first_unpinned_image_editor_space(context, return_index=False):
+    space = None
+    index = -1
+    for i, area in enumerate(context.screen.areas):
+        if area.type == 'IMAGE_EDITOR':
+            if not area.spaces[0].use_image_pin:
+                space = area.spaces[0]
+                index = i
                 break
-            elif not area.spaces[0].use_image_pin: #and area.spaces[0].image != image:
-                area.spaces[0].image = image
-                # Hack for Blender 2.8 which keep pinning image automatically
-                area.spaces[0].use_image_pin = False
-                break
+
+    if return_index:
+        return space, index
+
+    return space
 
 def get_first_image_editor_image(context):
-    image = None
-    for area in context.screen.areas:
-        if area.type == 'IMAGE_EDITOR':
-            if context.screen.name == 'UV Editing':
-                image = area.spaces[0].image
-                break
-            elif not area.spaces[0].use_image_pin:
-                image = area.spaces[0].image
-                break
-
-    return image
+    space = get_first_unpinned_image_editor_space(context)
+    if space: return space.image
+    return None
 
 def update_tool_canvas_image(context, image):
     # HACK: Remember unpinned images to avoid all image editor images being updated
@@ -2482,10 +2501,22 @@ def check_uvmap_on_other_objects_with_same_mat(mat, uv_name, set_active=True):
                     if set_active:
                         uvls.active = uvl
 
+def remove_temp_uv(obj):
+    uv_layers = get_uv_layers(obj)
+    
+    if uv_layers:
+        for uv in uv_layers:
+            if uv.name == TEMP_UV:
+                uv_layers.remove(uv)
+                break
+
 def refresh_temp_uv(obj, entity): 
 
+    if obj.type != 'MESH':
+        return False
 
     if not entity:
+        remove_temp_uv(obj)
         return False
 
     #print(entity.path_from_id())
@@ -2509,25 +2540,24 @@ def refresh_temp_uv(obj, entity):
     else: return False
 
     if m3 and entity.override_type != 'IMAGE':
+        remove_temp_uv(obj)
         return False
 
     if (m1 or m2) and entity.type != 'IMAGE':
+        remove_temp_uv(obj)
         return False
 
-    uv_layers = get_uv_layers(obj)
-    if not uv_layers: return False
-
     # Delete previous temp uv
-    for uv in uv_layers:
-        if uv.name == TEMP_UV:
-            uv_layers.remove(uv)
-            break
+    remove_temp_uv(obj)
+
+    uv_layers = get_uv_layers(obj)
 
     if m3:
         layer_uv = uv_layers.get(layer.uv_name)
     else:
         layer_uv = uv_layers.get(entity.uv_name)
-        if not layer_uv: return False
+        if not layer_uv: 
+            return False
 
     # Set active uv
     if uv_layers.active != layer_uv:
@@ -2537,7 +2567,7 @@ def refresh_temp_uv(obj, entity):
     #print(uv_layers.active)
 
     # Only set actual uv if not in texture paint mode
-    if obj.mode != 'TEXTURE_PAINT':
+    if obj.mode not in {'TEXTURE_PAINT', 'EDIT'}:
         return False
 
     #yp = entity.id_data.yp
@@ -2561,20 +2591,22 @@ def refresh_temp_uv(obj, entity):
         #print('Channel!')
     else: return False
 
+    set_active_object(obj)
+
     # Cannot do this on edit mode
-    #ori_mode = obj.mode
-    #if ori_mode == 'EDIT':
-    #    bpy.ops.object.mode_set(mode='OBJECT')
+    ori_mode = obj.mode
+    if ori_mode == 'EDIT':
+        bpy.ops.object.mode_set(mode='OBJECT')
 
     if not is_transformed(mapping):
-        #if ori_mode == 'EDIT':
-        #    bpy.ops.object.mode_set(mode='EDIT')
+        if ori_mode == 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
         return False
 
     img = source.image
     if not img: 
-        #if ori_mode == 'EDIT':
-        #    bpy.ops.object.mode_set(mode='EDIT')
+        if ori_mode == 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
         return False
 
     # New uv layers
@@ -2644,8 +2676,8 @@ def refresh_temp_uv(obj, entity):
     temp_uv_layer.data.foreach_set('uv', arr.ravel())
 
     # Back to edit mode if originally from there
-    #if ori_mode == 'EDIT':
-    #    bpy.ops.object.mode_set(mode='EDIT')
+    if ori_mode == 'EDIT':
+        bpy.ops.object.mode_set(mode='EDIT')
 
     return True
 
@@ -3577,9 +3609,16 @@ def is_mesh_flat_shaded(mesh):
 
     return False
 
-def get_all_objects_with_same_materials(mat, mesh_only=False, uv_name=''):
+def get_all_objects_with_same_materials(mat, mesh_only=False, uv_name='', selected_only=False):
     objs = []
-    for obj in get_scene_objects():
+
+    if selected_only:
+        if len(bpy.context.selected_objects) > 0:
+            objects = bpy.context.selected_objects
+        else: objects = [bpy.context.object]
+    else: objects = get_scene_objects()
+
+    for obj in objects:
 
         if uv_name != '':
             uv_layers = get_uv_layers(obj)
