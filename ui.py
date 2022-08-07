@@ -2241,7 +2241,7 @@ def draw_layers_ui(context, layout, node): #, custom_icon_enable):
                     break
 
             if mask.type == 'COLOR_ID':
-                if not vcols.get(COLOR_ID_VCOL_NAME):
+                if obj.type == 'MESH' and COLOR_ID_VCOL_NAME not in vcols:
                     missing_data = True
                     break
 
@@ -3005,7 +3005,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                 row.label(text='', icon='BLANK1')
 
         # Image icon
-        if len(all_masks) == 0 and len(all_overrides) == 0:
+        #if len(all_masks) == 0 and len(all_overrides) == 0:
+        if len(selectable_masks) == 0 and len(selectable_overrides) == 0:
             row = master.row(align=True)
             row.active = is_hidden
             if image and image.yia.is_image_atlas: 
@@ -3021,9 +3022,9 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
             elif layer.type == 'HEMI': 
                 row.prop(layer, 'name', text='', emboss=False, icon_value=lib.get_icon('hemi'))
             elif layer.type == 'COLOR': 
-                #row.prop(layer, 'name', text='', emboss=False, icon='COLOR')
-                icon_value = lib.custom_icons["color"].icon_id
-                row.prop(layer, 'name', text='', emboss=False, icon_value=icon_value)
+                row.prop(layer, 'name', text='', emboss=False, icon='COLOR')
+                #icon_value = lib.custom_icons["color"].icon_id
+                #row.prop(layer, 'name', text='', emboss=False, icon_value=icon_value)
             elif layer.type == 'BACKGROUND': row.prop(layer, 'name', text='', emboss=False, icon_value=lib.get_icon('background'))
             elif layer.type == 'GROUP': row.prop(layer, 'name', text='', emboss=False, icon_value=lib.get_icon('group'))
             else: 
