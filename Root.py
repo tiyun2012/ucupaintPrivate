@@ -2210,24 +2210,34 @@ def update_channel_name(self, context):
     if yp.halt_reconnect or yp.halt_update:
         return
 
-    group_tree.inputs[self.io_index].name = self.name
-    group_tree.outputs[self.io_index].name = self.name
+    input_index = self.io_index
+    output_index = self.io_index
+
+    # Check if there's normal channel above current channel because it has extra output
+    for ch in yp.channels:
+        if ch.type == 'NORMAL' and ch != self:
+            output_index += 1
+        if ch == self:
+            break
+
+    group_tree.inputs[input_index].name = self.name
+    group_tree.outputs[output_index].name = self.name
 
     shift = 1
     #if self.type == 'RGB' and self.enable_alpha:
     if self.enable_alpha:
-        group_tree.inputs[self.io_index+shift].name = self.name + io_suffix['ALPHA']
-        group_tree.outputs[self.io_index+shift].name = self.name + io_suffix['ALPHA']
+        group_tree.inputs[input_index+shift].name = self.name + io_suffix['ALPHA']
+        group_tree.outputs[output_index+shift].name = self.name + io_suffix['ALPHA']
         shift += 1
 
     if self.type == 'NORMAL':
-        group_tree.inputs[self.io_index+shift].name = self.name + io_suffix['HEIGHT']
-        group_tree.outputs[self.io_index+shift].name = self.name + io_suffix['HEIGHT']
+        group_tree.inputs[input_index+shift].name = self.name + io_suffix['HEIGHT']
+        group_tree.outputs[output_index+shift].name = self.name + io_suffix['HEIGHT']
 
         shift += 1
 
-        #group_tree.inputs[self.io_index+shift].name = self.name + io_suffix['MAX_HEIGHT']
-        group_tree.outputs[self.io_index+shift].name = self.name + io_suffix['MAX_HEIGHT']
+        group_tree.outputs[output_index+shift].name = self.name + io_suffix['MAX_HEIGHT']
+
 
     #check_all_channel_ios(yp)
 
@@ -2303,12 +2313,29 @@ def get_preview(mat, output=None, advanced=False):
 def set_srgb_view_transform():
     scene = bpy.context.scene
 
+    ypup = get_user_preferences()
+
     # Set view transform to srgb
-    if scene.yp.ori_view_transform == '':
+    if scene.yp.ori_view_transform == '' and ypup.make_preview_mode_srgb:
         scene.yp.ori_view_transform = scene.view_settings.view_transform
         if is_greater_than_280():
             scene.view_settings.view_transform = 'Standard'
         else: scene.view_settings.view_transform = 'Default'
+
+        scene.yp.ori_display_device = scene.display_settings.display_device
+        scene.display_settings.display_device = 'sRGB'
+
+        scene.yp.ori_look = scene.view_settings.look
+        scene.view_settings.look = 'None'
+
+        scene.yp.ori_exposure = scene.view_settings.exposure
+        scene.view_settings.exposure = 0.0
+
+        scene.yp.ori_gamma = scene.view_settings.gamma
+        scene.view_settings.gamma = 1.0
+
+        scene.yp.ori_use_curve_mapping = scene.view_settings.use_curve_mapping
+        scene.view_settings.use_curve_mapping = False
 
 def remove_preview(mat, advanced=False):
     nodes = mat.node_tree.nodes
@@ -2328,6 +2355,12 @@ def remove_preview(mat, advanced=False):
         if scene.yp.ori_view_transform != '':
             scene.view_settings.view_transform = scene.yp.ori_view_transform
             scene.yp.ori_view_transform = ''
+
+            scene.display_settings.display_device = scene.yp.ori_display_device
+            scene.view_settings.look = scene.yp.ori_look
+            scene.view_settings.exposure = scene.yp.ori_exposure
+            scene.view_settings.gamma = scene.yp.ori_gamma
+            scene.view_settings.use_curve_mapping = scene.yp.ori_use_curve_mapping
 
 #def update_merge_mask_mode(self, context):
 #    if not self.layer_preview_mode:
@@ -2450,7 +2483,8 @@ def update_preview_mode(self, context):
         from_socket = [link.from_socket for link in preview.inputs[0].links]
         if not from_socket or (from_socket and not from_socket[0].name.startswith(channel.name)):
             # Connect first output
-            tree.links.new(group_node.outputs[channel.io_index], preview.inputs[0])
+            #tree.links.new(group_node.outputs[channel.io_index], preview.inputs[0])
+            tree.links.new(group_node.outputs[channel.name], preview.inputs[0])
         else:
             from_socket = from_socket[0]
             outs = [o for o in group_node.outputs if o.name.startswith(channel.name)]
@@ -3405,7 +3439,14 @@ class YPaintWMProps(bpy.types.PropertyGroup):
 class YPaintSceneProps(bpy.types.PropertyGroup):
     last_object = StringProperty(default='')
     last_mode = StringProperty(default='')
+
+    ori_display_device = StringProperty(default='')
     ori_view_transform = StringProperty(default='')
+    ori_exposure = FloatProperty(default=0.0)
+    ori_gamma = FloatProperty(default=1.0)
+    ori_look = StringProperty(default='')
+    ori_use_curve_mapping = BoolProperty(default=False)
+
     edit_image_editor_area_index = IntProperty(default=-1)
 
 class YPaintObjectProps(bpy.types.PropertyGroup):

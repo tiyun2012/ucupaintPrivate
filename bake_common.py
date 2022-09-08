@@ -11,7 +11,7 @@ problematic_modifiers = {
         'ARRAY',
         }
 
-def remember_before_bake(yp=None):
+def remember_before_bake(yp=None, mat=None):
     book = {}
     book['scene'] = scene = bpy.context.scene
     book['obj'] = obj = bpy.context.object
@@ -100,13 +100,17 @@ def remember_before_bake(yp=None):
         book['parallax_ch'] = get_root_parallax_channel(yp)
     else: book['parallax_ch'] = None
 
+    # Remember material props
+    if mat:
+        book['ori_bsdf'] = mat.yp.ori_bsdf
+
     return book
 
 def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', bake_type='EMIT', 
-        disable_problematic_modifiers=False, force_use_cpu=False, hide_other_objs=True, bake_from_multires=False, 
+        disable_problematic_modifiers=False, hide_other_objs=True, bake_from_multires=False, 
         tile_x=64, tile_y=64, use_selected_to_active=False, max_ray_distance=0.0, cage_extrusion=0.0,
         bake_target = 'IMAGE_TEXTURES',
-        source_objs=[]):
+        source_objs=[], bake_device='GPU'):
 
     #scene = self.scene
     scene = bpy.context.scene
@@ -148,11 +152,13 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
         scene.render.use_bake_multires = False
         scene.cycles.bake_type = bake_type
 
-    # Use CPU if being forced
-    if force_use_cpu:
+    # Old blender will always use CPU
+    if not is_greater_than_280():
         scene.cycles.device = 'CPU'
+    else: scene.cycles.device = bake_device
+
     # Use CUDA bake if Optix is selected
-    elif (is_greater_than_281() and not is_greater_than_300() and 'compute_device_type' in bpy.context.preferences.addons['cycles'].preferences and
+    if (is_greater_than_281() and not is_greater_than_300() and 'compute_device_type' in bpy.context.preferences.addons['cycles'].preferences and
             bpy.context.preferences.addons['cycles'].preferences['compute_device_type'] == 3):
         #scene.cycles.device = 'CPU'
         bpy.context.preferences.addons['cycles'].preferences['compute_device_type'] = 1
@@ -257,7 +263,7 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
     if book['parallax_ch']:
         book['parallax_ch'].enable_parallax = False
 
-def recover_bake_settings(book, yp=None, recover_active_uv=False):
+def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
     scene = book['scene']
     obj = book['obj']
     uv_layers = get_uv_layers(obj)
@@ -400,7 +406,12 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False):
         for mod in book['disabled_viewport_mods']:
             mod.show_viewport = True
 
-def blur_image(image, alpha_aware=True, force_use_cpu=False, factor=1.0, samples=512):
+    if mat:
+        # Recover stored material original bsdf for preview
+        if 'ori_bsdf' in book:
+            mat.yp.ori_bsdf = book['ori_bsdf']
+
+def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GPU'):
     T = time.time()
     print('FXAA: Doing FXAA pass on', image.name + '...')
     book = remember_before_bake()
@@ -425,7 +436,7 @@ def blur_image(image, alpha_aware=True, force_use_cpu=False, factor=1.0, samples
         plane_obj = bpy.context.view_layer.objects.active
     else: plane_obj = bpy.context.scene.objects.active
 
-    prepare_bake_settings(book, [plane_obj], samples=samples, margin=0, force_use_cpu=force_use_cpu)
+    prepare_bake_settings(book, [plane_obj], samples=samples, margin=0, bake_device=bake_device)
 
     # Create temporary material
     mat = bpy.data.materials.new('__TEMP__')
@@ -524,7 +535,7 @@ def blur_image(image, alpha_aware=True, force_use_cpu=False, factor=1.0, samples
 
     return image
 
-def fxaa_image(image, alpha_aware=True, force_use_cpu=False):
+def fxaa_image(image, alpha_aware=True, bake_device='GPU'):
     T = time.time()
     print('FXAA: Doing FXAA pass on', image.name + '...')
     book = remember_before_bake()
@@ -549,7 +560,7 @@ def fxaa_image(image, alpha_aware=True, force_use_cpu=False):
         plane_obj = bpy.context.view_layer.objects.active
     else: plane_obj = bpy.context.scene.objects.active
 
-    prepare_bake_settings(book, [plane_obj], samples=1, margin=0, force_use_cpu=force_use_cpu)
+    prepare_bake_settings(book, [plane_obj], samples=1, margin=0, bake_device=bake_device)
 
     # Create temporary material
     mat = bpy.data.materials.new('__TEMP__')
@@ -1131,7 +1142,7 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
 
         return True
 
-def temp_bake(context, entity, width, height, hdr, samples, margin, uv_map, force_use_cpu=False):
+def temp_bake(context, entity, width, height, hdr, samples, margin, uv_map, bake_device='GPU'):
 
     m1 = re.match(r'yp\.layers\[(\d+)\]$', entity.path_from_id())
     m2 = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
@@ -1144,7 +1155,7 @@ def temp_bake(context, entity, width, height, hdr, samples, margin, uv_map, forc
 
     # Prepare bake settings
     book = remember_before_bake(yp)
-    prepare_bake_settings(book, [obj], yp, samples, margin, uv_map, force_use_cpu=force_use_cpu)
+    prepare_bake_settings(book, [obj], yp, samples, margin, uv_map, bake_device=bake_device)
 
     mat = get_active_material()
     name = entity.name + ' Temp'
@@ -1277,7 +1288,7 @@ def join_objects(objs):
 
     return bpy.context.object
 
-def resize_image(image, width, height, colorspace='Linear', samples=1, margin=0, segment=None, alpha_aware=True, force_use_cpu=False, yp=None):
+def resize_image(image, width, height, colorspace='Linear', samples=1, margin=0, segment=None, alpha_aware=True, yp=None, bake_device='GPU'):
 
     T = time.time()
     image_name = image.name
@@ -1329,7 +1340,7 @@ def resize_image(image, width, height, colorspace='Linear', samples=1, margin=0,
         plane_obj = bpy.context.view_layer.objects.active
     else: plane_obj = bpy.context.scene.objects.active
 
-    prepare_bake_settings(book, [plane_obj], samples=samples, margin=margin, force_use_cpu=force_use_cpu)
+    prepare_bake_settings(book, [plane_obj], samples=samples, margin=margin, bake_device=bake_device)
 
     # If using image atlas, transform uv
     if segment:
