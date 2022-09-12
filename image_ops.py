@@ -203,6 +203,12 @@ def save_pack_all(yp, only_dirty = True):
     packed_float_images = []
 
     #print()
+    # Temporary scene for blender 3.30 hack
+    tmpscene = None
+    if is_greater_than_330():
+        tmpscene = bpy.data.scenes.new('Temp Save Scene')
+        tmpscene.view_settings.view_transform = 'Standard'
+        tmpscene.render.image_settings.file_format = 'PNG'
 
     # Save/pack images
     for image in images:
@@ -225,13 +231,51 @@ def save_pack_all(yp, only_dirty = True):
             if image.is_float:
                 save_float_image(image)
             else:
-                try:
-                    ori_colorspace = image.colorspace_settings.name
-                    image.save()
-                    image.colorspace_settings.name = ori_colorspace
+                # BLENDER BUG: Blender 3.3 has wrong srgb if not packed first
+                if is_greater_than_330() and image.colorspace_settings.name == 'Linear':
+
+                    # Get image path
+                    path = bpy.path.abspath(image.filepath)
+
+                    # Pack image first
+                    image.pack()
+                    image.colorspace_settings.name = 'sRGB'
+
+                    # Remove old files to avoid caching (?)
+                    try: os.remove(path)
+                    except Exception as e: print(e)
+                    
+                    # Then unpack
+                    default_dir, default_dir_found, default_filepath, temp_path, unpacked_path = unpack_image(image, path)
+
+                    # Save image
+                    image.save_render(path, scene=tmpscene)
+
+                    # Set the filepath to the image
+                    try: image.filepath = bpy.path.relpath(path)
+                    except: image.filepath = path
+
+                    # Bring back linear
+                    image.colorspace_settings.name = 'Linear'
+
+                    # Remove unpacked images on Blender 3.3 
+                    remove_unpacked_image_path(path, default_dir, default_dir_found, default_filepath, temp_path, unpacked_path)
+
                     print('INFO:', image.name, 'image is saved at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
-                except Exception as e:
-                    print(e)
+
+                else:
+                    try:
+                        ori_colorspace = image.colorspace_settings.name
+                        image.save()
+                        image.colorspace_settings.name = ori_colorspace
+
+                        print('INFO:', image.name, 'image is saved at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+                    except Exception as e:
+                        print(e)
+
+    # Delete temporary scene
+    if tmpscene:
+        bpy.data.scenes.remove(tmpscene)
 
     # HACK: For some reason active float image will glitch after auto save
     # This is only happen if active object is on texture paint mode
@@ -332,7 +376,7 @@ class YPackImage(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return hasattr(context, 'image') and context.image
+        return hasattr(context, 'image') and context.image and not context.image.packed_file
 
     def execute(self, context):
 
@@ -345,6 +389,39 @@ class YPackImage(bpy.types.Operator):
             if context.image.is_float:
                 pack_float_image(context.image)
             else: context.image.pack(as_png=True)
+
+        context.image.filepath = ''
+
+        node = get_active_ypaint_node()
+        tree = node.node_tree
+        yp = tree.yp
+
+        if yp.use_baked and yp.active_channel_index < len(yp.channels):
+            ch = yp.channels[yp.active_channel_index]
+            if ch.type == 'NORMAL':
+
+                baked_disp = tree.nodes.get(ch.baked_disp)
+                if baked_disp and baked_disp.image and not baked_disp.image.packed_file:
+                    if is_greater_than_280():
+                        baked_disp.image.pack()
+                    else:
+                        if baked_disp.image.is_float:
+                            pack_float_image(baked_disp.image)
+                        else: baked_disp.image.pack(as_png=True)
+
+                    baked_disp.image.filepath = ''
+
+                if not is_overlay_normal_empty(yp):
+                    baked_normal_overlay = tree.nodes.get(ch.baked_normal_overlay)
+                    if baked_normal_overlay and baked_normal_overlay.image and not baked_normal_overlay.image.packed_file:
+                        if is_greater_than_280():
+                            baked_normal_overlay.image.pack()
+                        else:
+                            if baked_normal_overlay.image.is_float:
+                                pack_float_image(baked_normal_overlay.image)
+                            else: baked_normal_overlay.image.pack(as_png=True)
+
+                    baked_normal_overlay.image.filepath = ''
 
         print('INFO:', context.image.name, 'image is packed at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
 
@@ -459,6 +536,10 @@ def unpack_image(image, filepath):
     # Unpack the file
     image.unpack()
     unpacked_path = bpy.path.abspath(image.filepath)
+
+    # HACK: Unpacked path sometimes has inconsistent backslash
+    folder, file = os.path.split(unpacked_path)
+    unpacked_path = os.path.join(folder, file)
 
     return default_dir, default_dir_found, default_filepath, temp_path, unpacked_path
 
@@ -715,7 +796,7 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
 
     @classmethod
     def poll(cls, context):
-        return hasattr(context, 'image') and context.image
+        return hasattr(context, 'image') and context.image and get_active_ypaint_node()
 
     def draw(self, context):
         if is_greater_than_280(): 
@@ -768,7 +849,14 @@ class YSaveAsImage(bpy.types.Operator, ExportHelper):
 
         # Set filepath
         if context.image.filepath == '':
+            yp = get_active_ypaint_node().node_tree.yp
+
             name = context.image.name
+
+            # Remove addon title from the file names
+            if yp.use_baked and name.startswith(get_addon_title() + ' '):
+                name = name.replace(get_addon_title() + ' ', '')
+
             if not name.endswith(file_ext): name += file_ext
             self.filepath = name
         else:

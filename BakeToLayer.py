@@ -279,7 +279,7 @@ class YBakeToLayer(bpy.types.Operator):
             description='Device to use for baking',
             items = (('GPU', 'GPU Compute', ''),
                      ('CPU', 'CPU', '')),
-            default='GPU'
+            default='CPU'
             )
 
     #source_object = PointerProperty(
@@ -1294,6 +1294,10 @@ class YBakeToLayer(bpy.types.Operator):
         if self.type in {'BEVEL_NORMAL', 'MULTIRES_NORMAL', 'OTHER_OBJECT_NORMAL'}:
             image.colorspace_settings.name = 'Linear'
 
+        # Set image filepath if overwrite image is found
+        if overwrite_img and not overwrite_img.packed_file:
+            image.filepath = overwrite_img.filepath
+
         # Set bake image
         tex.image = image
         mat.node_tree.nodes.active = tex
@@ -1700,7 +1704,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             description='Device to use for baking',
             items = (('GPU', 'GPU Compute', ''),
                      ('CPU', 'CPU', '')),
-            default='GPU'
+            default='CPU'
             )
 
     fxaa = BoolProperty(name='Use FXAA', 
