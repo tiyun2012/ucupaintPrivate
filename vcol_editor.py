@@ -100,7 +100,7 @@ class YSetActiveVcol(bpy.types.Operator):
         return {'CANCELLED'}
 
 class YToggleEraser(bpy.types.Operator):
-    bl_idname = "mesh.y_toggle_eraser"
+    bl_idname = "paint.y_toggle_eraser"
     bl_label = "Toggle Eraser Brush"
     bl_description = "Toggle eraser brush"
     bl_options = {'REGISTER', 'UNDO'}
@@ -439,6 +439,7 @@ class VIEW3D_PT_y_vcol_editor_ui(bpy.types.Panel):
     bl_label = "Vertex Color Editor"
     bl_context = "mesh_edit"
     bl_region_type = 'UI'
+    bl_category = 'VCol Edit'
     #bl_options = {'DEFAULT_CLOSED'} 
 
     @classmethod

@@ -13,7 +13,7 @@ TEMP_VCOL = '__temp__vcol__'
 class YTryToSelectBakedVertexSelect(bpy.types.Operator):
     bl_idname = "node.y_try_to_select_baked_vertex"
     bl_label = "Try to reselect baked selected vertex"
-    bl_description = "Try to reselect baked selected vertex. It might give you wrong results if mesh number of vertex changed."
+    bl_description = "Try to reselect baked selected vertex. It might give you wrong results if mesh number of vertex changed"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -110,7 +110,7 @@ class YTryToSelectBakedVertexSelect(bpy.types.Operator):
 class YRemoveBakeInfoOtherObject(bpy.types.Operator):
     bl_idname = "node.y_remove_bake_info_other_object"
     bl_label = "Remove other object info"
-    bl_description = "Remove other object bake info, so it won't be automatically baked anymore if you choose to rebake."
+    bl_description = "Remove other object bake info, so it won't be automatically baked anymore if you choose to rebake"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -1107,9 +1107,9 @@ class YBakeToLayer(bpy.types.Operator):
                         if i > multires_index: 
                             m.show_render = False
                             m.show_viewport = False
-            else:
+            elif obj not in other_objs:
                 for m in obj.modifiers:
-                    if m.type in {'SOLIDIFY', 'MIRROR', 'ARRAY'}:
+                    if m.type in problematic_modifiers:
                         m.show_render = False
 
             ori_mat_ids[obj.name] = []
@@ -1938,7 +1938,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             ori_viewport_mods[obj.name] = [m.show_viewport for m in obj.modifiers]
 
             for m in obj.modifiers:
-                if m.type in {'SOLIDIFY', 'MIRROR', 'ARRAY'}:
+                if m.type in problematic_modifiers:
                     m.show_render = False
 
         prepare_bake_settings(book, objs, yp, samples=samples, margin=self.margin, 

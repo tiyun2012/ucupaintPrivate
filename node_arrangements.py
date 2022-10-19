@@ -334,6 +334,9 @@ def arrange_modifier_nodes(tree, parent, loc, is_value=False, return_y_offset=Fa
             if check_set_node_loc(tree, m.color_ramp_alpha_multiply, loc):
                 loc.x += 165.0
 
+            if check_set_node_loc(tree, m.color_ramp_linear_start, loc):
+                loc.x += 165.0
+
             if check_set_node_loc(tree, m.color_ramp, loc):
                 loc.x += 265.0
 
@@ -1659,8 +1662,6 @@ def rearrange_yp_nodes(group_tree):
     yp = group_tree.yp
     nodes = group_tree.nodes
 
-    dist_y = 185
-    dist_x = 200
     loc = Vector((0, 0))
 
     # Rearrange depth layer nodes

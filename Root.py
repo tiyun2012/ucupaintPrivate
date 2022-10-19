@@ -587,8 +587,8 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
     normal = BoolProperty(name='Normal', default=True)
 
     mute_texture_paint_overlay = BoolProperty(
-            name = 'Mute Texture Paint Overlay',
-            description = 'Set Texture Paint Overlay on 3D View screen to 0. It can helps texture painting better.',
+            name = 'Mute Stencil Mask Opacity',
+            description = 'Set Stencil Mask Opacity found in the 3D Viewport\'s Overlays menu to 0',
             default = True)
 
     @classmethod
@@ -600,14 +600,14 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
         mat = get_active_material()
 
         # Get target bsdf
-        self.target_bsdf = None
+        self.target_bsdf_name = ''
         if mat and mat.node_tree: # and is_greater_than_280():
             output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
             if output:
                 bsdf_node = get_closest_bsdf(output[0])
                 if bsdf_node:
                     self.type = bsdf_node.type
-                    self.target_bsdf = bsdf_node
+                    self.target_bsdf_name = bsdf_node.name
                     #print(bsdf_node)
 
         # Normal channel does not works to non mesh object
@@ -690,8 +690,9 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
         ao_mul = None
 
         # If target bsdf is used as main bsdf
-        if self.target_bsdf and self.target_bsdf.type == self.type:
-            main_bsdf = self.target_bsdf
+        target_bsdf = nodes.get(self.target_bsdf_name)
+        if target_bsdf and target_bsdf.type == self.type:
+            main_bsdf = target_bsdf
             for l in main_bsdf.outputs[0].links:
                 outsoc = l.to_socket
 
@@ -2598,18 +2599,33 @@ def update_channel_colorspace(self, context):
         if c == self:
             channel_index = i
             for mod in c.modifiers:
+
                 if mod.type == 'RGB_TO_INTENSITY':
                     rgb2i = nodes.get(mod.rgb2i)
                     if self.colorspace == 'LINEAR':
                         rgb2i.inputs['Gamma'].default_value = 1.0
                     else: rgb2i.inputs['Gamma'].default_value = 1.0/GAMMA
 
+                if mod.type == 'COLOR_RAMP':
+
+                    color_ramp_linear_start = nodes.get(mod.color_ramp_linear_start)
+                    if color_ramp_linear_start:
+                        if self.colorspace == 'SRGB':
+                            color_ramp_linear_start.inputs[1].default_value = GAMMA
+                        else: color_ramp_linear_start.inputs[1].default_value = 1.0
+
+                    color_ramp_linear = nodes.get(mod.color_ramp_linear)
+                    if color_ramp_linear:
+                        if self.colorspace == 'SRGB':
+                            color_ramp_linear.inputs[1].default_value = 1.0/GAMMA
+                        else: color_ramp_linear.inputs[1].default_value = 1.0
+
     for layer in yp.layers:
         ch = layer.channels[channel_index]
-        #tree = get_tree(layer)
+        tree = get_tree(layer)
 
         #Layer.set_layer_channel_linear_node(tree, layer, self, ch)
-        Layer.check_layer_channel_linear_node(ch, layer, self, reconnect=True)
+        check_layer_channel_linear_node(ch, layer, self, reconnect=True)
 
         # Check for linear node
         #linear = tree.nodes.get(ch.linear)
@@ -2625,6 +2641,38 @@ def update_channel_colorspace(self, context):
         #        ch.layer_input = 'RGB_LINEAR'
         #    elif ch.layer_input == 'CUSTOM':
         #        ch.layer_input = 'CUSTOM'
+
+        # Change modifier colorspace only on image layer
+        if layer.type == 'IMAGE':
+            mod_tree = get_mod_tree(layer)
+
+            for mod in layer.modifiers:
+
+                if mod.type == 'RGB_TO_INTENSITY':
+                    rgb2i = mod_tree.nodes.get(mod.rgb2i)
+                    if self.colorspace == 'LINEAR':
+                        rgb2i.inputs['Gamma'].default_value = 1.0
+                    else: rgb2i.inputs['Gamma'].default_value = 1.0/GAMMA
+
+                if mod.type == 'OVERRIDE_COLOR':
+                    oc = mod_tree.nodes.get(mod.oc)
+                    if self.colorspace == 'LINEAR':
+                        oc.inputs['Gamma'].default_value = 1.0
+                    else: oc.inputs['Gamma'].default_value = 1.0/GAMMA
+
+                if mod.type == 'COLOR_RAMP':
+
+                    color_ramp_linear_start = mod_tree.nodes.get(mod.color_ramp_linear_start)
+                    if color_ramp_linear_start:
+                        if self.colorspace == 'SRGB':
+                            color_ramp_linear_start.inputs[1].default_value = GAMMA
+                        else: color_ramp_linear_start.inputs[1].default_value = 1.0
+
+                    color_ramp_linear = mod_tree.nodes.get(mod.color_ramp_linear)
+                    if color_ramp_linear:
+                        if self.colorspace == 'SRGB':
+                            color_ramp_linear.inputs[1].default_value = 1.0/GAMMA
+                        else: color_ramp_linear.inputs[1].default_value = 1.0
 
         if ch.enable_transition_ramp:
             tr_ramp = tree.nodes.get(ch.tr_ramp)
@@ -2655,10 +2703,18 @@ def update_channel_colorspace(self, context):
                 else: oc.inputs['Gamma'].default_value = 1.0/GAMMA
 
             if mod.type == 'COLOR_RAMP':
+
+                color_ramp_linear_start = tree.nodes.get(mod.color_ramp_linear_start)
+                if color_ramp_linear_start:
+                    if self.colorspace == 'SRGB':
+                        color_ramp_linear_start.inputs[1].default_value = GAMMA
+                    else: color_ramp_linear_start.inputs[1].default_value = 1.0
+
                 color_ramp_linear = tree.nodes.get(mod.color_ramp_linear)
-                if self.colorspace == 'SRGB':
-                    color_ramp_linear.inputs[1].default_value = 1.0/GAMMA
-                else: color_ramp_linear.inputs[1].default_value = 1.0
+                if color_ramp_linear:
+                    if self.colorspace == 'SRGB':
+                        color_ramp_linear.inputs[1].default_value = 1.0/GAMMA
+                    else: color_ramp_linear.inputs[1].default_value = 1.0
 
 def update_enable_smooth_bump(self, context):
     yp = self.id_data.yp
@@ -3158,7 +3214,7 @@ class YPaintChannel(bpy.types.PropertyGroup):
     # Real displacement using height map
     enable_subdiv_setup = BoolProperty(
             name = 'Enable Displacement Setup',
-            description = 'Enable displacement setup. Only works if baked results is used.',
+            description = 'Enable displacement setup. Only works if baked results is used',
             default=False, update=Bake.update_enable_subdiv_setup)
 
     #subdiv_standard_type = EnumProperty(
