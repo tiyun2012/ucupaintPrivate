@@ -292,6 +292,7 @@ possible_object_types = {
         'MESH',
         'META',
         'CURVE',
+        'CURVES',
         'SURFACE',
         'FONT'
         }
@@ -432,8 +433,18 @@ def is_greater_than_330():
         return True
     return False
 
+def is_greater_than_340():
+    if bpy.app.version >= (3, 4, 0):
+        return True
+    return False
+
 def is_created_using_279():
     if bpy.data.version[:2] == (2, 79):
+        return True
+    return False
+
+def is_created_before_340():
+    if bpy.data.version[:2] < (3, 4):
         return True
     return False
 
@@ -3410,7 +3421,7 @@ def get_multires_modifier(obj, keyword=''):
     return None
 
 def get_uv_layers(obj):
-    if obj.type != 'MESH': return None
+    if obj.type != 'MESH': return []
 
     if not is_greater_than_280():
         uv_layers = obj.data.uv_textures
@@ -3941,6 +3952,103 @@ def get_flow_vcol(obj, uv0, uv1):
                     vcol.data[li].color = (cv.x, cv.y, 0.0)
 
     return vcol
+
+def new_mix_node(tree, entity, prop, label='', data_type='RGBA'):
+    ''' Create new mix node '''
+    if not hasattr(entity, prop): return
+
+    node_id_name = 'ShaderNodeMix' if is_greater_than_340() else 'ShaderNodeMixRGB'
+
+    node = new_node(tree, entity, prop, node_id_name, label)
+
+    if is_greater_than_340():
+        node.data_type = data_type
+
+    return node
+
+def simple_new_mix_node(tree, data_type='RGBA', label=''):
+    ''' Create simple new mix node '''
+
+    if is_greater_than_340():
+        node = tree.nodes.new('ShaderNodeMix')
+        node.data_type = data_type
+    else: node = tree.nodes.new('ShaderNodeMixRGB')
+
+    if label != '': node.label = label
+
+    return node
+
+def check_new_mix_node(tree, entity, prop, label='', return_dirty=False, data_type='RGBA'):
+    ''' Check if mix node is available, if not, create one '''
+
+    dirty = False
+
+    # Try to get the node first
+    try: node = tree.nodes.get(getattr(entity, prop))
+    except: 
+        if return_dirty:
+            return None, dirty
+        return None
+
+    # Create new node if not found
+    if not node:
+        node = new_mix_node(tree, entity, prop, label, data_type)
+        dirty = True
+
+    if return_dirty:
+        return node, dirty
+
+    return node
+
+def replace_new_mix_node(tree, entity, prop, label='', return_status=False, hard_replace=False, dirty=False, force_replace=False, data_type='RGBA'):
+
+    if is_greater_than_340():
+        node_id_name = 'ShaderNodeMix'
+    else: node_id_name = 'ShaderNodeMixRGB'
+
+    group_name = ''
+
+    node, dirty = replace_new_node(tree, entity, prop, node_id_name, label, group_name, 
+            return_status=True, hard_replace=hard_replace, dirty=dirty, force_replace=force_replace)
+
+    if is_greater_than_340():
+        node.data_type = data_type
+
+    if return_status:
+        return node, dirty
+
+    return node
+
+def set_mix_clamp(mix, bool_val):
+    if hasattr(mix, 'clamp_result'):
+        mix.clamp_result = bool_val
+    elif hasattr(mix, 'use_clamp'):
+        mix.use_clamp = bool_val
+
+def get_mix_color_indices(mix):
+    if mix == None: return 0, 0, 0
+
+    if mix.bl_idname == 'ShaderNodeMix':
+        if mix.data_type == 'FLOAT':
+            return 2, 3, 0
+        elif mix.data_type == 'VECTOR':
+            return 4, 5, 1
+        return 6, 7, 2
+
+    # Check for Color1 input name
+    idx0 = [i for i, inp in enumerate(mix.inputs) if inp.name == 'Color1']
+    if len(idx0) > 0: 
+        idx0 = idx0[0]
+    else: idx0 = 1
+
+    idx1 = [i for i, inp in enumerate(mix.inputs) if inp.name == 'Color2']
+    if len(idx1) > 0: 
+        idx1 = idx1[0]
+    else: idx1 = 2
+
+    outidx = 0
+
+    return idx0, idx1, outidx
 
 #def get_io_index(layer, root_ch, alpha=False):
 #    if alpha:

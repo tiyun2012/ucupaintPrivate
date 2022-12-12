@@ -8,69 +8,10 @@ from .common import *
 from .node_arrangements import *
 from .node_connections import *
 from .subtree import *
+from .input_outputs import *
 
 DEFAULT_NEW_IMG_SUFFIX = ' Layer'
 DEFAULT_NEW_VCOL_SUFFIX = ' VCol'
-
-def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #, check_uvs=False): #, has_parent=False):
-
-    yp = layer.id_data.yp
-    if not tree: tree = get_tree(layer)
-
-    # Check uv maps
-    #if check_uvs:
-    #    check_uv_nodes(yp)
-
-    # Check layer tree io
-    check_layer_tree_ios(layer, tree)
-
-    # Get source_tree
-    source_tree = get_source_tree(layer, tree)
-
-    # Find override channels
-    #using_vector = is_layer_using_vector(layer)
-
-    # Mapping node
-    #if layer.type not in {'BACKGROUND', 'VCOL', 'GROUP', 'COLOR'} or using_vector:
-    if is_layer_using_vector(layer):
-        mapping = source_tree.nodes.get(layer.mapping)
-        if not mapping:
-            mapping = new_node(source_tree, layer, 'mapping', 'ShaderNodeMapping', 'Mapping')
-
-    # Flip Y
-    #update_image_flip_y(self, context)
-
-    # Linear node
-    check_layer_image_linear_node(layer, source_tree)
-
-    # Check the need of bump process
-    check_layer_bump_process(layer, tree)
-
-    # Check the need of divider alpha
-    check_layer_divider_alpha(layer, tree)
-
-    #print(specific_ch.enable)
-
-    # Update transition related nodes
-    height_ch = get_height_channel(layer)
-    if height_ch:
-        transition.check_transition_bump_nodes(layer, tree, height_ch)
-
-    # Channel nodes
-    for i, ch in enumerate(layer.channels):
-        if specific_ch and specific_ch != ch: continue
-        root_ch = yp.channels[i]
-
-        # Update layer ch blend type
-        check_blend_type_nodes(root_ch, layer, ch)
-
-        if root_ch.type != 'NORMAL': # Because normal map related nodes should already created
-            # Check mask mix nodes
-            check_mask_mix_nodes(layer, tree, specific_ch=ch)
-
-    # Mask nodes
-    #for mask in layer.masks:
-    #    check_mask_image_linear_node(mask)
 
 def channel_items(self, context):
     node = get_active_ypaint_node()
@@ -303,8 +244,8 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
                 if hasattr(mask_image, 'use_alpha'):
                     mask_image.use_alpha = False
 
-            #if mask_image.colorspace_settings.name != 'Linear':
-            #    mask_image.colorspace_settings.name = 'Linear'
+            if mask_image.colorspace_settings.name != 'Linear':
+                mask_image.colorspace_settings.name = 'Linear'
 
         # New vertex color
         elif mask_type in {'VCOL', 'COLOR_ID'}:
@@ -3231,8 +3172,8 @@ def replace_mask_type(mask, new_type, item_name='', remove_data=False):
         source.image = image
         if hasattr(source, 'color_space'):
             source.color_space = 'NONE'
-        #if image.colorspace_settings.name != 'Linear':
-        #    image.colorspace_settings.name = 'Linear'
+        if image.colorspace_settings.name != 'Linear':
+            image.colorspace_settings.name = 'Linear'
     elif new_type == 'VCOL':
         set_source_vcol_name(source, item_name)
     elif new_type == 'HEMI':
@@ -4128,7 +4069,7 @@ def update_write_height(self, context):
     update_displacement_height_ratio(root_ch)
 
     rearrange_layer_nodes(layer)
-    reconnect_layer_nodes(layer, ch_index)
+    reconnect_layer_nodes(layer) #, ch_index)
 
 def update_normal_strength(self, context):
     yp = self.id_data.yp
@@ -4470,16 +4411,6 @@ def update_layer_channel_use_clamp(self, context):
     if root_ch.type == 'NORMAL': return
 
     check_blend_type_nodes(root_ch, layer, self)
-
-def check_layer_divider_alpha(layer, tree=None):
-    if not tree: tree = get_source_tree(layer)
-
-    if layer.divide_rgb_by_alpha:
-        divider_alpha = check_new_node(tree, layer, 'divider_alpha', 'ShaderNodeMixRGB', 'Spread Fix')
-        divider_alpha.blend_type = 'DIVIDE'
-        divider_alpha.inputs[0].default_value = 1.0
-    else:
-        remove_node(tree, layer, 'divider_alpha')
 
 def update_divide_rgb_by_alpha(self, context):
     yp = self.id_data.yp

@@ -4,297 +4,31 @@ from .common import *
 from .node_arrangements import *
 from .node_connections import *
 
-def create_input(tree, name, socket_type, valid_inputs, index, 
-        dirty = False, min_value=None, max_value=None, default_value=None):
-
-    inp = tree.inputs.get(name)
-    if not inp:
-        inp = tree.inputs.new(socket_type, name)
-        if min_value != None: inp.min_value = min_value
-        if max_value != None: inp.max_value = max_value
-        if default_value != None: inp.default_value = default_value
-        dirty = True
-    valid_inputs.append(inp)
-    fix_io_index(inp, tree.inputs, index)
-
-    return dirty
-
-def create_output(tree, name, socket_type, valid_outputs, index, dirty=False, default_value=None):
-
-    outp = tree.outputs.get(name)
-    if not outp:
-        outp = tree.outputs.new(socket_type, name)
-        if default_value != None: outp.default_value = default_value
-        dirty = True
-    valid_outputs.append(outp)
-    fix_io_index(outp, tree.outputs, index)
-
-    return dirty
-
-def check_layer_tree_ios(layer, tree=None):
-
-    yp = layer.id_data.yp
-    if not tree: tree = get_tree(layer)
-
-    dirty = False
-
-    input_index = 0
-    output_index = 0
-    valid_inputs = []
-    valid_outputs = []
-
-    has_parent = layer.parent_idx != -1
-    need_prev_normal = check_need_prev_normal(layer)
+def check_channel_clamp(tree, root_ch):
     
-    # Tree input and outputs
-    for i, ch in enumerate(layer.channels):
-        #if yp.disable_quick_toggle and not ch.enable: continue
-        root_ch = yp.channels[i]
-
-        if not (root_ch.type == 'NORMAL' and need_prev_normal) and not ch.enable:
-            continue
-
-        dirty = create_input(tree, root_ch.name, channel_socket_input_bl_idnames[root_ch.type], 
-                valid_inputs, input_index, dirty)
-        input_index += 1
-
-        if root_ch.type != 'NORMAL' or not need_prev_normal or ch.enable:
-            dirty = create_output(tree, root_ch.name, channel_socket_output_bl_idnames[root_ch.type], 
-                    valid_outputs, output_index, dirty)
-            output_index += 1
-
-        # Alpha IO
-        #if (root_ch.type == 'RGB' and root_ch.enable_alpha) or has_parent:
-        if root_ch.enable_alpha or has_parent:
-
-            name = root_ch.name + io_suffix['ALPHA']
-            dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-            input_index += 1
-
-            if root_ch.type != 'NORMAL' or not need_prev_normal or ch.enable:
-                dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                output_index += 1
-
-        # Displacement IO
-        if root_ch.type == 'NORMAL':
-
-            if not root_ch.enable_smooth_bump:
-
-                name = root_ch.name + io_suffix['HEIGHT']
-                dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                input_index += 1
-
-                if not need_prev_normal or ch.enable:
-                    dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                    output_index += 1
-
-                if has_parent:
-
-                    name = root_ch.name + io_suffix['HEIGHT'] + io_suffix['ALPHA']
-                    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    if not need_prev_normal or ch.enable:
-                        dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                        output_index += 1
-
-            else:
-
-                name = root_ch.name + io_suffix['HEIGHT_ONS']
-                dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                input_index += 1
-
-                if not need_prev_normal or ch.enable:
-                    dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
-                    output_index += 1
-
-                name = root_ch.name + io_suffix['HEIGHT_EW']
-                dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                input_index += 1
-
-                if not need_prev_normal or ch.enable:
-                    dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
-                    output_index += 1
-
-                if has_parent:
-
-                    name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    if not need_prev_normal or ch.enable:
-                        dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
-                        output_index += 1
-
-                    name = root_ch.name + io_suffix['HEIGHT_EW'] + io_suffix['ALPHA']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    if not need_prev_normal or ch.enable:
-                        dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
-                        output_index += 1
-
-                #for d in neighbor_directions:
-
-                #    name = root_ch.name + io_suffix['HEIGHT'] + ' ' + d
-                #    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                #    dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                #    input_index += 1
-                #    output_index += 1
-
-                #    if has_parent:
-
-                #        name = root_ch.name + io_suffix['ALPHA'] + ' ' + d
-                #        dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                #        dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                #        input_index += 1
-                #        output_index += 1
-
-    # Tree background inputs
-    if layer.type in {'BACKGROUND', 'GROUP'}:
-
-        for i, ch in enumerate(layer.channels):
-            #if yp.disable_quick_toggle and not ch.enable: continue
-            if not ch.enable: continue
-
-            root_ch = yp.channels[i]
-
-            name = root_ch.name + io_suffix[layer.type]
-            dirty = create_input(tree, name, channel_socket_input_bl_idnames[root_ch.type],
-                    valid_inputs, input_index, dirty)
-            input_index += 1
-
-            # Alpha Input
-            if root_ch.enable_alpha or layer.type == 'GROUP':
-
-                name = root_ch.name + io_suffix['ALPHA'] + io_suffix[layer.type]
-                dirty = create_input(tree, name, 'NodeSocketFloatFactor',
-                        valid_inputs, input_index, dirty)
-                input_index += 1
-
-            # Displacement Input
-            if root_ch.type == 'NORMAL' and layer.type == 'GROUP':
-
-                if not root_ch.enable_smooth_bump:
-
-                    name = root_ch.name + io_suffix['HEIGHT'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketFloat',
-                            valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    name = root_ch.name + io_suffix['HEIGHT'] + io_suffix['ALPHA'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketFloat',
-                            valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                else:
-
-                    name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    name = root_ch.name + io_suffix['HEIGHT_EW'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    name = root_ch.name + io_suffix['HEIGHT_EW'] + io_suffix['ALPHA'] + io_suffix['GROUP']
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                    #for d in neighbor_directions:
-                    #    name = root_ch.name + io_suffix['HEIGHT'] + ' ' + d + io_suffix['GROUP']
-
-                    #    dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
-                    #    input_index += 1
-
-                    #    name = (root_ch.name + 
-                    #            #io_suffix['HEIGHT'] + ' ' + 
-                    #            io_suffix['ALPHA'] + ' ' + 
-                    #            d + io_suffix['GROUP'])
-
-                    #    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                    #    input_index += 1
-
-    # UV necessary container
-    uv_names = []
-
-    # Check height root channel
-    height_root_ch = get_root_height_channel(yp)
-    height_ch = get_height_channel(layer)
-    if height_root_ch and height_root_ch.main_uv != '' and height_root_ch.main_uv not in uv_names:
-        uv_names.append(height_root_ch.main_uv)
-
-    # Add main UV if need previous normal
-    if need_prev_normal and height_root_ch.main_uv != '':
-        uv_names.append(height_root_ch.main_uv)
-
-    # Check layer uv
-    if layer.texcoord_type == 'UV' and layer.uv_name not in uv_names and layer.uv_name != '':
-        uv_names.append(layer.uv_name)
-
-    # Check masks uvs
-    for mask in layer.masks:
-        if mask.texcoord_type == 'UV' and mask.uv_name not in uv_names and mask.uv_name != '':
-            uv_names.append(mask.uv_name)
-
-    #print(height_root_ch.main_uv)
-
-    # Create inputs
-    for uv_name in uv_names:
-        name = uv_name + io_suffix['UV']
-        dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-        input_index += 1
-
-        #print(uv_name)
-
-        #if height_ch and not (yp.disable_quick_toggle and not height_ch.enable):
-        if (height_ch and height_ch.enable) or (need_prev_normal and uv_name == height_root_ch.main_uv):
-
-            name = uv_name + io_suffix['TANGENT']
-            dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-            input_index += 1
-
-            name = uv_name + io_suffix['BITANGENT']
-            dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-            input_index += 1
-
-    # Other than uv texcoord name container
-    texcoords = []
-
-    # Check layer texcoords
-    if layer.texcoord_type != 'UV':
-        texcoords.append(layer.texcoord_type)
-
-    for mask in layer.masks:
-        if mask.texcoord_type != 'UV' and mask.texcoord_type not in texcoords:
-            texcoords.append(mask.texcoord_type)
-
-    for texcoord in texcoords:
-        name = io_names[texcoord]
-        dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-        input_index += 1
-
-    if yp.layer_preview_mode:
-        dirty = create_output(tree, LAYER_VIEWER, 'NodeSocketColor', valid_outputs, output_index, dirty)
-        output_index += 1
-
-        dirty = create_output(tree, LAYER_ALPHA_VIEWER, 'NodeSocketColor', valid_outputs, output_index, dirty)
-        output_index += 1
-
-    # Check for invalid io
-    for inp in tree.inputs:
-        if inp not in valid_inputs:
-            tree.inputs.remove(inp)
-
-    for outp in tree.outputs:
-        if outp not in valid_outputs:
-            tree.outputs.remove(outp)
-
-    return dirty
+    if root_ch.type == 'RGB':
+        if root_ch.use_clamp:
+            clamp = tree.nodes.get(root_ch.clamp)
+            if not clamp:
+                clamp = new_mix_node(tree, root_ch, 'clamp')
+                clamp.inputs[0].default_value = 0.0
+                set_mix_clamp(clamp, True)
+        else:
+            remove_node(tree, root_ch, 'clamp')
+
+    elif root_ch.type == 'VALUE':
+        end_linear = tree.nodes.get(root_ch.end_linear)
+        if end_linear: end_linear.use_clamp = root_ch.use_clamp
+
+def check_layer_divider_alpha(layer, tree=None):
+    if not tree: tree = get_source_tree(layer)
+
+    if layer.divide_rgb_by_alpha:
+        divider_alpha = check_new_mix_node(tree, layer, 'divider_alpha', 'Spread Fix')
+        divider_alpha.blend_type = 'DIVIDE'
+        divider_alpha.inputs[0].default_value = 1.0
+    else:
+        remove_node(tree, layer, 'divider_alpha')
 
 def move_mod_group(layer, from_tree, to_tree):
     mod_group = from_tree.nodes.get(layer.mod_group)
@@ -880,10 +614,6 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
                 remove_node(tree, c, 'mix')
                 remove_node(tree, c, 'mix_remains')
                 if root_ch.type == 'NORMAL':
-                    #remove_node(tree, c, 'mix_n')
-                    #remove_node(tree, c, 'mix_s')
-                    #remove_node(tree, c, 'mix_e')
-                    #remove_node(tree, c, 'mix_w')
                     remove_node(tree, c, 'mix_pure')
                     remove_node(tree, c, 'mix_normal')
                 continue
@@ -905,21 +635,22 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
                     remove_node(tree, c, 'mix')
                     mix = None
                 if not mix:
-                    mix = new_node(tree, c, 'mix', 'ShaderNodeMixRGB', 'Mask Blend')
+                    mix = new_mix_node(tree, c, 'mix', 'Mask Blend')
                     mix.inputs[0].default_value = mask.intensity_value
                 mix.blend_type = mask.blend_type
                 # Use clamp to keep value between 0.0 to 1.0
-                if mask.blend_type not in {'MIX', 'MULTIPLY'}: mix.use_clamp = True
+                if mask.blend_type not in {'MIX', 'MULTIPLY'}: 
+                    set_mix_clamp(mix, True)
 
             if root_ch.type == 'NORMAL':
 
                 if i >= chain and trans_bump and ch == trans_bump:
                     mix_pure = tree.nodes.get(c.mix_pure)
                     if not mix_pure:
-                        mix_pure = new_node(tree, c, 'mix_pure', 'ShaderNodeMixRGB', 'Mask Blend Pure')
+                        mix_pure = new_mix_node(tree, c, 'mix_pure', 'Mask Blend Pure')
                         mix_pure.blend_type = mask.blend_type
                         # Use clamp to keep value between 0.0 to 1.0
-                        mix_pure.use_clamp = True
+                        set_mix_clamp(mix_pure, True)
                         mix_pure.inputs[0].default_value = mask.intensity_value
 
                 else:
@@ -931,38 +662,24 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
                     ):
                     mix_remains = tree.nodes.get(c.mix_remains)
                     if not mix_remains:
-                        mix_remains = new_node(tree, c, 'mix_remains', 'ShaderNodeMixRGB', 'Mask Blend Remaining')
+                        mix_remains = new_mix_node(tree, c, 'mix_remains', 'Mask Blend Remaining')
                         mix_remains.inputs[0].default_value = mask.intensity_value
                     mix_remains.blend_type = mask.blend_type
                     # Use clamp to keep value between 0.0 to 1.0
-                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: mix_remains.use_clamp = True
+                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: 
+                        set_mix_clamp(mix_remains, True)
                 else:
                     remove_node(tree, c, 'mix_remains')
-
-                #if (root_ch.enable_smooth_bump and
-                #    (write_height or (not write_height and i < chain))
-                #    ):
-
-                #    for d in neighbor_directions:
-                #        mix = tree.nodes.get(getattr(c, 'mix_' + d))
-
-                #        if not mix:
-                #            mix = new_node(tree, c, 'mix_' + d, 'ShaderNodeMixRGB', 'Mask Blend ' + d)
-                #            mix.blend_type = mask.blend_type
-                #            mix.inputs[0].default_value = mask.intensity_value
-
-                #else:
-                #    for d in neighbor_directions:
-                #        remove_node(tree, c, 'mix_' + d)
 
                 if layer.type == 'GROUP':
                     mix_normal = tree.nodes.get(c.mix_normal)
                     if not mix_normal:
-                        mix_normal = new_node(tree, c, 'mix_normal', 'ShaderNodeMixRGB', 'Mask Normal')
+                        mix_normal = new_mix_node(tree, c, 'mix_normal', 'Mask Normal')
                         mix_normal.inputs[0].default_value = mask.intensity_value
                     mix_normal.blend_type = mask.blend_type
                     # Use clamp to keep value between 0.0 to 1.0
-                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: mix_normal.use_clamp = True
+                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: 
+                        set_mix_clamp(mix_normal, True)
                 else:
                     remove_node(tree, c, 'mix_normal')
 
@@ -974,12 +691,13 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
                     mix_remains = tree.nodes.get(c.mix_remains)
 
                     if not mix_remains:
-                        mix_remains = new_node(tree, c, 'mix_remains', 'ShaderNodeMixRGB', 'Mask Blend n')
+                        mix_remains = new_mix_node(tree, c, 'mix_remains', 'Mask Blend n')
                         mix_remains.inputs[0].default_value = mask.intensity_value
 
                     mix_remains.blend_type = mask.blend_type
                     # Use clamp to keep value between 0.0 to 1.0
-                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: mix_remains.use_clamp = True
+                    if mask.blend_type not in {'MIX', 'MULTIPLY'}: 
+                        set_mix_clamp(mix_remains, True)
                 else:
                     remove_node(tree, c, 'mix_remains')
 
@@ -1342,8 +1060,10 @@ def check_parallax_mix(tree, uv, baked=False, remove=False):
         else: remove_node(tree, uv, 'parallax_mix')
         #tree.nodes.remove(parallax_mix)
     elif not remove and not parallax_mix:
-        if baked: parallax_mix = new_node(tree, uv, 'baked_parallax_mix', 'ShaderNodeMixRGB', uv.name + ' Final Mix')
-        else: parallax_mix = new_node(tree, uv, 'parallax_mix', 'ShaderNodeMixRGB', uv.name + ' Final Mix')
+        if baked: 
+            parallax_mix = new_mix_node(tree, uv, 'baked_parallax_mix', uv.name + ' Final Mix')
+        else: 
+            parallax_mix = new_mix_node(tree, uv, 'parallax_mix', uv.name + ' Final Mix')
 
 def check_non_uv_parallax_mix(tree, texcoord_name, remove=False):
 
@@ -1352,7 +1072,7 @@ def check_non_uv_parallax_mix(tree, texcoord_name, remove=False):
     if remove and parallax_mix:
         tree.nodes.remove(parallax_mix)
     elif not remove and not parallax_mix:
-        parallax_mix = tree.nodes.new('ShaderNodeMixRGB')
+        parallax_mix = simple_new_mix_node(tree)
         parallax_mix.name = PARALLAX_MIX_PREFIX + TEXCOORD_IO_PREFIX + texcoord_name
         parallax_mix.label = texcoord_name + ' Final Mix'
 
@@ -1400,10 +1120,10 @@ def check_iterate_current_uv_mix(tree, uv, baked=False, remove=False):
         if baked: remove_node(tree, uv, 'baked_parallax_current_uv_mix')
         else: remove_node(tree, uv, 'parallax_current_uv_mix')
     elif not remove and not current_uv_mix:
-        if baked: current_uv_mix = new_node(tree, uv, 'baked_parallax_current_uv_mix', 
-                'ShaderNodeMixRGB', uv.name + CURRENT_UV)
-        else: current_uv_mix = new_node(tree, uv, 'parallax_current_uv_mix', 
-                'ShaderNodeMixRGB', uv.name + CURRENT_UV)
+        if baked: 
+            current_uv_mix = new_mix_node(tree, uv, 'baked_parallax_current_uv_mix', uv.name + CURRENT_UV)
+        else: 
+            current_uv_mix = new_mix_node(tree, uv, 'parallax_current_uv_mix', uv.name + CURRENT_UV)
 
 def check_non_uv_iterate_current_mix(tree, texcoord_name, remove=False):
 
@@ -1412,7 +1132,7 @@ def check_non_uv_iterate_current_mix(tree, texcoord_name, remove=False):
     if remove and current_mix:
         tree.nodes.remove(current_mix)
     elif not remove and not current_mix:
-        current_mix = tree.nodes.new('ShaderNodeMixRGB')
+        current_mix = simple_new_mix_node(tree)
         current_mix.name = PARALLAX_CURRENT_MIX_PREFIX + TEXCOORD_IO_PREFIX + texcoord_name
         current_mix.label = texcoord_name + ' Current Mix'
 
@@ -1426,8 +1146,10 @@ def check_depth_source_calculation(tree, uv, baked=False, remove=False):
         else: remove_node(tree, uv, 'parallax_delta_uv')
         #tree.nodes.remove(delta_uv)
     elif not remove and not delta_uv:
-        if baked: delta_uv = new_node(tree, uv, 'baked_parallax_delta_uv', 'ShaderNodeMixRGB', uv.name + DELTA_UV)
-        else: delta_uv = new_node(tree, uv, 'parallax_delta_uv', 'ShaderNodeMixRGB', uv.name + DELTA_UV)
+        if baked: 
+            delta_uv = new_mix_node(tree, uv, 'baked_parallax_delta_uv', uv.name + DELTA_UV)
+        else: 
+            delta_uv = new_mix_node(tree, uv, 'parallax_delta_uv', uv.name + DELTA_UV)
         delta_uv.inputs[0].default_value = 1.0
         delta_uv.blend_type = 'MULTIPLY'
 
@@ -1450,7 +1172,7 @@ def check_non_uv_depth_source_calculation(tree, texcoord_name, remove=False):
     if remove and delta:
         tree.nodes.remove(delta)
     elif not remove and not delta:
-        delta = tree.nodes.new('ShaderNodeMixRGB')
+        delta = simple_new_mix_node(tree)
         delta.name = PARALLAX_DELTA_PREFIX + TEXCOORD_IO_PREFIX + texcoord_name
         delta.label = texcoord_name + ' Delta'
         delta.inputs[0].default_value = 1.0
@@ -2120,8 +1842,11 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
                             tree, ch, 'height_blend', 'ShaderNodeGroup', 'Height Blend', 
                             lib.HEIGHT_MIX_SMOOTH, return_status=True, hard_replace=True, dirty=need_reconnect)
                 else:
-                    height_blend, need_reconnect = replace_new_node(
-                            tree, ch, 'height_blend', 'ShaderNodeMixRGB', 'Height Blend', 
+                    #height_blend, need_reconnect = replace_new_node(
+                    #        tree, ch, 'height_blend', 'ShaderNodeMixRGB', 'Height Blend', 
+                    #        return_status=True, dirty=need_reconnect) #, hard_replace=True)
+                    height_blend, need_reconnect = replace_new_mix_node(
+                            tree, ch, 'height_blend', 'Height Blend', 
                             return_status=True, dirty=need_reconnect) #, hard_replace=True)
 
                     height_blend.blend_type = 'MIX'
@@ -2146,8 +1871,11 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
                             tree, ch, 'height_blend', 'ShaderNodeGroup', 'Height Blend', 
                             lib.HEIGHT_ADD_SMOOTH, return_status=True, hard_replace=True, dirty=need_reconnect)
                 else:
-                    height_blend, need_reconnect = replace_new_node(
-                            tree, ch, 'height_blend', 'ShaderNodeMixRGB', 'Height Blend', 
+                    #height_blend, need_reconnect = replace_new_node(
+                    #        tree, ch, 'height_blend', 'ShaderNodeMixRGB', 'Height Blend', 
+                    #        return_status=True, dirty=need_reconnect) #, hard_replace=True)
+                    height_blend, need_reconnect = replace_new_mix_node(
+                            tree, ch, 'height_blend', 'Height Blend', 
                             return_status=True, dirty=need_reconnect) #, hard_replace=True)
 
                     height_blend.blend_type = 'ADD'
@@ -2439,8 +2167,10 @@ def check_blend_type_nodes(root_ch, layer, ch):
                         return_status = True, hard_replace=True, dirty=need_reconnect)
 
         else:
-            blend, need_reconnect = replace_new_node(tree, ch, 'blend', 
-                    'ShaderNodeMixRGB', 'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
+            #blend, need_reconnect = replace_new_node(tree, ch, 'blend', 
+            #        'ShaderNodeMixRGB', 'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
+            blend, need_reconnect = replace_new_mix_node(tree, ch, 'blend', 
+                    'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
 
     elif root_ch.type == 'NORMAL':
 
@@ -2487,8 +2217,10 @@ def check_blend_type_nodes(root_ch, layer, ch):
                         return_status = True, hard_replace=True, dirty=need_reconnect)
         else:
 
-            blend, need_reconnect = replace_new_node(tree, ch, 'blend', 
-                    'ShaderNodeMixRGB', 'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
+            #blend, need_reconnect = replace_new_node(tree, ch, 'blend', 
+            #        'ShaderNodeMixRGB', 'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
+            blend, need_reconnect = replace_new_mix_node(tree, ch, 'blend', 
+                    'Blend', return_status = True, hard_replace=True, dirty=need_reconnect)
 
     if root_ch.type != 'NORMAL' and blend.type == 'MIX_RGB' and blend.blend_type != blend_type:
         blend.blend_type = blend_type
@@ -2496,8 +2228,7 @@ def check_blend_type_nodes(root_ch, layer, ch):
     if root_ch.type != 'NORMAL':
         if blend.type == 'GROUP' and 'Clamp' in blend.inputs:
             blend.inputs['Clamp'].default_value = 1.0 if ch.use_clamp else 0.0
-        elif hasattr(blend, 'use_clamp'):
-            blend.use_clamp = ch.use_clamp
+        else: set_mix_clamp(blend, ch.use_clamp)
 
     # Mute
     #mute = not layer.enable or not ch.enable

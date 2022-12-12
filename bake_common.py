@@ -414,7 +414,7 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
 
     # Recover modifiers
     for obj_name, lib in book['obj_mods_lib'].items():
-        o = bpy.context.view_layer.objects.get(obj_name)
+        o = get_scene_objects().get(obj_name)
         if o:
             for mod_name in lib['disabled_mods']:
                 mod = o.modifiers.get(mod_name)
@@ -712,20 +712,22 @@ def bake_to_vcol(mat, node, root_ch, extra_channel=None, extra_multiplier=1.0):
         rgb = create_link(mat.node_tree, rgb, norm.inputs[0])[0]
 
     if extra_channel:
-        mul = mat.node_tree.nodes.new('ShaderNodeMixRGB')
+        mul = simple_new_mix_node(mat.node_tree)
+        mmixcol0, mmixcol1, mmixout = get_mix_color_indices(mul)
         mul.inputs[0].default_value = 1.0
-        mul.inputs[2].default_value = (extra_multiplier, extra_multiplier, extra_multiplier, 1.0)
+        mul.inputs[mmixcol1].default_value = (extra_multiplier, extra_multiplier, extra_multiplier, 1.0)
         mul.blend_type = 'MULTIPLY'
 
         extra_rgb = node.outputs[extra_channel.name]
-        extra_rgb = create_link(mat.node_tree, extra_rgb, mul.inputs[1])[0]
+        extra_rgb = create_link(mat.node_tree, extra_rgb, mul.inputs[mmixcol0])[0]
 
-        add = mat.node_tree.nodes.new('ShaderNodeMixRGB')
+        add = simple_new_mix_node(mat.node_tree)
+        amixcol0, amixcol1, amixout = get_mix_color_indices(add)
         add.inputs[0].default_value = 1.0
         add.blend_type = 'ADD'
 
-        rgb = create_link(mat.node_tree, rgb, add.inputs[1])[0]
-        create_link(mat.node_tree, extra_rgb, add.inputs[2])
+        rgb = create_link(mat.node_tree, rgb, add.inputs[amixcol0])[amixout]
+        create_link(mat.node_tree, extra_rgb, add.inputs[amixcol1])
 
     mat.node_tree.links.new(rgb, emit.inputs[0])
 

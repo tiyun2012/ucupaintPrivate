@@ -7,6 +7,7 @@ from .common import *
 from .node_connections import *
 from .node_arrangements import *
 from .subtree import *
+from .input_outputs import *
 
 #def check_object_index_props(entity, source=None):
 #    source.inputs[0].default_value = entity.object_index
@@ -474,8 +475,8 @@ class YNewLayerMask(bpy.types.Operator):
                 if hasattr(img, 'use_alpha'):
                     img.use_alpha = False
 
-            #if img.colorspace_settings.name != 'Linear':
-            #    img.colorspace_settings.name = 'Linear'
+            if img.colorspace_settings.name != 'Linear':
+                img.colorspace_settings.name = 'Linear'
 
         # New vertex color
         elif self.type in {'VCOL', 'COLOR_ID'}:
@@ -638,8 +639,8 @@ class YOpenImageAsMask(bpy.types.Operator, ImportHelper):
                 try: image.filepath = bpy.path.relpath(image.filepath)
                 except: pass
 
-            #if image.colorspace_settings.name != 'Linear':
-            #    image.colorspace_settings.name = 'Linear'
+            if image.colorspace_settings.name != 'Linear':
+                image.colorspace_settings.name = 'Linear'
 
             # Add new mask
             mask = add_new_mask(layer, image.name, 'IMAGE', self.texcoord_type, self.uv_map, image, None, blend_type=self.blend_type)
@@ -783,8 +784,8 @@ class YOpenAvailableDataAsMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             image = bpy.data.images.get(self.image_name)
             name = image.name
-            #if image.colorspace_settings.name != 'Linear':
-            #    image.colorspace_settings.name = 'Linear'
+            if image.colorspace_settings.name != 'Linear':
+                image.colorspace_settings.name = 'Linear'
         elif self.type == 'VCOL':
             vcols = get_vertex_colors(obj)
             vcol = vcols.get(self.vcol_name)
