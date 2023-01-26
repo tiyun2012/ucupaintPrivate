@@ -361,8 +361,8 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
                 c.hide_render = True
             else: c.hide_render = False
 
-        #for o in scene.objects:
-        for o in bpy.context.view_layer.objects:
+        objs = [o for o in bpy.context.view_layer.objects]
+        for o in objs:
             if o in book['ori_active_selected_objs']:
                 o.select_set(True)
             else: o.select_set(False)
@@ -719,7 +719,7 @@ def bake_to_vcol(mat, node, root_ch, extra_channel=None, extra_multiplier=1.0):
         mul.blend_type = 'MULTIPLY'
 
         extra_rgb = node.outputs[extra_channel.name]
-        extra_rgb = create_link(mat.node_tree, extra_rgb, mul.inputs[mmixcol0])[0]
+        extra_rgb = create_link(mat.node_tree, extra_rgb, mul.inputs[mmixcol0])[mmixout]
 
         add = simple_new_mix_node(mat.node_tree)
         amixcol0, amixcol1, amixout = get_mix_color_indices(add)

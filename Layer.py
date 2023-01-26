@@ -3623,21 +3623,32 @@ class YDuplicateLayer(bpy.types.Operator):
         for i, lname in enumerate(relevant_layer_names):
             #idx = relevant_ids[i]
 
-            l = yp.layers.get(lname)
-
             # Create new layer
             new_layer = yp.layers.add()
             new_layer.name = get_unique_name(lname, yp.layers)
 
+            # Get original layer
+            l = yp.layers.get(lname)
+            group_node = tree.nodes.get(l.group_node)
+
+            # Copy layer props
             copy_id_props(l, new_layer, ['name'])
 
             # Duplicate groups
-            group_node = tree.nodes.get(l.group_node)
             new_group_node = new_node(tree, new_layer, 'group_node', 'ShaderNodeGroup', group_node.label)
             new_group_node.node_tree = group_node.node_tree
 
             # Duplicate images and some nodes inside
             duplicate_layer_nodes_and_images(tree, new_layer, True, self.make_image_blank)
+
+            # Rename masks
+            for mask in new_layer.masks:
+                if mask.type in {'VCOL'}: continue
+                m = re.match(r'^Mask\s.*\((.+)\)$', mask.name)
+                if m:
+                    old_layer_name = m.group(1)
+                    if old_layer_name == lname:
+                        mask.name = mask.name.replace(old_layer_name, new_layer.name)
 
             #yp.layers.move(len(yp.layers)-1, idx)
             created_ids.append(len(yp.layers)-1)

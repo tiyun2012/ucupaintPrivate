@@ -99,6 +99,8 @@ def remove_mask_channel_nodes(tree, c):
     remove_node(tree, c, 'mix_pure')
     remove_node(tree, c, 'mix_remains')
     remove_node(tree, c, 'mix_normal')
+    remove_node(tree, c, 'mix_limit')
+    remove_node(tree, c, 'mix_limit_normal')
 
 def remove_mask_channel(tree, layer, ch_index):
 
@@ -153,8 +155,9 @@ def get_new_mask_name(obj, layer, mask_type):
     if mask_type == 'IMAGE':
         #name = 'Image'
         name = 'Mask'
-        items = bpy.data.images
-        return get_unique_name(name, items, surname)
+        name = get_unique_name(name, layer.masks, surname)
+        name = get_unique_name(name, bpy.data.images)
+        return name
     elif mask_type == 'VCOL' and obj.type == 'MESH':
         name = 'Mask VCol'
         items = get_vertex_colors(obj)
@@ -784,7 +787,7 @@ class YOpenAvailableDataAsMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             image = bpy.data.images.get(self.image_name)
             name = image.name
-            if image.colorspace_settings.name != 'Linear':
+            if image.colorspace_settings.name != 'Linear' and not image.is_dirty:
                 image.colorspace_settings.name = 'Linear'
         elif self.type == 'VCOL':
             vcols = get_vertex_colors(obj)
@@ -816,6 +819,10 @@ class YOpenAvailableDataAsMask(bpy.types.Operator):
 
         rearrange_yp_nodes(layer.id_data)
         reconnect_yp_nodes(layer.id_data)
+
+        # Make sure all layers which used the opened image is using correct linear color
+        if self.type == 'IMAGE':
+            check_yp_linear_nodes(yp)
 
         ypui.layer_ui.expand_masks = True
         ypui.need_update = True
@@ -1235,6 +1242,24 @@ def update_mask_name(self, context):
     layer = yp.layers[int(match.group(1))]
     src = get_mask_source(self)
 
+    # Also update layer name if mask name is renamed in certain pattern
+    m = re.match(r'^Mask\s.*\((.+)\)$', self.name)
+    if m:
+        old_layer_name = layer.name
+        new_layer_name = m.group(1)
+
+        yp.halt_update = True
+        layer.name = new_layer_name
+
+        # Also update other mask names
+        for mask in layer.masks:
+            if mask == self: continue
+            mm = re.match(r'^Mask\s.*\((.+)\)$', mask.name)
+            if mm:
+                mask.name = mask.name.replace(mm.group(1), new_layer_name)
+
+        yp.halt_update = False
+
     if self.type == 'IMAGE' and self.segment_name != '': return
     change_layer_name(yp, context.object, src, self, layer.masks)
 
@@ -1301,6 +1326,10 @@ class YLayerMaskChannel(bpy.types.PropertyGroup):
 
     # Normal and height has its own alpha if using group, this one is for normal
     mix_normal = StringProperty(default='')
+
+    # To limit mix value to not go above original channel value, useful for group layer
+    mix_limit = StringProperty(default='')
+    mix_limit_normal = StringProperty(default='')
 
     # Bump related
     #mix_n = StringProperty(default='')
