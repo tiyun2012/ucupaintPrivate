@@ -122,6 +122,13 @@ def remove_mask(layer, mask, obj):
 
     tree = get_tree(layer)
 
+    # Get mask index
+    mask_index = [i for i, m in enumerate(layer.masks) if m == mask][0]
+
+    # Remove mask fcurves first
+    remove_entity_fcurves(mask)
+    shift_mask_fcurves_up(layer, mask_index)
+
     # Dealing with image atlas segments
     if mask.type == 'IMAGE' and mask.segment_name != '':
         src = get_mask_source(mask)
@@ -145,10 +152,7 @@ def remove_mask(layer, mask, obj):
         remove_mask_channel_nodes(tree, c)
 
     # Remove mask
-    for i, m in enumerate(layer.masks):
-        if m == mask:
-            layer.masks.remove(i)
-            break
+    layer.masks.remove(mask_index)
 
 def get_new_mask_name(obj, layer, mask_type):
     surname = '(' + layer.name + ')'
@@ -865,6 +869,7 @@ class YMoveLayerMask(bpy.types.Operator):
 
         # Swap masks
         layer.masks.move(index, new_index)
+        swap_mask_fcurves(layer, index, new_index)
 
         # Dealing with transition bump
         tree = get_tree(layer)

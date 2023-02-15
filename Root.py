@@ -1120,14 +1120,17 @@ class YMoveYPaintChannel(bpy.types.Operator):
 
         # Move channel
         yp.channels.move(index, new_index)
+        swap_channel_fcurves(yp, index, new_index)
 
         # Move layer channels
         for layer in yp.layers:
             layer.channels.move(index, new_index)
+            swap_layer_channel_fcurves(layer, index, new_index)
 
             # Move mask channels
             for mask in layer.masks:
                 mask.channels.move(index, new_index)
+                swap_mask_channel_fcurves(mask, index, new_index)
 
         # Move IO
         check_all_channel_ios(yp)
@@ -1179,6 +1182,10 @@ class YRemoveYPaintChannel(bpy.types.Operator):
         channel_idx = yp.active_channel_index
         channel = yp.channels[channel_idx]
         channel_name = channel.name
+
+        # Remove channel fcurves first
+        remove_channel_fcurves(channel)
+        shift_channel_fcurves_up(yp, channel_idx)
 
         # Collapse the UI
         #setattr(ypui, 'show_channel_modifiers_' + str(channel_idx), False)
@@ -3487,16 +3494,41 @@ def ypaint_force_update_on_anim(scene):
                     ng_string = 'bpy.data.node_groups["' + ng.name + '"].'
                     path = ng_string + fc.data_path
 
+                    # Get evaluated value
+                    val = fc.evaluate(scene.frame_current)
+
+                    # Check if path is a string
+                    if type(eval(path)) == str:
+                        # Get prop name
+                        m = re.match(r'(.+)\.(.+)$', fc.data_path)
+                        if m:
+                            parent_path = ng_string + m.group(1)
+                            prop_name = m.group(2)
+                            enum_path = parent_path + '.bl_rna.properties["' + prop_name + '"].enum_items[' + str(int(val)) + '].identifier'
+                            val = eval(enum_path)
+
                     # Check if path is an array
-                    if hasattr(eval(path), '__len__'):
+                    elif hasattr(eval(path), '__len__'):
                         path += '[' + str(fc.array_index) + ']'
 
-                    # Construct the script to trigger update
-                    script = path + ' = ' + str(fc.evaluate(scene.frame_current))
+                    # Check if path is a boolean
+                    elif type(eval(path)) == bool:
+                        val = val == 1.0
 
-                    # Run the script to actually trigger update
-                    #print(script)
-                    exec(script)
+                    #print(path, val)
+
+                    # Only run script if needed
+                    if eval(path) != val:
+
+                        # Convert evaluated value to string
+                        string_val = str(val) if type(val) != str else '"' + val + '"'
+
+                        # Construct the script
+                        script = path + ' = ' + string_val
+
+                        # Run the script to trigger update
+                        #print(script)
+                        exec(script)
 
 def register():
     bpy.utils.register_class(YSelectMaterialPolygons)
