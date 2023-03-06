@@ -892,7 +892,7 @@ class YNewYPaintChannel(bpy.types.Operator):
             items = colorspace_items,
             default='LINEAR')
 
-    use_clamp : BoolProperty(
+    use_clamp = BoolProperty(
             name='Use Clamp', 
             description = 'Use clamp of newly the channel',
             default=True)
