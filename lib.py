@@ -121,12 +121,14 @@ HEIGHT_PROCESS_SMOOTH_NORMAL_MAP = '~yPL Height Process Smooth Normal Map'
 HEIGHT_PROCESS_TRANSITION_SMOOTH_NORMAL_MAP = '~yPL Height Process Transition Smooth Normal Map'
 HEIGHT_PROCESS_TRANSITION_SMOOTH_NORMAL_MAP_CREASE = '~yPL Height Process Transition Smooth Normal Map Crease'
 
-HEIGHT_COMPARE = '~yPL Height Compare'
 HEIGHT_MIX_SMOOTH = '~yPL Height Mix Smooth'
 HEIGHT_ADD_SMOOTH = '~yPL Height Add Smooth'
-HEIGHT_COMPARE_SMOOTH = '~yPL Height Compare Smooth'
 STRAIGHT_OVER_HEIGHT_MIX_SMOOTH = '~yPL Straight Over Height Mix Smooth'
 STRAIGHT_OVER_HEIGHT_ADD_SMOOTH = '~yPL Straight Over Height Add Smooth'
+
+HEIGHT_COMPARE = '~yPL Height Compare'
+HEIGHT_COMPARE_SMOOTH = '~yPL Height Compare Smooth'
+STRAIGHT_OVER_HEIGHT_COMPARE = '~yPL Straight Over Height Compare'
 STRAIGHT_OVER_HEIGHT_COMPARE_SMOOTH = '~yPL Straight Over Height Compare Smooth'
 
 NORMAL_PROCESS = '~yPL Normal Process'
@@ -139,8 +141,11 @@ NORMAL_MAP_PROCESS_TRANSITION = '~yPL Normal Map Process Transition'
 NORMAL_MAP_PROCESS_SMOOTH = '~yPL Normal Map Process Smooth'
 NORMAL_MAP_PROCESS_SMOOTH_TRANSITION = '~yPL Normal Map Process Smooth Transition'
 
+NORMAL_EMISSION_VIEWER = '~yPL Normal Emission Viewer'
 ADVANCED_EMISSION_VIEWER = '~yPL Advanced Emission Viewer'
+ADVANCED_NORMAL_EMISSION_VIEWER = '~yPL Advanced Normal Emission Viewer'
 #GRID_EMISSION_VIEWER = '~yPL Grid Emission Viewer'
+
 
 ENGINE_FILTER = '~yPL Engine Filter'
 
@@ -226,6 +231,7 @@ BUMP_PROCESS = '~yPL Bump Process'
 # Bake stuff
 BAKE_NORMAL = '~yPL Bake Normal'
 BAKE_NORMAL_ACTIVE_UV = '~yPL Bake Normal with Active UV'
+BAKE_NORMAL_ACTIVE_UV_300 = '~yPL Bake Normal with Active UV 3.0'
 
 # SRGB Stuff
 SRGB_2_LINEAR = '~yPL SRGB to Linear'
@@ -453,6 +459,8 @@ def get_smooth_mix_node(blend_type, layer_type=''):
         mixcol0, mixcol1, mixout = get_mix_color_indices(mix)
         mix.name = '_mix'
         mix.blend_type = blend_type
+        if blend_type not in {'MIX', 'MULTIPLY'}: 
+            set_mix_clamp(mix, True)
 
         mix.location = loc
 
@@ -485,6 +493,8 @@ def get_smooth_mix_node(blend_type, layer_type=''):
             mixcol0, mixcol1, mixout = get_mix_color_indices(mix)
             mix.name = '_mix_' + d
             mix.blend_type = blend_type
+            if blend_type not in {'MIX', 'MULTIPLY'}: 
+                set_mix_clamp(mix, True)
 
             mix.location = loc
 

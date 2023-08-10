@@ -555,6 +555,7 @@ class YBakeToLayer(bpy.types.Operator):
     def draw(self, context):
         node = get_active_ypaint_node()
         yp = node.node_tree.yp
+        mat = get_active_material()
 
         channel = yp.channels[int(self.channel_idx)] if self.channel_idx != '-1' else None
         height_root_ch = get_root_height_channel(yp)
@@ -567,7 +568,6 @@ class YBakeToLayer(bpy.types.Operator):
         show_use_baked_disp = height_root_ch and not self.type.startswith('MULTIRES_') and self.type not in {'SELECTED_VERTICES'}
 
         col = row.column(align=False)
-
 
         if not self.overwrite_current:
 
@@ -844,6 +844,7 @@ class YBakeToLayer(bpy.types.Operator):
 
         # To hold temporary objects
         temp_objs = []
+        temp_meshes = []
 
         # Join objects
         if self.type.startswith('OTHER_OBJECT_'):
@@ -900,21 +901,68 @@ class YBakeToLayer(bpy.types.Operator):
             if not height_root_ch.enable_subdiv_setup:
                 height_root_ch.enable_subdiv_setup = True
 
-        #return {'FINISHED'}
+        # Join objects if the number of objects is higher than one
+        need_join_objects = len(objs) > 1 and not is_join_objects_problematic(yp)
 
-        # Cavity bake sometimes will create temporary objects
-        if self.type == 'CAVITY' and (self.subsurf_influence or self.use_baked_disp):
+        # Join objects and sometimes Cavity bake will create temporary objects
+        if need_join_objects or (self.type == 'CAVITY' and (self.subsurf_influence or self.use_baked_disp)):
             tt = time.time()
-            print('BAKE TO LAYER: Duplicating mesh(es) for Cavity bake...')
+            print('BAKE TO LAYER: Duplicating mesh(es) for baking...')
             for obj in objs:
                 temp_obj = obj.copy()
                 link_object(scene, temp_obj)
                 temp_objs.append(temp_obj)
                 temp_obj.data = temp_obj.data.copy()
+                temp_meshes.append(temp_obj.data)
+
+                # Hide render of original object
+                obj.hide_render = True
 
             objs = temp_objs
 
             print('BAKE TO LAYER: Duplicating mesh(es) is done at', '{:0.2f}'.format(time.time() - tt), 'seconds!')
+
+        # Option to join all objects into one
+        if need_join_objects:
+
+            # Select objects
+            bpy.ops.object.mode_set(mode = 'OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            for obj in objs:
+                set_active_object(obj)
+                set_object_select(obj, True)
+
+                # Apply shape keys
+                if obj.data.shape_keys:
+                    bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+
+                # Apply modifiers
+                mnames = [m.name for m in obj.modifiers]
+                problematic_modifiers = get_problematic_modifiers(obj)
+
+                for mname in mnames:
+                    m = obj.modifiers[mname]
+                    if m not in problematic_modifiers:
+                        try:
+                            bpy.ops.object.modifier_apply(modifier=m.name)
+                            continue
+                        except Exception as e: print(e)
+                    bpy.ops.object.modifier_remove(modifier=m.name)
+
+            # Set active object
+            first_obj = objs[0]
+            set_active_object(first_obj)
+
+            # Join
+            bpy.ops.object.join()
+
+            # Remap pointers
+            objs = temp_objs = [first_obj]
+
+            # Remove temp meshes
+            for tm in temp_meshes:
+                if tm != first_obj.data:
+                    bpy.data.meshes.remove(tm)
 
         fill_mode = 'FACE'
         obj_vertex_indices = {}
@@ -1113,9 +1161,8 @@ class YBakeToLayer(bpy.types.Operator):
                             m.show_render = False
                             m.show_viewport = False
             elif obj not in other_objs:
-                for m in obj.modifiers:
-                    if m.type in problematic_modifiers:
-                        m.show_render = False
+                for m in get_problematic_modifiers(obj):
+                    m.show_render = False
 
             ori_mat_ids[obj.name] = []
             ori_loop_locs[obj.name] = []
@@ -1376,7 +1423,7 @@ class YBakeToLayer(bpy.types.Operator):
             if not segment or need_to_create_new_segment:
 
                 # Clearing unused image atlas segments
-                img_atlas = ImageAtlas.check_need_of_erasing_segments('TRANSPARENT', self.width, self.height, self.hdr)
+                img_atlas = ImageAtlas.check_need_of_erasing_segments(yp, 'TRANSPARENT', self.width, self.height, self.hdr)
                 if img_atlas: ImageAtlas.clear_unused_segments(img_atlas.yia)
 
                 segment = ImageAtlas.get_set_image_atlas_segment(
@@ -1906,9 +1953,11 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         ori_layer_preview_mode = yp.layer_preview_mode
         ori_layer_preview_mode_type = yp.layer_preview_mode_type
 
+        self.layer.enable = True
+
         if self.mask: 
             self.mask.enable = True
-        else: self.layer.enable = True
+            self.mask.active_edit = True
 
         yp.layer_preview_mode_type = 'SPECIFIC_MASK' if self.mask else 'LAYER'
         yp.layer_preview_mode = True
@@ -1934,15 +1983,12 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             ori_mods[obj.name] = [m.show_render for m in obj.modifiers]
             ori_viewport_mods[obj.name] = [m.show_viewport for m in obj.modifiers]
 
-            for m in obj.modifiers:
-                if m.type in problematic_modifiers:
-                    m.show_render = False
+            for m in get_problematic_modifiers(obj):
+                m.show_render = False
 
         prepare_bake_settings(book, objs, yp, samples=samples, margin=self.margin, 
                 uv_map=self.uv_map, bake_type='EMIT', bake_device=self.bake_device
                 )
-
-        #return {'FINISHED'}
 
         # Create bake nodes
         tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
@@ -1950,6 +1996,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         # Create image
         image = bpy.data.images.new(name=self.name,
                 width=self.width, height=self.height, alpha=True, float_buffer=self.hdr)
+        image.colorspace_settings.name = 'Linear'
 
         # Set bake image
         tex.image = image
@@ -1971,7 +2018,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
                 mask_name = get_unique_name(mask_name, self.layer.masks)
 
                 # Clearing unused image atlas segments
-                img_atlas = ImageAtlas.check_need_of_erasing_segments('BLACK', self.width, self.height, self.hdr)
+                img_atlas = ImageAtlas.check_need_of_erasing_segments(yp, 'BLACK', self.width, self.height, self.hdr)
                 if img_atlas: ImageAtlas.clear_unused_segments(img_atlas.yia)
 
                 segment = ImageAtlas.get_set_image_atlas_segment(

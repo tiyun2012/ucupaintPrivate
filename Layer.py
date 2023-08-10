@@ -2,7 +2,7 @@ import bpy, time, re, os, random
 from bpy.props import *
 from bpy_extras.io_utils import ImportHelper
 from bpy_extras.image_utils import load_image  
-from . import Modifier, lib, Mask, transition, ImageAtlas, NormalMapModifier
+from . import Modifier, lib, Mask, transition, ImageAtlas, UDIM, NormalMapModifier
 from .common import *
 #from .bake_common import *
 from .node_arrangements import *
@@ -248,7 +248,7 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
                 if hasattr(mask_image, 'use_alpha'):
                     mask_image.use_alpha = False
 
-            if mask_image.colorspace_settings.name != 'Linear':
+            if mask_image.colorspace_settings.name != 'Linear' and not mask_image.is_dirty:
                 mask_image.colorspace_settings.name = 'Linear'
 
         # New vertex color
@@ -608,6 +608,11 @@ class YNewLayer(bpy.types.Operator):
             items = get_normal_map_type_items)
             #default = 'BUMP_MAP')
 
+    use_udim = BoolProperty(
+            name = 'Use UDIM Tiles',
+            description='Use UDIM Tiles',
+            default=False)
+
     use_image_atlas = BoolProperty(
             name = 'Use Image Atlas',
             description='Use Image Atlas',
@@ -741,17 +746,23 @@ class YNewLayer(bpy.types.Operator):
 
                 # UV Map collections update
                 self.uv_map_coll.clear()
-                for uv in obj.data.uv_layers:
+                for uv in get_uv_layers(obj):
                     if not uv.name.startswith(TEMP_UV):
                         self.uv_map_coll.add().name = uv.name
 
         return context.window_manager.invoke_props_dialog(self, width=320)
 
+    def is_using_udim(self):
+        return self.use_udim and is_greater_than_330()
+
+    def is_using_image_atlas(self):
+        return self.use_image_atlas and not self.is_using_udim()
+
     def check(self, context):
         ypup = get_user_preferences()
 
         # New image cannot use more pixels than the image atlas
-        if self.use_image_atlas:
+        if self.is_using_image_atlas():
             if self.hdr: max_size = ypup.hdr_image_atlas_size
             else: max_size = ypup.image_atlas_size
             if self.width > max_size: self.width = max_size
@@ -765,11 +776,11 @@ class YNewLayer(bpy.types.Operator):
 
         return True
 
-    def get_to_be_cleared_image_atlas(self, context):
-        if self.type == 'IMAGE' and not self.add_mask and self.use_image_atlas:
-            return ImageAtlas.check_need_of_erasing_segments('TRANSPARENT', self.width, self.height, self.hdr)
+    def get_to_be_cleared_image_atlas(self, context, yp):
+        if self.type == 'IMAGE' and not self.add_mask and self.is_using_image_atlas():
+            return ImageAtlas.check_need_of_erasing_segments(yp, 'TRANSPARENT', self.width, self.height, self.hdr)
         if self.add_mask and self.mask_type == 'IMAGE' and self.use_image_atlas_for_mask:
-            return ImageAtlas.check_need_of_erasing_segments(self.mask_color, self.mask_width, self.mask_height, self.hdr)
+            return ImageAtlas.check_need_of_erasing_segments(yp, self.mask_color, self.mask_width, self.mask_height, self.hdr)
 
         return None
 
@@ -903,7 +914,11 @@ class YNewLayer(bpy.types.Operator):
                 crow.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
 
         if self.type == 'IMAGE':
-            col.prop(self, 'use_image_atlas')
+            if is_greater_than_330():
+                col.prop(self, 'use_udim')
+            ccol = col.column()
+            ccol.active = not self.use_udim
+            ccol.prop(self, 'use_image_atlas')
 
         if self.type != 'IMAGE':
             col.prop(self, 'add_mask', text='Add Mask')
@@ -926,7 +941,7 @@ class YNewLayer(bpy.types.Operator):
                     crow = col.row(align=True)
                     crow.prop(self, 'mask_vcol_data_type', expand=True)
 
-        if self.get_to_be_cleared_image_atlas(context):
+        if self.get_to_be_cleared_image_atlas(context, yp):
             col = self.layout.column(align=True)
             col.label(text='INFO: An unused atlas segment can be used.', icon='ERROR')
             col.label(text='It will take a couple seconds to clear.')
@@ -974,31 +989,40 @@ class YNewLayer(bpy.types.Operator):
             return {'CANCELLED'}
 
         # Clearing unused image atlas segments
-        img_atlas = self.get_to_be_cleared_image_atlas(context)
+        img_atlas = self.get_to_be_cleared_image_atlas(context, yp)
         if img_atlas: ImageAtlas.clear_unused_segments(img_atlas.yia)
 
         img = None
         segment = None
         if self.type == 'IMAGE':
 
-            if self.use_image_atlas:
+            if self.is_using_image_atlas():
                 segment = ImageAtlas.get_set_image_atlas_segment(
                         self.width, self.height, 'TRANSPARENT', self.hdr, yp=yp) #, ypup.image_atlas_size)
                 img = segment.id_data
             else:
 
-                #alpha = False if self.add_rgb_to_intensity else True
                 alpha = True
-                #color = (0,0,0,1) if self.add_rgb_to_intensity else self.color
-                #color = (0,0,0,1) if self.add_rgb_to_intensity else (0,0,0,0)
                 color = (0,0,0,0)
-                img = bpy.data.images.new(name=self.name, 
-                        width=self.width, height=self.height, alpha=alpha, float_buffer=self.hdr)
+
+                if self.is_using_udim():
+                    img = bpy.data.images.new(name=self.name, width=self.width, height=self.height, 
+                            alpha=alpha, float_buffer=self.hdr, tiled=True)
+
+                    # Fill tiles
+                    objs = get_all_objects_with_same_materials(mat)
+                    tilenums = UDIM.get_tile_numbers(objs, self.uv_map)
+                    for tilenum in tilenums:
+                        UDIM.fill_tile(img, tilenum, color, self.width, self.height)
+                    UDIM.initial_pack_udim(img)
+                else:
+                    img = bpy.data.images.new(name=self.name, width=self.width, height=self.height, 
+                            alpha=alpha, float_buffer=self.hdr)
+
                 #img.generated_type = self.generated_type
                 img.generated_type = 'BLANK'
                 img.generated_color = color
                 if hasattr(img, 'use_alpha'):
-                    #img.use_alpha = False if self.add_rgb_to_intensity else True
                     img.use_alpha = True
 
             #if img.colorspace_settings.name != 'Linear':
@@ -3185,7 +3209,7 @@ def replace_mask_type(mask, new_type, item_name='', remove_data=False):
         source.image = image
         if hasattr(source, 'color_space'):
             source.color_space = 'NONE'
-        if image.colorspace_settings.name != 'Linear':
+        if image.colorspace_settings.name != 'Linear' and not image.is_dirty:
             image.colorspace_settings.name = 'Linear'
     elif new_type == 'VCOL':
         set_source_vcol_name(source, item_name)
@@ -4064,12 +4088,12 @@ def update_blend_type(self, context):
 
     if check_blend_type_nodes(root_ch, layer, self): # and not yp.halt_reconnect:
 
+        rearrange_layer_nodes(layer)
+
         # Reconnect all layer channels if normal channel is updated
         if root_ch.type == 'NORMAL':
             reconnect_layer_nodes(layer) 
         else: reconnect_layer_nodes(layer, ch_index)
-
-        rearrange_layer_nodes(layer)
 
     print('INFO: Layer', layer.name, ' blend type is changed at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
     wm.yptimer.time = str(time.time())

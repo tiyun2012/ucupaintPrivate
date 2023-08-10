@@ -165,6 +165,13 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
             if segment.bake_info.is_baked:
                 draw_bake_info(segment.bake_info, col, entity)
 
+        if hasattr(source, 'interpolation'): 
+            split = col.split(factor=0.4)
+            scol = split.column()
+            scol.label(text='Interpolation:')
+            scol = split.column()
+            scol.prop(source, 'interpolation', text='')
+
         return
 
     col.template_ID(source, "image", unlink='node.y_remove_layer')
@@ -183,7 +190,6 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
         row = col.row()
         row.label(text='Color:')
         row.prop(image, 'generated_color', text='')
-        col.template_colorspace_settings(image, "colorspace_settings")
 
     elif image.source == 'FILE':
         if not image.filepath:
@@ -200,22 +206,41 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
         col.label(text='Info: ' + str(image.size[0]) + ' x ' + str(image.size[1]) +
                 ' ' + image_format + ' ' + str(image_bit) + '-bit')
 
-        col.template_colorspace_settings(image, "colorspace_settings")
-        col.prop(source, 'extension')
-        col.prop(source, 'projection')
-        #col.prop(image, 'use_view_as_render')
-        col.prop(image, 'alpha_mode')
+
+    split = col.split(factor=0.4)
+
+    scol = split.column()
+    if not image.is_dirty:
+        scol.label(text='Color Space:')
         if hasattr(image, 'use_alpha'):
-            col.prop(image, 'use_alpha')
-        #col.prop(image, 'use_fields')
+            scol.label(text='Use Alpha:')
+        scol.label(text='Alpha Mode:')
 
-        split = col.split(factor=0.25)
+    if entity and hasattr(entity, 'image_flip_y') and show_flip_y:
+        scol.label(text='Flip Y:')
 
-        if entity and hasattr(entity, 'image_flip_y') and show_flip_y:
-            row = split.row()
-            row.label(text='Flip Y:')
-            row = split.row()
-            row.prop(entity, 'image_flip_y', text='')
+    if hasattr(source, 'interpolation'):
+        scol.label(text='Interpolation:')
+
+    scol.label(text='Extension:')
+    #scol.label(text='Projection:')
+
+    scol = split.column()
+
+    if not image.is_dirty:
+        scol.prop(image.colorspace_settings, "name", text='') 
+        if hasattr(image, 'use_alpha'):
+            scol.prop(image, 'use_alpha', text='')
+        scol.prop(image, 'alpha_mode', text='')
+
+    if entity and hasattr(entity, 'image_flip_y') and show_flip_y:
+        scol.prop(entity, 'image_flip_y', text='')
+
+    if hasattr(source, 'interpolation'): 
+        scol.prop(source, 'interpolation', text='')
+
+    scol.prop(source, 'extension', text='')
+    #scol.prop(source, 'projection', text='')
 
 def draw_object_index_props(entity, layout):
     col = layout.column()
@@ -617,6 +642,7 @@ def draw_modifier_stack(context, parent, channel_type, layout, ui, layer=None, e
             #row.label(text='', icon='BLANK1')
 
 def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
+    mat = get_active_material()
     group_tree = node.node_tree
     nodes = group_tree.nodes
     yp = group_tree.yp
@@ -765,6 +791,20 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                     bbox = brow.box()
                     bbcol = bbox.column() #align=True)
                     bbcol.active = channel.enable_alpha
+
+                    if is_greater_than_280():
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Blend Mode:')
+                        brow.prop(channel, 'alpha_blend_mode', text='')
+
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Shadow Mode:')
+                        brow.prop(channel, 'alpha_shadow_mode', text='')
+
+                        if channel.alpha_blend_mode == 'CLIP' or channel.alpha_shadow_mode == 'CLIP':
+                            brow = bbcol.row(align=True)
+                            brow.label(text='Clip Threshold:')
+                            brow.prop(mat, 'alpha_threshold', text='')
 
                     brow = bbcol.row(align=True)
                     brow.active = not (yp.use_baked and yp.enable_baked_outside)
@@ -2204,20 +2244,32 @@ def draw_layers_ui(context, layout, node): #, custom_icon_enable):
     height_root_ch = get_root_height_channel(yp)
     enable_parallax = is_parallax_enabled(height_root_ch)
 
+    # Check duplicated yp node (indicated by more than one users)
+    if group_tree.users > 1:
+        row = box.row(align=True)
+        row.alert = True
+        op = row.operator("node.y_duplicate_yp_nodes", text='Fix Multi-User ' + get_addon_title() + ' Node', icon='ERROR')
+        op.duplicate_node = True
+        op.duplicate_material = False
+        op.only_active = True
+        row.alert = False
+        #box.prop(ypui, 'make_image_single_user')
+        return
+
     # Check duplicated layers (indicated by more than one users)
-    if len(yp.layers) > 0:
-        last_layer = yp.layers[-1]
-        ltree = get_tree(last_layer)
-        if ltree and (
-            (not enable_parallax and ltree.users > 1) or
-            (enable_parallax and ltree.users > 2)
-            ):
-            row = box.row(align=True)
-            row.alert = True
-            row.operator("node.y_fix_duplicated_yp_nodes", text='Fix Duplicated Layers', icon='ERROR')
-            row.alert = False
-            box.prop(ypui, 'make_image_single_user')
-            return
+    #elif len(yp.layers) > 0:
+    #    last_layer = yp.layers[-1]
+    #    ltree = get_tree(last_layer)
+    #    if ltree and (
+    #        (not enable_parallax and ltree.users > 1) or
+    #        (enable_parallax and ltree.users > 2)
+    #        ):
+    #        row = box.row(align=True)
+    #        row.alert = True
+    #        row.operator("node.y_fix_duplicated_yp_nodes", text='Fix Duplicated Layers', icon='ERROR')
+    #        row.alert = False
+    #        #box.prop(ypui, 'make_image_single_user')
+    #        return
 
     # Check source for missing data
     missing_data = False
@@ -2770,7 +2822,17 @@ def main_draw(self, context):
 
         images = []
         vcols = []
+        num_ramps = 0
+        num_curves = 0
         num_gen_texs = 0
+
+        for root_ch in yp.channels:
+            for mod in root_ch.modifiers:
+                if not mod.enable: continue
+                if mod.type == 'COLOR_RAMP':
+                    num_ramps += 1
+                elif mod.type == 'RGB_CURVE':
+                    num_curves += 1
 
         for layer in yp.layers:
             if not layer.enable: continue
@@ -2808,6 +2870,26 @@ def main_draw(self, context):
                             if src.image and src.image not in images:
                                 images.append(src.image)
 
+                    for mod in ch.modifiers:
+                        if not mod.enable: continue
+                        if mod.type == 'COLOR_RAMP':
+                            num_ramps += 1
+                        elif mod.type == 'RGB_CURVE':
+                            num_curves += 1
+
+                    if ch.enable_transition_ramp:
+                        num_ramps += 1
+
+                    if ch.enable_transition_bump and ch.transition_bump_falloff and ch.transition_bump_falloff_type == 'CURVE':
+                        num_curves += 1
+
+            for mod in layer.modifiers:
+                if not mod.enable: continue
+                if mod.type == 'COLOR_RAMP':
+                    num_ramps += 1
+                elif mod.type == 'RGB_CURVE':
+                    num_curves += 1
+
             if not layer.enable_masks: continue
 
             for mask in layer.masks:
@@ -2824,6 +2906,13 @@ def main_draw(self, context):
                 else:
                     num_gen_texs += 1
 
+                for mod in mask.modifiers:
+                    if not mod.enable: continue
+                    if mod.type == 'RAMP':
+                        num_ramps += 1
+                    elif mod.type == 'CURVE':
+                        num_curves += 1
+
         box = layout.box()
         col = box.column()
         #col = layout.column(align=True)
@@ -2832,6 +2921,8 @@ def main_draw(self, context):
         col.label(text='Number of Vertex Colors: ' + str(len(vcols)), icon_value=lib.get_icon('vertex_color'))
         #col.label(text='Number of Generated Textures: ' + str(num_gen_texs), icon='TEXTURE')
         col.label(text='Number of Generated Textures: ' + str(num_gen_texs), icon_value=lib.get_icon('texture'))
+        col.label(text='Number of Color Ramps: ' + str(num_ramps), icon_value=lib.get_icon('modifier'))
+        col.label(text='Number of RGB Curves: ' + str(num_curves), icon_value=lib.get_icon('modifier'))
 
         #col.operator('node.y_new_image_atlas_segment_test', icon_value=lib.get_icon('image'))
         #col.operator('node.y_uv_transform_test', icon_value=lib.get_icon('uv'))
@@ -3317,7 +3408,8 @@ class YPaintSpecialMenu(bpy.types.Menu):
 
         col.separator()
 
-        col.operator('node.y_duplicate_yp_nodes', text='Duplicate Material and ' + get_addon_title() + ' nodes', icon='COPY_ID').duplicate_material = True
+        op = col.operator('node.y_duplicate_yp_nodes', text='Duplicate Material and ' + get_addon_title() + ' nodes', icon='COPY_ID')
+        op.duplicate_material = True
 
         col.separator()
 
@@ -3553,6 +3645,9 @@ class YBakedImageMenu(bpy.types.Menu):
 
         icon = 'FILEBROWSER' if is_greater_than_280() else 'FILE_FOLDER'
         col.operator('node.y_save_all_baked_images', text='Save All Baked Images to..', icon=icon)
+
+        col.separator()
+        col.operator('node.y_delete_baked_channel_images', text='Delete All Baked Images', icon='ERROR')
 
 class YLayerListSpecialMenu(bpy.types.Menu):
     bl_idname = "NODE_MT_y_layer_list_special_menu"
@@ -4578,10 +4673,10 @@ class YPaintUI(bpy.types.PropertyGroup):
     halt_prop_update = BoolProperty(default=False)
 
     # Duplicated layer related
-    make_image_single_user = BoolProperty(
-            name = 'Make Images Single User',
-            description = 'Make duplicated image layers single user',
-            default=True)
+    #make_image_single_user = BoolProperty(
+    #        name = 'Make Images Single User',
+    #        description = 'Make duplicated image layers single user',
+    #        default=True)
 
     # HACK: For some reason active float image will glitch after auto save
     # This prop will notify if float image is active after saving

@@ -441,6 +441,11 @@ def is_greater_than_282():
         return True
     return False
 
+def is_greater_than_283():
+    if bpy.app.version >= (2, 83, 0):
+        return True
+    return False
+
 def is_greater_than_292():
     if bpy.app.version >= (2, 92, 0):
         return True
@@ -456,6 +461,11 @@ def is_greater_than_320():
         return True
     return False
 
+def is_version_320():
+    if bpy.app.version[0] == 3 and bpy.app.version[1] == 2:
+        return True
+    return False
+
 def is_greater_than_330():
     if bpy.app.version >= (3, 3, 0):
         return True
@@ -463,6 +473,11 @@ def is_greater_than_330():
 
 def is_greater_than_340():
     if bpy.app.version >= (3, 4, 0):
+        return True
+    return False
+
+def is_greater_than_350():
+    if bpy.app.version >= (3, 5, 0):
         return True
     return False
 
@@ -553,6 +568,14 @@ def get_object_parent_layer_collections(arr, col, obj):
         if col not in arr: arr.append(col)
 
     return arr
+
+def get_node_input_index(node, inp):
+    index = -1
+
+    try: index = [i for i, s in enumerate(node.inputs) if s == inp][0]
+    except Exception as e: print(e)
+
+    return index
 
 def get_active_material():
     scene = bpy.context.scene
@@ -2604,7 +2627,32 @@ def check_uvmap_on_other_objects_with_same_mat(mat, uv_name, set_active=True):
                     if set_active:
                         uvls.active = uvl
 
-def remove_temp_uv(obj):
+def set_uv_mirror_offsets(obj, matrix):
+
+    mirror = get_first_mirror_modifier(obj)
+    if not mirror: return
+
+    movec = Vector((mirror.mirror_offset_u/2, mirror.mirror_offset_v/2, 0.0))
+    if is_greater_than_280():
+        movec = matrix @ movec
+    else: movec = matrix * movec
+
+    if mirror.use_mirror_u:
+        obj.yp.ori_mirror_offset_u = mirror.mirror_offset_u
+        mirror.mirror_offset_u = movec.x * 2 - (1.0 - matrix[0][0])
+
+    if mirror.use_mirror_v:
+        obj.yp.ori_mirror_offset_v = mirror.mirror_offset_v
+        mirror.mirror_offset_v = movec.y * 2 - (1.0 - matrix[1][1])
+
+    if is_greater_than_280():
+        obj.yp.ori_offset_u = mirror.offset_u
+        mirror.offset_u *= matrix[0][0]
+
+        obj.yp.ori_offset_v = mirror.offset_v
+        mirror.offset_v *= matrix[1][1]
+
+def remove_temp_uv(obj, entity):
     uv_layers = get_uv_layers(obj)
     
     if uv_layers:
@@ -2613,13 +2661,42 @@ def remove_temp_uv(obj):
                 uv_layers.remove(uv)
                 #break
 
+    if not entity: return
+
+    m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
+    m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
+
+    if not m1 and not m2:
+        return
+
+    # Remove uv mirror offsets for entity with image atlas
+    mirror = get_first_mirror_modifier(obj)
+    if mirror and entity.type == 'IMAGE'  and (
+            entity.segment_name != '' or 
+            # Because sometimes you want to tweak mirror offsets in texture paint mode,
+            # quitting texture paint while using standard image will not reset mirror offsets
+            # But unfortunately, it will still reset if you are changing active layer
+            # even if the layer is not using image atlas
+            # Better solution will requires storing last active layer
+            (entity.segment_name == '' and obj.mode == 'TEXTURE_PAINT')
+            ):
+        if mirror.use_mirror_u:
+            mirror.mirror_offset_u = obj.yp.ori_mirror_offset_u
+
+        if mirror.use_mirror_v:
+            mirror.mirror_offset_v = obj.yp.ori_mirror_offset_v
+
+        if is_greater_than_280():
+            mirror.offset_u = obj.yp.ori_offset_u
+            mirror.offset_v = obj.yp.ori_offset_v
+
 def refresh_temp_uv(obj, entity): 
 
     if obj.type != 'MESH':
         return False
 
     if not entity:
-        remove_temp_uv(obj)
+        remove_temp_uv(obj, entity)
         return False
 
     #print(entity.path_from_id())
@@ -2643,15 +2720,15 @@ def refresh_temp_uv(obj, entity):
     else: return False
 
     if m3 and entity.override_type != 'IMAGE':
-        remove_temp_uv(obj)
+        remove_temp_uv(obj, entity)
         return False
 
     if (m1 or m2) and entity.type != 'IMAGE':
-        remove_temp_uv(obj)
+        remove_temp_uv(obj, entity)
         return False
 
     # Delete previous temp uv
-    remove_temp_uv(obj)
+    remove_temp_uv(obj, entity)
 
     uv_layers = get_uv_layers(obj)
 
@@ -2777,6 +2854,10 @@ def refresh_temp_uv(obj, entity):
     # Set back uv coordinates
     #obj.data.uv_layers.active.data.foreach_set('uv', arr.ravel())
     temp_uv_layer.data.foreach_set('uv', arr.ravel())
+
+    # Set UV mirror offset
+    if ori_mode != 'EDIT':
+        set_uv_mirror_offsets(obj, m)
 
     # Back to edit mode if originally from there
     if ori_mode == 'EDIT':
@@ -3507,6 +3588,107 @@ def get_uv_layers(obj):
     else: uv_layers = obj.data.uv_layers
 
     return uv_layers
+
+def get_vcol_index(obj, vcol_name):
+    vcols = obj.data.vertex_colors
+    for i, vc in enumerate(vcols):
+        if vc.name == vcol_name:
+            return i
+
+    return -1
+
+def get_uv_layer_index(obj, uv_name):
+    uv_layers = get_uv_layers(obj)
+    for i, ul in enumerate(uv_layers):
+        if ul.name == uv_name:
+            return i
+
+    return -1
+
+def move_vcol_to_bottom(obj, index):
+    set_active_object(obj)
+    vcols = obj.data.vertex_colors
+
+    # Get original uv name
+    vcols.active_index = index
+    ori_name = vcols.active.name
+
+    # Duplicate vcol
+    if is_greater_than_330():
+        bpy.ops.geometry.color_attribute_duplicate()
+    else: bpy.ops.mesh.vertex_color_add()
+
+    # Delete old vcol
+    vcols.active_index = index
+
+    if is_greater_than_330():
+        bpy.ops.geometry.color_attribute_remove()
+    else: bpy.ops.mesh.vertex_color_remove()
+
+    # Set original name to newly created uv
+    vcols[-1].name = ori_name
+
+def move_vcol(obj, from_index, to_index):
+    vcols = obj.data.vertex_colors
+    
+    if from_index == to_index or from_index < 0 or from_index >= len(vcols) or to_index < 0 or to_index >= len(vcols):
+        #print("Invalid indices")
+        return
+
+    # Move the UV map down to the target index
+    if from_index < to_index:
+        move_vcol_to_bottom(obj, from_index)
+        for i in range(len(vcols)-1-to_index):
+            move_vcol_to_bottom(obj, to_index)
+            
+    # Move the UV map up to the target index
+    elif from_index > to_index:
+        for i in range(from_index-to_index):
+            move_vcol_to_bottom(obj, to_index)
+        for i in range(len(vcols)-1-from_index):
+            move_vcol_to_bottom(obj, to_index+1)
+    
+    vcols.active_index = to_index
+
+def move_uv_to_bottom(obj, index):
+    set_active_object(obj)
+    uv_layers = get_uv_layers(obj)
+
+    # Get original uv name
+    uv_layers.active_index = index
+    ori_name = uv_layers.active.name
+
+    # Duplicate uv
+    bpy.ops.mesh.uv_texture_add()
+
+    # Delete old uv
+    uv_layers.active_index = index
+    bpy.ops.mesh.uv_texture_remove()
+
+    # Set original name to newly created uv
+    uv_layers[-1].name = ori_name
+    
+def move_uv(obj, from_index, to_index):
+    uv_layers = get_uv_layers(obj)
+    
+    if from_index == to_index or from_index < 0 or from_index >= len(uv_layers) or to_index < 0 or to_index >= len(uv_layers):
+        #print("Invalid indices")
+        return
+    
+    # Move the UV map down to the target index
+    if from_index < to_index:
+        move_uv_to_bottom(obj, from_index)
+        for i in range(len(uv_layers)-1-to_index):
+            move_uv_to_bottom(obj, to_index)
+            
+    # Move the UV map up to the target index
+    elif from_index > to_index:
+        for i in range(from_index-to_index):
+            move_uv_to_bottom(obj, to_index)
+        for i in range(len(uv_layers)-1-from_index):
+            move_uv_to_bottom(obj, to_index+1)
+    
+    uv_layers.active_index = to_index
 
 def get_vertex_colors(obj):
     if not obj or obj.type != 'MESH': return []
@@ -4351,6 +4533,54 @@ def shift_mask_fcurves_up(layer, start_index=1):
 
 def is_tangent_sign_hacks_needed(yp):
     return yp.enable_tangent_sign_hacks and is_greater_than_280() and not is_greater_than_300()
+
+def is_root_ch_prop_node_unique(root_ch, prop):
+    yp = root_ch.id_data.yp
+
+    for ch in yp.channels:
+        try:
+            if ch != root_ch and getattr(ch, prop) == getattr(root_ch, prop):
+                return False
+        except Exception as e: print(e)
+
+    return True
+
+def get_first_mirror_modifier(obj):
+    for m in obj.modifiers:
+        if m.type == 'MIRROR':
+            return m
+
+    return None
+
+def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0):
+    width = dest.size[0]
+    height = dest.size[1]
+
+    if is_greater_than_283():
+
+        # Store pixels to numpy
+        dest_pxs = numpy.empty(shape=width*height*4, dtype=numpy.float32)
+        src_pxs = numpy.empty(shape=width*height*4, dtype=numpy.float32)
+        dest.pixels.foreach_get(dest_pxs)
+        src.pixels.foreach_get(src_pxs)
+
+        # Copy to selected channel
+        dest_pxs[dest_idx::4] = src_pxs[src_idx::4]
+        dest.pixels.foreach_set(dest_pxs)
+
+    else:
+        # Get image pixels
+        src_pxs = list(src.pixels)
+        dest_pxs = list(dest.pixels)
+
+        # Copy to selected channel
+        for y in range(height):
+            offset_y = width * 4 * y
+            for x in range(width):
+                offset_x = 4 * x
+                dest_pxs[offset_y + offset_x + dest_idx] = src_pxs[offset_y + offset_x + src_idx]
+
+        dest.pixels = dest_pxs
 
 #def get_io_index(layer, root_ch, alpha=False):
 #    if alpha:

@@ -2177,18 +2177,14 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             group_alpha_e = None
             group_alpha_w = None
 
-            if is_greater_than_281():
-                if (
-                    (ch.layer_input == 'RGB' and layer.type in {'NOISE', 'VORONOI'}) or
-                    (ch.layer_input == 'ALPHA' and layer.type not in {'NOISE', 'VORONOI'})
-                    ):
-                    source_index = 2
-                else:
-                    source_index = 0
-            else:
-                if ch.layer_input == 'ALPHA' and layer.type not in {'IMAGE', 'VCOL', 'HEMI', 'OBJECT_INDEX', 'MUSGRAVE'}:
-                    source_index = 2
-                else: source_index = 0
+            # Get source output index
+            source_index = 0
+            if ch.layer_input == 'ALPHA' and layer.type not in {'IMAGE', 'VCOL', 'HEMI', 'OBJECT_INDEX', 'MUSGRAVE'}:
+                source_index = 2
+
+            # Noise and voronoi output has flipped order since Blender 2.81
+            if is_greater_than_281() and layer.type in {'NOISE', 'VORONOI'} and ch.layer_input == 'RGB':
+                source_index = 2
 
             if source_n and source_s and source_e and source_w:
                 # Use override value instead from actual layer if using default override type
@@ -2631,6 +2627,12 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     create_link(tree, height_alpha, height_blend.inputs['Alpha'])
                     create_link(tree, height_proc.outputs['Height'], height_blend.inputs['Height'])
 
+                    # For straight over height compare
+                    if 'Prev Alpha' in height_blend.inputs:
+                        create_link(tree, prev_alpha, height_blend.inputs['Prev Alpha'])
+                    if 'Alpha' in height_blend.outputs:
+                        height_alpha = height_blend.outputs['Alpha']
+
                 if 'Height' in normal_proc.inputs:
                     create_link(tree, height_blend.outputs[hbout], normal_proc.inputs['Height'])
 
@@ -2869,7 +2871,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
         if (
                 #(blend_type == 'MIX' and (has_parent or (root_ch.type == 'RGB' and root_ch.enable_alpha)))
-                (blend_type == 'MIX' and (has_parent or root_ch.enable_alpha))
+                (blend_type in {'MIX', 'COMPARE'} and (has_parent or root_ch.enable_alpha))
                 or (blend_type == 'OVERLAY' and has_parent and root_ch.type == 'NORMAL')
             ):
 

@@ -223,6 +223,10 @@ class YTransferSomeLayerUV(bpy.types.Operator):
             description = "Remove 'From UV' from objects",
             default=False)
 
+    reorder_uv_list = BoolProperty(name='Reorder UV',
+            description = "Reorder 'To UV' so it will have the same index as 'From UV'",
+            default=True)
+
     @classmethod
     def poll(cls, context):
         return get_active_ypaint_node() and context.object.type == 'MESH' # and hasattr(context, 'layer')
@@ -267,12 +271,18 @@ class YTransferSomeLayerUV(bpy.types.Operator):
         col.label(text='Margin:')
         col.label(text='')
 
+        if self.remove_from_uv:
+            col.label(text='')
+
         col = row.column(align=False)
         col.prop_search(self, "from_uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
         col.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
         col.prop(self, 'samples', text='')
         col.prop(self, 'margin', text='')
         col.prop(self, 'remove_from_uv')
+
+        if self.remove_from_uv:
+            col.prop(self, 'reorder_uv_list')
 
     def execute(self, context):
 
@@ -326,14 +336,22 @@ class YTransferSomeLayerUV(bpy.types.Operator):
 
         #return {'FINISHED'}
 
-        # Recover bake settings
-        recover_bake_settings(book, yp)
-
         if self.remove_from_uv:
             for obj in objs:
                 uv_layers = get_uv_layers(obj)
+                ori_index = get_uv_layer_index(obj, self.from_uv_map)
                 from_uv = uv_layers.get(self.from_uv_map)
                 uv_layers.remove(from_uv)
+
+                # Reorder UV
+                if self.reorder_uv_list and ori_index != -1:
+                    uv_index = get_uv_layer_index(obj, self.uv_map)
+                    if ori_index > uv_index:
+                        ori_index -= 1
+                    move_uv(obj, uv_index, ori_index)
+
+        # Recover bake settings
+        recover_bake_settings(book, yp)
 
         # Check height channel uv
         height_ch = get_root_height_channel(yp)
@@ -604,10 +622,10 @@ class YBakeChannelToVcol(bpy.types.Operator):
             description='Emission multiplier so the emission can be more visible on the result',
             default=1.0, min=0.0)
 
-    #force_first_index : BoolProperty(
-    #        name='Force First Index', 
-    #        description="Force target vertex color to be first on the vertex colors list (useful for exporting)",
-    #        default=True)
+    force_first_index = BoolProperty(
+            name='Force First Index', 
+            description="Force target vertex color to be first on the vertex colors list (useful for exporting)",
+            default=True)
 
     @classmethod
     def poll(cls, context):
@@ -642,7 +660,9 @@ class YBakeChannelToVcol(bpy.types.Operator):
         if self.show_emission_option:
             col.label(text='Add Emission:')
             col.label(text='Emission Multiplier:')
-        #col.label(text='Force First Index:')
+
+        if not is_version_320():
+            col.label(text='Force First Index:')
 
         col = row.column(align=True)
 
@@ -650,7 +670,8 @@ class YBakeChannelToVcol(bpy.types.Operator):
         if self.show_emission_option:
             col.prop(self, 'add_emission', text='')
             col.prop(self, 'emission_multiplier', text='')
-        #col.prop(self, 'force_first_index', text='')
+        if not is_version_320():
+            col.prop(self, 'force_first_index', text='')
 
     def execute(self, context):
         obj = context.object
@@ -706,17 +727,15 @@ class YBakeChannelToVcol(bpy.types.Operator):
                     vcol = new_vertex_color(ob, self.vcol_name)
                 except Exception as e: print(e)
 
-            # NOTE: This implementation is unfinished since this only works if target vertex color is newly created
-            #if self.force_first_index:
-            #    first_vcol = vcols[0]
-            #    if first_vcol != vcol:
-            #        # Rename vcol
-            #        vcol.name = '___TEMP____'
-            #        first_vcol_name = first_vcol.name
-            #        first_vcol.name = self.vcol_name
-            #        vcol.name = first_vcol_name
-            #        vcol = first_vcol
+            # Get newly created vcol name
+            vcol_name = vcol.name
 
+            # NOTE: Because of api changes, vertex color shift doesn't work with Blender 3.2
+            if self.force_first_index and not is_version_320():
+                move_vcol(ob, get_vcol_index(ob, vcol.name), 0)
+
+            # Get the newly created vcol to avoid pointer error
+            vcol = vcols.get(vcol_name)
             set_active_vertex_color(ob, vcol)
 
         # Multi materials setup
@@ -760,6 +779,47 @@ class YBakeChannelToVcol(bpy.types.Operator):
         # Remap vertex color indices
         #for ob in objs:
         #    pass
+
+        return {'FINISHED'}
+
+class YDeleteBakedChannelImages(bpy.types.Operator):
+    bl_idname = "node.y_delete_baked_channel_images"
+    bl_label = "Delete All Baked Channel Images"
+    bl_description = "Delete all baked channel images"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node() and context.object.type == 'MESH'
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=320)
+
+    def draw(self, context):
+        self.layout.label(text='Are you sure you want to delete all baked images?', icon='ERROR')
+
+    def execute(self, context):
+        node = get_active_ypaint_node()
+        tree = node.node_tree
+        yp = tree.yp
+
+        # Set bake to false first
+        if yp.use_baked:
+            yp.use_baked = False
+
+        # Remove baked nodes
+        for root_ch in yp.channels:
+            remove_node(tree, root_ch, 'baked')
+
+            if root_ch.type == 'NORMAL':
+                remove_node(tree, root_ch, 'baked_disp')
+                remove_node(tree, root_ch, 'baked_normal_overlay')
+                remove_node(tree, root_ch, 'baked_normal_prep')
+                remove_node(tree, root_ch, 'baked_normal')
+
+        # Reconnect
+        rearrange_yp_nodes(tree)
+        reconnect_yp_nodes(tree)
 
         return {'FINISHED'}
 
@@ -815,7 +875,7 @@ class YBakeChannels(bpy.types.Operator):
         node = get_active_ypaint_node()
         yp = node.node_tree.yp
         obj = self.obj = context.object
-        scene = self.scene = context.scene
+        scene = context.scene
         ypup = get_user_preferences()
 
         # Use active uv layer name by default
@@ -855,6 +915,9 @@ class YBakeChannels(bpy.types.Operator):
         return True
 
     def draw(self, context):
+        obj = context.object
+        mat = obj.active_material
+
         if is_greater_than_280():
             row = self.layout.split(factor=0.4)
         else: row = self.layout.split(percentage=0.4)
@@ -903,7 +966,7 @@ class YBakeChannels(bpy.types.Operator):
         node = get_active_ypaint_node()
         tree = node.node_tree
         yp = tree.yp
-        ypui = context.window_manager.ypui
+        scene = context.scene
         obj = context.object
         mat = obj.active_material
 
@@ -998,6 +1061,93 @@ class YBakeChannels(bpy.types.Operator):
                     ori_mat_ids[ob.name].append(p.material_index)
                     p.material_index = active_mat_id
 
+        
+        # Check if any objects use geometry nodes to output uv
+        any_uv_geonodes = False
+        for o in objs:
+            if any(get_output_uv_names_from_geometry_nodes(o)):
+                any_uv_geonodes = True
+
+        # Join objects if the number of objects is higher than one 
+        # or if there are uvs generated by geometry nodes
+        need_join_objects = (len(objs) > 1 or any_uv_geonodes) and not is_join_objects_problematic(yp)
+        temp_objs = []
+        temp_meshes = []
+        ori_objs = []
+        if need_join_objects:
+            tt = time.time()
+            print('BAKE CHANNELS: Joining meshes for baking...')
+
+            # Duplicate objects first
+            for o in objs:
+                temp_obj = o.copy()
+                link_object(scene, temp_obj)
+                temp_objs.append(temp_obj)
+                temp_obj.data = temp_obj.data.copy()
+                temp_meshes.append(temp_obj.data)
+
+                # Hide render of original object
+                o.hide_render = True
+
+            # Select objects
+            bpy.ops.object.mode_set(mode = 'OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            for o in temp_objs:
+                set_active_object(o)
+                set_object_select(o, True)
+
+                # Apply shape keys
+                if o.data.shape_keys:
+                    bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+
+                # Apply modifiers
+                mnames = [m.name for m in o.modifiers]
+                problematic_modifiers = get_problematic_modifiers(o)
+
+                # Get all uv output from geometry nodes
+                geo_uv_names = get_output_uv_names_from_geometry_nodes(o)
+
+                for mname in mnames:
+                    m = o.modifiers[mname]
+                    if m not in problematic_modifiers:
+
+                        # Apply modifier
+                        try:
+                            bpy.ops.object.modifier_apply(modifier=m.name)
+                            continue
+                        except Exception as e: print(e)
+
+                    # Remove modifier
+                    bpy.ops.object.modifier_remove(modifier=m.name)
+
+                # HACK: Convert all geo uvs attribute to 2D vector 
+                # This is needed since it always produce 3D vector until blender 3.5
+                # 3D vector can't produce correct tangent so smooth bump can't be baked
+                for guv in geo_uv_names:
+                    for i, attr in enumerate(o.data.attributes):
+                        if attr and attr.name == guv:
+                            o.data.attributes.active_index = i
+                            bpy.ops.geometry.attribute_convert(domain='CORNER', data_type='FLOAT2')
+
+            # Set active object
+            first_obj = temp_objs[0]
+            set_active_object(first_obj)
+
+            # Join
+            if len(objs) > 1:
+                bpy.ops.object.join()
+
+            # Remap pointers
+            ori_objs = objs
+            objs = temp_objs = [first_obj]
+
+            # Remove temp meshes
+            for tm in temp_meshes:
+                if tm != first_obj.data:
+                    bpy.data.meshes.remove(tm)
+
+            print('BAKE TO LAYER: Joining meshes is done at', '{:0.2f}'.format(time.time() - tt), 'seconds!')
+
         # AA setup
         #if self.aa_level > 1:
         margin = self.margin * self.aa_level
@@ -1014,7 +1164,6 @@ class YBakeChannels(bpy.types.Operator):
                 #if ch.type != 'NORMAL': continue
                 use_hdr = not ch.use_clamp
                 bake_channel(self.uv_map, mat, node, ch, width, height, use_hdr=use_hdr)
-                #return {'FINISHED'}
 
         # AA process
         if self.aa_level > 1:
@@ -1046,7 +1195,6 @@ class YBakeChannels(bpy.types.Operator):
                 baked = tree.nodes.get(ch.baked)
                 if baked and baked.image:
                     fxaa_image(baked.image, ch.enable_alpha, bake_device=self.bake_device)
-                    #return {'FINISHED'}
 
                 if ch.type == 'NORMAL':
 
@@ -1063,6 +1211,9 @@ class YBakeChannels(bpy.types.Operator):
 
         # Recover bake settings
         recover_bake_settings(book, yp)
+
+        # Return to original objects
+        if ori_objs: objs = ori_objs
 
         for ob in objs:
             # Recover material index
@@ -1111,6 +1262,13 @@ class YBakeChannels(bpy.types.Operator):
 
         # Update baked outside nodes
         update_enable_baked_outside(yp, context)
+
+        # Remove temporary objects
+        if temp_objs:
+            for o in temp_objs:
+                m = o.data
+                bpy.data.objects.remove(o)
+                bpy.data.meshes.remove(m)
 
         print('INFO:', tree.name, 'channels is baked at', '{:0.2f}'.format(time.time() - T), 'seconds!')
 
@@ -1981,6 +2139,7 @@ def update_enable_baked_outside(self, context):
                 con = ch.ori_to.add()
                 con.node = l.to_node.name
                 con.socket = l.to_socket.name
+                con.socket_index = get_node_input_index(l.to_node, l.to_socket)
 
             outp_alpha = node.outputs.get(ch.name + io_suffix['ALPHA'])
             if outp_alpha:
@@ -1988,6 +2147,7 @@ def update_enable_baked_outside(self, context):
                     con = ch.ori_alpha_to.add()
                     con.node = l.to_node.name
                     con.socket = l.to_socket.name
+                    con.socket_index = get_node_input_index(l.to_node, l.to_socket)
 
             outp_height = node.outputs.get(ch.name + io_suffix['HEIGHT'])
             if outp_height:
@@ -1995,6 +2155,7 @@ def update_enable_baked_outside(self, context):
                     con = ch.ori_height_to.add()
                     con.node = l.to_node.name
                     con.socket = l.to_socket.name
+                    con.socket_index = get_node_input_index(l.to_node, l.to_socket)
 
             outp_mheight = node.outputs.get(ch.name + io_suffix['MAX_HEIGHT'])
             if outp_mheight:
@@ -2002,6 +2163,7 @@ def update_enable_baked_outside(self, context):
                     con = ch.ori_max_height_to.add()
                     con.node = l.to_node.name
                     con.socket = l.to_socket.name
+                    con.socket_index = get_node_input_index(l.to_node, l.to_socket)
 
             baked = tree.nodes.get(ch.baked)
             if baked and baked.image and not ch.no_layer_using:
@@ -2133,30 +2295,22 @@ def update_enable_baked_outside(self, context):
         for ch in yp.channels:
 
             outp = node.outputs.get(ch.name)
-            for con in ch.ori_to:
-                try: mtree.links.new(outp, mtree.nodes[con.node].inputs[con.socket])
-                except: pass
+            connect_to_original_node(mtree, outp, ch.ori_to)
             ch.ori_to.clear()
 
             outp_alpha = node.outputs.get(ch.name + io_suffix['ALPHA'])
             if outp_alpha:
-                for con in ch.ori_alpha_to:
-                    try: mtree.links.new(outp_alpha, mtree.nodes[con.node].inputs[con.socket])
-                    except: pass
+                connect_to_original_node(mtree, outp_alpha, ch.ori_alpha_to)
                 ch.ori_alpha_to.clear()
 
             outp_height = node.outputs.get(ch.name + io_suffix['HEIGHT'])
             if outp_height:
-                for con in ch.ori_height_to:
-                    try: mtree.links.new(outp_height, mtree.nodes[con.node].inputs[con.socket])
-                    except: pass
+                connect_to_original_node(mtree, outp_height, ch.ori_height_to)
                 ch.ori_height_to.clear()
 
             outp_mheight = node.outputs.get(ch.name + io_suffix['MAX_HEIGHT'])
             if outp_mheight:
-                for con in ch.ori_max_height_to:
-                    try: mtree.links.new(outp_mheight, mtree.nodes[con.node].inputs[con.socket])
-                    except: pass
+                connect_to_original_node(mtree, outp_mheight, ch.ori_max_height_to)
                 ch.ori_max_height_to.clear()
 
             # Delete nodes inside frames
@@ -2190,6 +2344,18 @@ def update_enable_baked_outside(self, context):
             set_adaptive_displacement_node(mat, node)
 
     #print("howowowo")
+
+def connect_to_original_node(mtree, outp, ori_to):
+    for con in ori_to:
+        node = mtree.nodes.get(con.node)
+        if not node: continue
+        # Some mix inputs has same name so use index instead
+        if node.type == 'MIX':
+            try: mtree.links.new(outp, node.inputs[con.socket_index])
+            except Exception as e: print(e)
+        else:
+            try: mtree.links.new(outp, node.inputs[con.socket])
+            except Exception as e: print(e)
 
 def update_use_baked(self, context):
     tree = self.id_data
@@ -2736,6 +2902,7 @@ def register():
     bpy.utils.register_class(YMergeMask)
     bpy.utils.register_class(YBakeTempImage)
     bpy.utils.register_class(YDisableTempImage)
+    bpy.utils.register_class(YDeleteBakedChannelImages)
 
 def unregister():
     bpy.utils.unregister_class(YTransferSomeLayerUV)
@@ -2747,3 +2914,4 @@ def unregister():
     bpy.utils.unregister_class(YMergeMask)
     bpy.utils.unregister_class(YBakeTempImage)
     bpy.utils.unregister_class(YDisableTempImage)
+    bpy.utils.unregister_class(YDeleteBakedChannelImages)

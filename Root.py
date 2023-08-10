@@ -863,6 +863,11 @@ def update_connect_to(self, context):
     if item:
         self.name = get_unique_name(item.input_name, yp.channels)
 
+    # Emission will not use clamp by default
+    if 'Emission' in self.name:
+        self.use_clamp = False
+    else: self.use_clamp = True
+
 class YNewYPaintChannel(bpy.types.Operator):
     bl_idname = "node.y_add_new_ypaint_channel"
     bl_label = "Add new " + get_addon_title() + " Channel"
@@ -886,6 +891,11 @@ class YNewYPaintChannel(bpy.types.Operator):
             description = "Non color won't converted to linear first before blending",
             items = colorspace_items,
             default='LINEAR')
+
+    use_clamp = BoolProperty(
+            name='Use Clamp', 
+            description = 'Use clamp of newly the channel',
+            default=True)
 
     @classmethod
     def poll(cls, context):
@@ -947,6 +957,7 @@ class YNewYPaintChannel(bpy.types.Operator):
         col.label(text='Connect To:')
         if self.type != 'NORMAL':
             col.label(text='Color Space:')
+        if self.type != 'NORMAL': col.label(text='')
 
         col = row.column(align=False)
         col.prop(self, 'name', text='')
@@ -954,6 +965,7 @@ class YNewYPaintChannel(bpy.types.Operator):
                 #lib.custom_icons[channel_socket_custom_icon_names[self.type]].icon_id)
         if self.type != 'NORMAL':
             col.prop(self, "colorspace", text='')
+        if self.type != 'NORMAL': col.prop(self, 'use_clamp')
 
     def execute(self, context):
 
@@ -1016,6 +1028,10 @@ class YNewYPaintChannel(bpy.types.Operator):
         if inp and self.type != 'NORMAL': 
             set_input_default_value(node, channel, inp.default_value)
         else: set_input_default_value(node, channel)
+
+        # Set use clamp
+        if channel.use_clamp != self.use_clamp:
+            channel.use_clamp = self.use_clamp
 
         # Change active channel
         last_index = len(yp.channels)-1
@@ -1384,7 +1400,19 @@ class YFixMissingUV(bpy.types.Operator):
         return obj and obj.type == 'MESH'
 
     def invoke(self, context, event):
+        mat = get_active_material()
         obj = context.object
+        objs = get_all_objects_with_same_materials(mat)
+
+        # Remapping will proceed if this flag is true
+        self.need_remap = True
+
+        # No need to remap if other objects has the uv
+        for o in objs:
+            uvls = get_uv_layers(o)
+            if self.source_uv_name in uvls:
+                self.need_remap = False
+                return self.execute(context)
 
         self.target_uv_name = ''
 
@@ -1415,49 +1443,51 @@ class YFixMissingUV(bpy.types.Operator):
         group_tree = node.node_tree
         yp = group_tree.yp
 
-        if self.target_uv_name == '':
+        if self.target_uv_name == '' and self.need_remap:
             self.report({'ERROR'}, "Target UV name is cannot be empty!")
             return {'CANCELLED'}
+
+        target_uv_name = self.target_uv_name if self.need_remap else self.source_uv_name
         
         for o in objs:
             if o.type != 'MESH': continue
 
             uv_layers = get_uv_layers(o)
 
-            #if self.uv_map != '':
             # Get uv layer
             uv_layers = get_uv_layers(o)
-            uvl = uv_layers.get(self.target_uv_name)
+            uvl = uv_layers.get(target_uv_name)
 
             # Create one if it didn't exist
             if not uvl:
-                uvl = uv_layers.new(name=self.target_uv_name)
+                uvl = uv_layers.new(name=target_uv_name)
             uv_layers.active = uvl
 
-        # Check baked images uv
-        if yp.baked_uv_name == self.source_uv_name:
-            yp.baked_uv_name = self.target_uv_name
+        if self.need_remap:
+            # Check baked images uv
+            if yp.baked_uv_name == self.source_uv_name:
+                yp.baked_uv_name = target_uv_name
 
-        # Check baked normal channel
-        for ch in yp.channels:
-            baked_normal = group_tree.nodes.get(ch.baked_normal)
-            if baked_normal and baked_normal.uv_map == self.source_uv_name:
-                baked_normal.uv_map = self.target_uv_name
+            # Check baked normal channel
+            for ch in yp.channels:
+                baked_normal = group_tree.nodes.get(ch.baked_normal)
+                if baked_normal and baked_normal.uv_map == self.source_uv_name:
+                    baked_normal.uv_map = target_uv_name
 
-        # Check layer and masks uv
-        for layer in yp.layers:
-            if layer.uv_name == self.source_uv_name:
-                layer.uv_name = self.target_uv_name
+            # Check layer and masks uv
+            for layer in yp.layers:
+                if layer.uv_name == self.source_uv_name:
+                    layer.uv_name = target_uv_name
 
-            for mask in layer.masks:
-                if mask.uv_name == self.source_uv_name:
-                    mask.uv_name = self.target_uv_name
+                for mask in layer.masks:
+                    if mask.uv_name == self.source_uv_name:
+                        mask.uv_name = target_uv_name
 
-        # Check height channel uv
-        height_ch = get_root_height_channel(yp)
-        if height_ch and height_ch.main_uv == self.source_uv_name:
-            height_ch.main_uv = self.target_uv_name
-            #height_ch.enable_smooth_bump = height_ch.enable_smooth_bump
+            # Check height channel uv
+            height_ch = get_root_height_channel(yp)
+            if height_ch and height_ch.main_uv == self.source_uv_name:
+                height_ch.main_uv = target_uv_name
+                #height_ch.enable_smooth_bump = height_ch.enable_smooth_bump
 
         return {'FINISHED'}
 
@@ -1519,30 +1549,35 @@ class YChangeActiveYPaintNode(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class YFixDuplicatedYPNodes(bpy.types.Operator):
-    bl_idname = "node.y_fix_duplicated_yp_nodes"
-    bl_label = "Fix Duplicated " + get_addon_title() + " Nodes"
-    bl_description = "Fix duplicated " + get_addon_title() + " nodes by making it single user"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        group_node = get_active_ypaint_node()
-        if not group_node: return False
-        yp = group_node.node_tree.yp
-        if len(yp.layers) == 0: return False
-        layer_tree = get_tree(yp.layers[-1])
-        return layer_tree.users > 1
-
-    def execute(self, context):
-        bpy.ops.node.y_duplicate_yp_nodes(duplicate_material=False, only_active=False)
-        return {'FINISHED'}
+#class YFixDuplicatedYPNodes(bpy.types.Operator):
+#    bl_idname = "node.y_fix_duplicated_yp_nodes"
+#    bl_label = "Fix Duplicated " + get_addon_title() + " Nodes"
+#    bl_description = "Fix duplicated " + get_addon_title() + " nodes by making it single user"
+#    bl_options = {'REGISTER', 'UNDO'}
+#
+#    @classmethod
+#    def poll(cls, context):
+#        group_node = get_active_ypaint_node()
+#        if not group_node: return False
+#        yp = group_node.node_tree.yp
+#        if len(yp.layers) == 0: return False
+#        layer_tree = get_tree(yp.layers[-1])
+#        return layer_tree.users > 1
+#
+#    def execute(self, context):
+#        bpy.ops.node.y_duplicate_yp_nodes(duplicate_node=False, duplicate_material=False, only_active=False)
+#        return {'FINISHED'}
 
 class YDuplicateYPNodes(bpy.types.Operator):
     bl_idname = "node.y_duplicate_yp_nodes"
     bl_label = "Duplicate " + get_addon_title() + " Nodes"
-    bl_description = "Duplicate " + get_addon_title() + " nodes to make it single user"
+    bl_description = get_addon_title() + " doesn't work with more than one user! Duplicate to make it single user"
     bl_options = {'REGISTER', 'UNDO'}
+
+    duplicate_node = BoolProperty(
+            name = 'Duplicate this Node',
+            description = 'Duplicate this node',
+            default=False)
 
     duplicate_material = BoolProperty(
             name = 'Also Duplicate Material',
@@ -1560,12 +1595,7 @@ class YDuplicateYPNodes(bpy.types.Operator):
         group_node = get_active_ypaint_node()
         if not group_node: return False
 
-        yp = group_node.node_tree.yp
-        if len(yp.layers) > 0:
-            layer_tree = get_tree(yp.layers[-1])
-        else: layer_tree = None
-
-        return (layer_tree and layer_tree.users > 1) or mat.users > 1
+        return True
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -1589,9 +1619,12 @@ class YDuplicateYPNodes(bpy.types.Operator):
                     if m == mat:
                         obj.data.materials[i] = dup_mat
 
+            mat = dup_mat
+
+        if self.duplicate_material or self.duplicate_node:
             # Get to be duplicated trees
             tree_dict = {}
-            for node in dup_mat.node_tree.nodes:
+            for node in mat.node_tree.nodes:
                 if node.type == 'GROUP' and node.node_tree and node.node_tree.yp.is_ypaint_node and node.node_tree.name not in tree_dict:
                     tree_dict[node.node_tree.name] = node
                     #node.node_tree = node.node_tree.copy()
@@ -1608,7 +1641,8 @@ class YDuplicateYPNodes(bpy.types.Operator):
 
         # Make all layers single(dual) user
         #for layer in yp.layers:
-        Layer.duplicate_layer_nodes_and_images(tree, make_image_single_user=ypui.make_image_single_user)
+        #Layer.duplicate_layer_nodes_and_images(tree, make_image_single_user=ypui.make_image_single_user)
+        Layer.duplicate_layer_nodes_and_images(tree, make_image_single_user=True)
 
         # Duplicate uv nodes
         for uv in yp.uvs:
@@ -1628,27 +1662,27 @@ class YDuplicateYPNodes(bpy.types.Operator):
         #            re.match(r'^.+_Copy\.*\d{0,3}$', node.node_tree.name)):
         #        node.node_tree = node.node_tree.copy()
 
-        if ypui.make_image_single_user:
+        #if ypui.make_image_single_user:
 
-            # Copy baked image
-            for ch in yp.channels:
-                baked = tree.nodes.get(ch.baked)
-                if baked and baked.image:
-                    baked.image = baked.image.copy()
+        # Copy baked image
+        for ch in yp.channels:
+            baked = tree.nodes.get(ch.baked)
+            if baked and baked.image:
+                baked.image = baked.image.copy()
 
-                    # Also rename path because why not? NO, because it will cause image lost
-                    #path = baked.image.filepath
-                    #ext = os.path.splitext(path)[1]
-                    #baked.image.filepath = os.path.dirname(path) + baked.image.name + ext
+                # Also rename path because why not? NO, because it will cause image lost
+                #path = baked.image.filepath
+                #ext = os.path.splitext(path)[1]
+                #baked.image.filepath = os.path.dirname(path) + baked.image.name + ext
 
-                if ch.type == 'NORMAL':
-                    baked_disp = tree.nodes.get(ch.baked_disp)
-                    if baked_disp and baked_disp.image:
-                        baked_disp.image = baked_disp.image.copy()
+            if ch.type == 'NORMAL':
+                baked_disp = tree.nodes.get(ch.baked_disp)
+                if baked_disp and baked_disp.image:
+                    baked_disp.image = baked_disp.image.copy()
 
-                    baked_normal_overlay = tree.nodes.get(ch.baked_normal_overlay)
-                    if baked_normal_overlay and baked_normal_overlay.image:
-                        baked_normal_overlay.image = baked_normal_overlay.image.copy()
+                baked_normal_overlay = tree.nodes.get(ch.baked_normal_overlay)
+                if baked_normal_overlay and baked_normal_overlay.image:
+                    baked_normal_overlay.image = baked_normal_overlay.image.copy()
 
         # Recover possibly deleted parallax
         height_root_ch = get_root_height_channel(yp)
@@ -2125,7 +2159,7 @@ def update_channel_name(self, context):
     print('INFO: Channel renamed at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
     wm.yptimer.time = str(time.time())
 
-def get_preview(mat, output=None, advanced=False):
+def get_preview(mat, output=None, advanced=False, normal_viewer=False):
     tree = mat.node_tree
     #nodes = tree.nodes
 
@@ -2136,11 +2170,16 @@ def get_preview(mat, output=None, advanced=False):
     if not output: return None
 
     if advanced:
-        preview, dirty = simple_replace_new_node(
-                tree, EMISSION_VIEWER, 'ShaderNodeGroup', 'Emission Viewer', 
-                lib.ADVANCED_EMISSION_VIEWER,
-                #lib.GRID_EMISSION_VIEWER, 
-                return_status=True, hard_replace=True)
+        if normal_viewer:
+            preview, dirty = simple_replace_new_node(
+                    tree, EMISSION_VIEWER, 'ShaderNodeGroup', 'Emission Viewer', 
+                    lib.ADVANCED_NORMAL_EMISSION_VIEWER,
+                    return_status=True, hard_replace=True)
+        else:
+            preview, dirty = simple_replace_new_node(
+                    tree, EMISSION_VIEWER, 'ShaderNodeGroup', 'Emission Viewer', 
+                    lib.ADVANCED_EMISSION_VIEWER,
+                    return_status=True, hard_replace=True)
         if dirty:
             duplicate_lib_node_tree(preview)
             #preview.node_tree = preview.node_tree.copy()
@@ -2153,9 +2192,16 @@ def get_preview(mat, output=None, advanced=False):
             #    mat.game_settings.alpha_blend = 'ALPHA'
             #mat.yp.ori_blend_method = blend_method
     else:
-        preview, dirty = simple_replace_new_node(
-                tree, EMISSION_VIEWER, 'ShaderNodeEmission', 'Emission Viewer', 
-                return_status=True)
+        if normal_viewer:
+            preview, dirty = simple_replace_new_node(
+                    tree, EMISSION_VIEWER, 'ShaderNodeGroup', 'Emission Viewer', 
+                    lib.NORMAL_EMISSION_VIEWER,
+                    return_status=True, hard_replace=True)
+        else:
+            preview, dirty = simple_replace_new_node(
+                    tree, EMISSION_VIEWER, 'ShaderNodeEmission', 'Emission Viewer', 
+                    return_status=True)
+
     if dirty:
         preview.hide = True
         preview.location = (output.location.x, output.location.y + 30.0)
@@ -2296,7 +2342,10 @@ def update_layer_preview_mode(self, context):
             tree.links.new(preview.outputs[0], output.inputs[0])
 
         else:
-            preview = get_preview(mat, output, True)
+            if channel.type == 'NORMAL':
+                preview = get_preview(mat, output, True, True)
+            else:
+                preview = get_preview(mat, output, True)
             if not preview: return
 
             tree.links.new(group_node.outputs[LAYER_VIEWER], preview.inputs[0])
@@ -2304,9 +2353,10 @@ def update_layer_preview_mode(self, context):
             tree.links.new(preview.outputs[0], output.inputs[0])
 
             # Set gamma
-            if channel.colorspace != 'LINEAR':
-                preview.inputs[2].default_value = 2.2
-            else: preview.inputs[2].default_value = 1.0
+            if 'Gamma' in preview.inputs:
+                if channel.colorspace != 'LINEAR':
+                    preview.inputs['Gamma'].default_value = 2.2
+                else: preview.inputs['Gamma'].default_value = 1.0
 
             # Set channel layer blending
             ch = layer.channels[yp.active_channel_index]
@@ -2338,19 +2388,35 @@ def update_preview_mode(self, context):
         set_srgb_view_transform()
 
         output = get_active_mat_output_node(mat.node_tree)
-        preview = get_preview(mat, output)
+
+        # Get preview node by name first
+        preview = mat.node_tree.nodes.get(EMISSION_VIEWER)
+
+        # Try to get socket that connected to preview first input
+        if preview:
+            from_socket = [link.from_socket for link in preview.inputs[0].links]
+            if from_socket: from_socket = from_socket[0]
+        else: from_socket = None
+
+        # Check if there's any valid socket connected to first input of preview node
+        is_from_socket_missing = not from_socket or (from_socket and not from_socket.name.startswith(channel.name))
+
+        # Get all outputs from current channel
+        outs = [o for o in group_node.outputs if o.name.startswith(channel.name)]
+
+        # Use special preview for normal
+        if channel.type == 'NORMAL' and (is_from_socket_missing or (from_socket and from_socket == outs[-1])):
+            preview = get_preview(mat, output, False, True)
+        else: preview = get_preview(mat, output, False)
+
+        # Preview should exists by now
         if not preview: return
 
-        from_socket = [link.from_socket for link in preview.inputs[0].links]
-        if not from_socket or (from_socket and not from_socket[0].name.startswith(channel.name)):
+        if is_from_socket_missing:
             # Connect first output
-            #tree.links.new(group_node.outputs[channel.io_index], preview.inputs[0])
             tree.links.new(group_node.outputs[channel.name], preview.inputs[0])
         else:
-            from_socket = from_socket[0]
-            outs = [o for o in group_node.outputs if o.name.startswith(channel.name)]
-
-            # Cycle outpus
+            # Cycle outputs
             for i, o in enumerate(outs):
                 if o == from_socket:
                     if i != len(outs)-1:
@@ -2434,7 +2500,6 @@ def update_layer_index(self, context):
     objs = get_all_objects_with_same_materials(mat, selected_only=True)
     for ob in objs:
         refresh_temp_uv(ob, src_of_img)
-    #refresh_temp_uv(obj, src_of_img)
 
     update_image_editor_image(context, image)
 
@@ -2785,8 +2850,8 @@ def update_channel_alpha(self, context):
         if any(alpha_chs):
             # Set material to use alpha blend
             if is_greater_than_280():
-                mat.blend_method = 'HASHED'
-                mat.shadow_method = 'HASHED'
+                mat.blend_method = self.alpha_blend_mode
+                mat.shadow_method = self.alpha_shadow_mode
             else:
                 mat.game_settings.alpha_blend = 'ALPHA'
 
@@ -2823,6 +2888,17 @@ def update_channel_alpha(self, context):
         self.ori_alpha_to.clear()
 
     yp.refresh_tree = True
+
+def update_channel_alpha_blend_mode(self, context):
+    mat = get_active_material()
+    group_tree = self.id_data
+    yp = group_tree.yp
+
+    if not self.enable_alpha or not is_greater_than_280(): return
+
+    # Set material alpha blend
+    mat.blend_method = self.alpha_blend_mode
+    mat.shadow_method = self.alpha_shadow_mode
 
 #def update_disable_quick_toggle(self, context):
 #    yp = self
@@ -2958,6 +3034,7 @@ def update_channel_main_uv(self, context):
 class YNodeConnections(bpy.types.PropertyGroup):
     node = StringProperty(default='')
     socket = StringProperty(default='')
+    socket_index = IntProperty(default=-1)
 
 class YPaintChannel(bpy.types.PropertyGroup):
     name = StringProperty(
@@ -2990,6 +3067,31 @@ class YPaintChannel(bpy.types.PropertyGroup):
 
     # Alpha for transparent materials
     enable_alpha = BoolProperty(default=False, update=update_channel_alpha)
+
+    alpha_blend_mode = EnumProperty(
+            name = 'Alpha Blend Mode',
+            description = 'This will change your material blend mode if alpha is enabled',
+            items = (
+                ('CLIP', 'Alpha Clip', ''),
+                ('HASHED', 'Alpha Hashed', ''),
+                ('BLEND', 'Alpha Blend', ''),
+                ),
+            default = 'HASHED',
+            update=update_channel_alpha_blend_mode
+            )
+
+    alpha_shadow_mode = EnumProperty(
+            name = 'Alpha Shadow Mode',
+            description = 'This will change your material shadow mode if alpha is enabled',
+            items = (
+                ('NONE', 'None', ''),
+                ('OPAQUE', 'Opaque', ''),
+                ('HASHED', 'Alpha Hashed', ''),
+                ('CLIP', 'Alpha Clip', ''),
+                ),
+            default = 'HASHED',
+            update=update_channel_alpha_blend_mode
+            )
 
     # Backface mode for alpha
     backface_mode = EnumProperty(
@@ -3371,6 +3473,11 @@ class YPaintObjectProps(bpy.types.PropertyGroup):
     ori_multires_render_levels = IntProperty(default=1)
     ori_multires_levels = IntProperty(default=1)
 
+    ori_mirror_offset_u = FloatProperty(default=0.0)
+    ori_mirror_offset_v = FloatProperty(default=0.0)
+    ori_offset_u = FloatProperty(default=0.0)
+    ori_offset_v = FloatProperty(default=0.0)
+
 #class YPaintMeshProps(bpy.types.PropertyGroup):
 #    parallax_scale_min = FloatProperty(default=0.0)
 #    parallax_scale_span = FloatProperty(default=1.0)
@@ -3440,6 +3547,17 @@ def ypaint_last_object_update(scene):
             scene.yp.last_mode = obj.mode
             if yp and len(yp.layers) > 0 :
                 image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, yp)
+
+                # Store original uv mirror offsets
+                if obj.mode == 'TEXTURE_PAINT':
+                    mirror = get_first_mirror_modifier(obj)
+                    if mirror:
+                        obj.yp.ori_mirror_offset_u = mirror.mirror_offset_u
+                        obj.yp.ori_mirror_offset_v = mirror.mirror_offset_v
+                        if is_greater_than_280():
+                            obj.yp.ori_offset_u = mirror.offset_u
+                            obj.yp.ori_offset_v = mirror.offset_v
+
                 refresh_temp_uv(obj, src_of_img)
 
         # Into edit mode
@@ -3544,7 +3662,7 @@ def register():
     bpy.utils.register_class(YRenameYPaintTree)
     bpy.utils.register_class(YChangeActiveYPaintNode)
     bpy.utils.register_class(YDuplicateYPNodes)
-    bpy.utils.register_class(YFixDuplicatedYPNodes)
+    #bpy.utils.register_class(YFixDuplicatedYPNodes)
     bpy.utils.register_class(YFixMissingData)
     bpy.utils.register_class(YRefreshTangentSignVcol)
     bpy.utils.register_class(YRemoveYPaintNode)
@@ -3592,7 +3710,7 @@ def unregister():
     bpy.utils.unregister_class(YRenameYPaintTree)
     bpy.utils.unregister_class(YChangeActiveYPaintNode)
     bpy.utils.unregister_class(YDuplicateYPNodes)
-    bpy.utils.unregister_class(YFixDuplicatedYPNodes)
+    #bpy.utils.unregister_class(YFixDuplicatedYPNodes)
     bpy.utils.unregister_class(YFixMissingData)
     bpy.utils.unregister_class(YRefreshTangentSignVcol)
     bpy.utils.unregister_class(YRemoveYPaintNode)
