@@ -1038,11 +1038,18 @@ def get_active_ypaint_node():
 #    if tree.users == 0:
 #        bpy.data.node_groups.remove(tree)
 
-def simple_remove_node(tree, node, remove_data=True):
+def simple_remove_node(tree, node, remove_data=True, passthrough_links=False):
     #if not node: return
     scene = bpy.context.scene
 
-    #print(node.name)
+    # Reconneect links if input and output has same name
+    if passthrough_links:
+        for inp in node.inputs:
+            if len(inp.links) == 0: continue
+            outp = node.outputs.get(inp.name)
+            if not outp: continue
+            for link in outp.links:
+                tree.links.new(inp.links[0].from_socket, link.to_socket)
 
     if remove_data:
         if node.bl_idname == 'ShaderNodeTexImage':
@@ -1324,6 +1331,30 @@ def unmute_node(tree, entity, prop):
     if not hasattr(entity, prop): return
     node = tree.nodes.get(getattr(entity, prop))
     if node: node.mute = False
+
+def set_default_value(node, input_name_or_index, value):
+
+    # HACK: Sometimes Blender bug will cause node with no inputs
+    # So try to reload the group again
+    # Tested on Blender 3.6.2
+    counter = 0
+    while node.type == 'GROUP' and len(node.inputs) == 0 and counter < 64:
+        print("HACK: Trying to set group '" + node.node_tree.name + "' again!")
+        tree_name = node.node_tree.name
+        node.node_tree = bpy.data.node_groups.get(tree_name)
+        counter += 1
+
+    inp = None
+
+    if type(input_name_or_index) == int:
+        if input_name_or_index < len(node.inputs):
+            inp = node.inputs[input_name_or_index]
+    else: inp = node.inputs.get(input_name_or_index)
+
+    if inp: inp.default_value = value
+    else: 
+        debug_name = node.node_tree.name if node.type == 'GROUP' and node.node_tree else node.name
+        print("WARNING: Input '" + str(input_name_or_index) + "' in '" + debug_name + "' is not found!")
 
 def new_node(tree, entity, prop, node_id_name, label=''):
     ''' Create new node '''
@@ -3886,6 +3917,19 @@ def is_mesh_flat_shaded(mesh):
 
     return False
 
+def get_all_materials_with_yp_nodes(mesh_only=True):
+    mats = []
+
+    for obj in get_scene_objects():
+        if mesh_only and obj.type != 'MESH': continue
+        if not hasattr(obj, 'data') or not hasattr(obj.data, 'materials'): continue
+        for mat in obj.data.materials:
+            if any([n for n in mat.node_tree.nodes if n.type == 'GROUP' and n.node_tree and n.node_tree.yp.is_ypaint_node]):
+                if mat not in mats:
+                    mats.append(mat)
+
+    return mats
+
 def get_all_objects_with_same_materials(mat, mesh_only=False, uv_name='', selected_only=False):
     objs = []
 
@@ -3933,6 +3977,58 @@ def get_yp_images(yp):
                     images.append(source.image)
 
     return images
+
+def get_yp_entities_images_and_segments(yp):
+    entities = []
+    images = []
+    segments = []
+
+    for layer in yp.layers:
+        if layer.type == 'IMAGE':
+            source = get_layer_source(layer)
+            if source and source.image:
+                image = source.image
+                if image.yia.is_image_atlas:
+                    segment = image.yia.segments.get(layer.segment_name)
+                    if segment not in segments:
+                        images.append(image)
+                        segments.append(segment)
+                        entities.append([layer])
+                    else:
+                        idx = [i for i, s in enumerate(segments) if s == segment][0]
+                        entities[idx].append(layer)
+                else:
+                    if image not in images:
+                        images.append(image)
+                        segments.append(None)
+                        entities.append([layer])
+                    else:
+                        idx = [i for i, img in enumerate(images) if img == image][0]
+                        entities[idx].append(layer)
+        for mask in layer.masks:
+            if mask.type == 'IMAGE':
+                source = get_mask_source(mask)
+                if source and source.image:
+                    image = source.image
+                    if image.yia.is_image_atlas:
+                        segment = image.yia.segments.get(mask.segment_name)
+                        if segment not in segments:
+                            images.append(image)
+                            segments.append(segment)
+                            entities.append([mask])
+                        else:
+                            idx = [i for i, s in enumerate(segments) if s == segment][0]
+                            entities[idx].append(mask)
+                    else:
+                        if image not in images:
+                            images.append(image)
+                            segments.append(None)
+                            entities.append([mask])
+                        else:
+                            idx = [i for i, img in enumerate(images) if img == image][0]
+                            entities[idx].append(mask)
+
+    return entities, images, segments
 
 def check_need_prev_normal(layer):
 
@@ -4544,21 +4640,44 @@ def get_first_mirror_modifier(obj):
 
     return None
 
-def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0):
-    width = dest.size[0]
-    height = dest.size[1]
+def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0, segment=None, segment_src=None):
+
+    start_x = 0
+    start_y = 0
+
+    src_start_x = 0
+    src_start_y = 0
+
+    width = src.size[0]
+    height = src.size[1]
+
+    if segment:
+        start_x = width * segment.tile_x
+        start_y = height * segment.tile_y
+
+    if segment_src:
+        width = segment_src.width
+        height = segment_src.height
+
+        src_start_x = width * segment_src.tile_x
+        src_start_y = height * segment_src.tile_y
 
     if is_greater_than_283():
 
         # Store pixels to numpy
-        dest_pxs = numpy.empty(shape=width*height*4, dtype=numpy.float32)
-        src_pxs = numpy.empty(shape=width*height*4, dtype=numpy.float32)
+        dest_pxs = numpy.empty(shape=dest.size[0]*dest.size[1]*4, dtype=numpy.float32)
+        src_pxs = numpy.empty(shape=src.size[0]*src.size[1]*4, dtype=numpy.float32)
         dest.pixels.foreach_get(dest_pxs)
         src.pixels.foreach_get(src_pxs)
 
+        # Set array to 3d
+        dest_pxs.shape = (-1, dest.size[0], 4)
+        src_pxs.shape = (-1, src.size[0], 4)
+
         # Copy to selected channel
-        dest_pxs[dest_idx::4] = src_pxs[src_idx::4]
-        dest.pixels.foreach_set(dest_pxs)
+        #dest_pxs[dest_idx::4] = src_pxs[src_idx::4]
+        dest_pxs[start_y:start_y+height, start_x:start_x+width][::, ::, dest_idx] = src_pxs[src_start_y:src_start_y+height, src_start_x:src_start_x+width][::, ::, src_idx]
+        dest.pixels.foreach_set(dest_pxs.ravel())
 
     else:
         # Get image pixels
@@ -4567,29 +4686,121 @@ def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0):
 
         # Copy to selected channel
         for y in range(height):
-            offset_y = width * 4 * y
+            source_offset_y = width * 4 * (y + src_start_y)
+            offset_y = dest.size[0] * 4 * (y + start_y)
             for x in range(width):
-                offset_x = 4 * x
-                dest_pxs[offset_y + offset_x + dest_idx] = src_pxs[offset_y + offset_x + src_idx]
+                source_offset_x = 4 * (x + src_start_x)
+                offset_x = 4 * (x + start_x)
+                dest_pxs[offset_y + offset_x + dest_idx] = src_pxs[source_offset_y + source_offset_x + src_idx]
 
         dest.pixels = dest_pxs
 
-#def get_io_index(layer, root_ch, alpha=False):
-#    if alpha:
-#        return root_ch.io_index+1
-#    return root_ch.io_index
-#
-#def get_alpha_io_index(layer, root_ch):
-#    return get_io_index(layer, root_ch, alpha=True)
+def copy_image_pixels(src, dest, segment=None, segment_src=None):
 
-# Some image_ops need this
-#def get_active_image():
-#    node = get_active_ypaint_node()
-#    if not node: return None
-#    yp = node.node_tree.yp
-#    nodes = node.node_tree.nodes
-#    if len(yp.layers) == 0: return None
-#    layer = yp.layers[yp.active_layer_index]
-#    if layer.type != 'ShaderNodeTexImage': return None
-#    source = nodes.get(layer.source)
-#    return source.image
+    start_x = 0
+    start_y = 0
+
+    src_start_x = 0
+    src_start_y = 0
+
+    width = src.size[0]
+    height = src.size[1]
+
+    if segment:
+        start_x = width * segment.tile_x
+        start_y = height * segment.tile_y
+
+    if segment_src:
+        width = segment_src.width
+        height = segment_src.height
+
+        src_start_x = width * segment_src.tile_x
+        src_start_y = height * segment_src.tile_y
+
+    if is_greater_than_283():
+        target_pxs = numpy.empty(shape=dest.size[0]*dest.size[1]*4, dtype=numpy.float32)
+        source_pxs = numpy.empty(shape=src.size[0]*src.size[1]*4, dtype=numpy.float32)
+        dest.pixels.foreach_get(target_pxs)
+        src.pixels.foreach_get(source_pxs)
+
+        # Set array to 3d
+        target_pxs.shape = (-1, dest.size[0], 4)
+        source_pxs.shape = (-1, src.size[0], 4)
+
+        target_pxs[start_y:start_y+height, start_x:start_x+width] = source_pxs[src_start_y:src_start_y+height, src_start_x:src_start_x+width]
+
+        dest.pixels.foreach_set(target_pxs.ravel())
+
+    else:
+        target_pxs = list(dest.pixels)
+        source_pxs = list(src.pixels)
+
+        for y in range(height):
+            source_offset_y = width * 4 * (y + src_start_y)
+            offset_y = dest.size[0] * 4 * (y + start_y)
+            for x in range(width):
+                source_offset_x = 4 * (x + src_start_x)
+                offset_x = 4 * (x + start_x)
+                for i in range(4):
+                    target_pxs[offset_y + offset_x + i] = source_pxs[source_offset_y + source_offset_x + i]
+
+        dest.pixels = target_pxs
+
+def set_image_pixels(image, color, segment=None):
+
+    start_x = 0
+    start_y = 0
+
+    width = image.size[0]
+    height = image.size[1]
+
+    if segment:
+        start_x = width * segment.tile_x
+        start_y = height * segment.tile_y
+
+        width = segment.width
+        height = segment.height
+
+    if is_greater_than_283():
+        pxs = numpy.empty(shape=image.size[0]*image.size[1]*4, dtype=numpy.float32)
+        image.pixels.foreach_get(pxs)
+
+        # Set array to 3d
+        pxs.shape = (-1, image.size[0], 4)
+
+        pxs[start_y:start_y+height, start_x:start_x+width] = color
+        image.pixels.foreach_set(pxs.ravel())
+
+    else:
+        pxs = list(image.pixels)
+
+        for y in range(height):
+            source_offset_y = width * 4 * y
+            offset_y = image.size[0] * 4 * (y + start_y)
+            for x in range(width):
+                source_offset_x = 4 * x
+                offset_x = 4 * (x + start_x)
+                for i in range(4):
+                    pxs[offset_y + offset_x + i] = color[i]
+
+        image.pixels = pxs
+
+def duplicate_image(image):
+    # Make sure UDIM image is updated
+    if image.source == 'TILED' and image.is_dirty:
+
+        # WARNING: This will cause a problem if UDIM image is originally from disk
+        # Since duplicated image will point to same source
+        if image.packed_file:
+            image.pack()
+        else: image.save()
+
+    new_image = image.copy()
+
+    # Copied image is not updated by default if it's dirty,
+    # So copy the pixels
+    if new_image.source != 'TILED':
+        new_image.pixels = list(image.pixels)
+
+    return new_image
+

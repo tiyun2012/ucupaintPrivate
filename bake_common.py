@@ -17,6 +17,7 @@ JOIN_PROBLEMATIC_TEXCOORDS = {
         }
 
 EMPTY_IMG_NODE = '___EMPTY_IMAGE__'
+ACTIVE_UV_NODE = '___ACTIVE_UV__'
 
 def get_problematic_modifiers(obj):
     pms = []
@@ -34,7 +35,25 @@ def get_problematic_modifiers(obj):
 
     return pms
 
-def is_join_objects_problematic(yp):
+''' Search for texcoord node that output join problematic texcoords outside yp '''
+def search_join_problematic_texcoord(tree, node):
+    for inp in node.inputs:
+        for link in inp.links:
+            from_node = link.from_node
+            from_socket = link.from_socket
+            if from_node.type == 'TEX_COORD' and from_socket.name in JOIN_PROBLEMATIC_TEXCOORDS:
+                return True
+            elif node.type == 'GROUP' and node.node_tree and not node.node_tree.yp.is_ypaint_node:
+                output = [n for n in node.node_tree.nodes if n.type == 'GROUP_OUTPUT' and n.is_active_output]
+                if output:
+                    if search_join_problematic_texcoord(node.node_tree, output[0]):
+                        return True
+            if search_join_problematic_texcoord(tree, from_node):
+                return True
+
+    return False
+
+def is_join_objects_problematic(yp, mat=None):
     for layer in yp.layers:
 
         for mask in layer.masks:
@@ -47,6 +66,13 @@ def is_join_objects_problematic(yp):
             continue
         if layer.texcoord_type in JOIN_PROBLEMATIC_TEXCOORDS:
             return True
+
+    if mat:
+        output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
+        if output: 
+            output = output[0]
+            if search_join_problematic_texcoord(mat.node_tree, output):
+                return True
 
     return False
 
@@ -167,6 +193,37 @@ def remember_before_bake(yp=None, mat=None):
         book['ori_mat_objs_active_nodes'].append(active_node_names)
 
     return book
+
+def get_active_render_uv_node(tree, active_render_uv_name):
+    act_uv = tree.nodes.get(ACTIVE_UV_NODE)
+    if not act_uv:
+        act_uv = tree.nodes.new('ShaderNodeUVMap')
+        act_uv.name = ACTIVE_UV_NODE
+        act_uv.uv_map = active_render_uv_name
+
+    return act_uv
+
+def add_active_render_uv_node(tree, active_render_uv_name):
+    for n in tree.nodes:
+        # Check for vector input
+        if n.bl_idname.startswith('ShaderNodeTex'):
+            vec = n.inputs.get('Vector')
+            if vec and len(vec.links) == 0:
+                act_uv = get_active_render_uv_node(tree, active_render_uv_name)
+                tree.links.new(act_uv.outputs[0], vec)
+
+        # Check for texcoord node
+        if n.type == 'TEX_COORD':
+            for l in n.outputs['UV'].links:
+                act_uv = get_active_render_uv_node(tree, active_render_uv_name)
+                tree.links.new(act_uv.outputs[0], l.to_socket)
+
+        # Check for normal map
+        if n.type == 'NORMAL_MAP':
+            n.uv_map = active_render_uv_name
+
+        if n.type == 'GROUP' and n.node_tree and not n.node_tree.yp.is_ypaint_node:
+            add_active_render_uv_node(n.node_tree, active_render_uv_name)
 
 def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', bake_type='EMIT', 
         disable_problematic_modifiers=False, hide_other_objs=True, bake_from_multires=False, 
@@ -309,16 +366,6 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
                     mod.show_viewport = False
                     book['obj_mods_lib'][obj.name]['disabled_viewport_mods'].append(mod.name)
 
-    # Set active uv layers
-    if uv_map != '':
-        for obj in objs:
-            #set_active_uv_layer(obj, uv_map)
-            uv_layers = get_uv_layers(obj)
-            uv = uv_layers.get(uv_map)
-            if uv: 
-                uv_layers.active = uv
-                uv.active_render = True
-
     # Disable auto temp uv update
     #ypui.disable_auto_temp_uv_update = True
 
@@ -330,15 +377,41 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
     if book['parallax_ch']:
         book['parallax_ch'].enable_parallax = False
 
-    # Create temporary image texture node to make sure
-    # other materials inside single object did not bake to their active image
     for o in objs:
         mat = o.active_material
+
+        # Add extra uv nodes for non connected texture nodes outside yp node
+        if uv_map != '':
+
+            uv_layers = get_uv_layers(o)
+            active_render_uvs = [u for u in uv_layers if u.active_render]
+
+            if active_render_uvs:
+                active_render_uv = active_render_uvs[0]
+
+                # Only add new uv node if target uv map is different than active render uv
+                if active_render_uv.name != uv_map:
+                    add_active_render_uv_node(mat.node_tree, active_render_uv.name)
+
         for m in o.data.materials:
-            if m == mat or not m.use_nodes: continue
-            temp = m.node_tree.nodes.new('ShaderNodeTexImage')
-            temp.name = EMPTY_IMG_NODE
-            m.node_tree.nodes.active = temp
+            if not m.use_nodes: continue
+
+            # Create temporary image texture node to make sure
+            # other materials inside single object did not bake to their active image
+            if m != mat:
+                temp = m.node_tree.nodes.new('ShaderNodeTexImage')
+                temp.name = EMPTY_IMG_NODE
+                m.node_tree.nodes.active = temp
+
+    # Set active uv layers
+    if uv_map != '':
+        for obj in objs:
+            #set_active_uv_layer(obj, uv_map)
+            uv_layers = get_uv_layers(obj)
+            uv = uv_layers.get(uv_map)
+            if uv: 
+                uv_layers.active = uv
+                uv.active_render = True
 
 def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
     scene = book['scene']
@@ -508,9 +581,11 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
                 active_node = m.node_tree.nodes.get(book['ori_mat_objs_active_nodes'][i][j])
                 m.node_tree.nodes.active = active_node
 
-                # Remove empty tex node
+                # Remove temporary nodes
                 temp = m.node_tree.nodes.get(EMPTY_IMG_NODE)
                 if temp: m.node_tree.nodes.remove(temp)
+                #act_uv = m.node_tree.nodes.get(ACTIVE_UV_NODE)
+                #if act_uv: m.node_tree.nodes.remove(act_uv)
 
 def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GPU'):
     T = time.time()
@@ -519,11 +594,6 @@ def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GP
 
     width = image.size[0]
     height = image.size[1]
-
-    # Copy image
-    pixels = list(image.pixels)
-    image_copy = image.copy()
-    image_copy.pixels = pixels
 
     # Set active collection to be root collection
     if is_greater_than_280():
@@ -556,7 +626,6 @@ def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GP
     blur.inputs[0].default_value = factor / 100.0
 
     source_tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
-    source_tex.image = image_copy
     target_tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
     target_tex.image = image
 
@@ -568,47 +637,49 @@ def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GP
     mat.node_tree.links.new(emi.outputs[0], output.inputs[0])
     mat.node_tree.nodes.active = target_tex
 
-    # Straight over won't work if using blur nodes, need another bake pass
-    if alpha_aware:
-        straight_over = mat.node_tree.nodes.new('ShaderNodeGroup')
-        straight_over.node_tree = get_node_tree_lib(lib.STRAIGHT_OVER)
-        straight_over.inputs[1].default_value = 0.0
+    if image.source == 'TILED':
+        tilenums = [tile.number for tile in image.tiles]
+    else: tilenums = [1001]
 
-        mat.node_tree.links.new(source_tex.outputs[0], straight_over.inputs[2])
-        mat.node_tree.links.new(source_tex.outputs[1], straight_over.inputs[3])
-        mat.node_tree.links.new(straight_over.outputs[0], emi.inputs[0])
+    for tilenum in tilenums:
 
-        # Bake
-        print('BLUR: Baking straight over on', image.name + '...')
+        if tilenum != 1001:
+            UDIM.swap_tile(image, 1001, tilenum)
+
+        width = image.size[0]
+        height = image.size[1]
+
+        # Copy image
+        image_copy = duplicate_image(image)
+
+        # Set source image
+        source_tex.image = image_copy
+
+        # Connect nodes again
+        mat.node_tree.links.new(source_tex.outputs[0], emi.inputs[0])
+        mat.node_tree.links.new(emi.outputs[0], output.inputs[0])
+
+        print('BLUR: Baking blur on', image.name + '...')
         bpy.ops.object.bake()
 
-        pixels_1 = list(image.pixels)
-        image_copy.pixels = pixels_1
+        # Run alpha pass
+        if alpha_aware:
+            print('BLUR: Running alpha pass to blur result of', image.name + '...')
 
-    # Connect nodes again
-    mat.node_tree.links.new(source_tex.outputs[0], emi.inputs[0])
-    mat.node_tree.links.new(emi.outputs[0], output.inputs[0])
+            # TODO: Bake blur on alpha channel
+            pass
 
-    print('BLUR: Baking blur on', image.name + '...')
-    #return
-    bpy.ops.object.bake()
+            # TODO: Bake straight over on blurred rgb
+            pass
 
-    # Copy original alpha to baked image
-    if alpha_aware:
-        print('BLUR: Copying original alpha to blur result of', image.name + '...')
-        target_pxs = list(image.pixels)
-        start_x = 0
-        start_y = 0
+            # TODO: Copy result to main image
+            #copy_image_channel_pixels(image_copy, image, 3, 3)
 
-        for y in range(height):
-            temp_offset_y = width * 4 * y
-            offset_y = width * 4 * (y + start_y)
-            for x in range(width):
-                temp_offset_x = 4 * x
-                offset_x = 4 * (x + start_x)
-                target_pxs[offset_y + offset_x + 3] = pixels[temp_offset_y + temp_offset_x + 3]
+        if tilenum != 1001:
+            UDIM.swap_tile(image, 1001, tilenum)
 
-        image.pixels = target_pxs
+        # Remove temp images
+        bpy.data.images.remove(image_copy)
 
     # Remove temp datas
     print('BLUR: Removing temporary data of blur pass')
@@ -619,7 +690,6 @@ def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GP
     if blur.node_tree.users == 1:
         bpy.data.node_groups.remove(blur.node_tree)
 
-    bpy.data.images.remove(image_copy)
     bpy.data.materials.remove(mat)
     plane = plane_obj.data
     bpy.ops.object.delete()
@@ -685,6 +755,7 @@ def fxaa_image(image, alpha_aware=True, bake_device='GPU'):
         width = image.size[0]
         height = image.size[1]
 
+        # Copy image
         pixels = list(image.pixels)
         image_ori  = None
         image_copy = image.copy()
@@ -747,7 +818,7 @@ def fxaa_image(image, alpha_aware=True, bake_device='GPU'):
 
         # Remove temp images
         bpy.data.images.remove(image_copy)
-        if image_ori : bpy.data.images.remove(image_ori )
+        if image_ori : bpy.data.images.remove(image_ori)
 
     # Remove temp datas
     print('FXAA: Removing temporary data of FXAA pass')
@@ -1264,22 +1335,7 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
         ori_img = source.image
 
         if segment:
-            start_x = width * segment.tile_x
-            start_y = height * segment.tile_y
-
-            target_pxs = list(ori_img.pixels)
-            temp_pxs = list(img.pixels)
-
-            for y in range(height):
-                temp_offset_y = width * 4 * y
-                offset_y = ori_img.size[0] * 4 * (y + start_y)
-                for x in range(width):
-                    temp_offset_x = 4 * x
-                    offset_x = 4 * (x + start_x)
-                    for i in range(4):
-                        target_pxs[offset_y + offset_x + i] = temp_pxs[temp_offset_y + temp_offset_x + i]
-
-            ori_img.pixels = target_pxs
+            copy_image_pixels(img, ori_img, segment)
 
             # Remove temp image
             bpy.data.images.remove(img)
@@ -1379,65 +1435,110 @@ def disable_temp_bake(entity):
     # Set entity attribute
     entity.use_temp_bake = False
 
-def copy_and_join_objects(objs):
+def get_duplicated_mesh_objects(scene, objs, hide_original=False):
+    tt = time.time()
+    print('INFO: Duplicating mesh(es) for baking...')
 
-    temp_objs = []
+    new_objs = []
+
     for obj in objs:
-        temp_obj = obj.copy()
-        link_object(bpy.context.scene, temp_obj)
-        temp_obj.data = temp_obj.data.copy()
-        temp_objs.append(temp_obj)
+        if obj.type != 'MESH': continue
+        new_obj = obj.copy()
+        link_object(scene, new_obj)
+        new_objs.append(new_obj)
+        new_obj.data = new_obj.data.copy()
 
-    return join_objects(temp_objs)
+        # Hide render of original object
+        if hide_original:
+            obj.hide_render = True
 
-def join_objects(objs):
+    print('INFO: Duplicating mesh(es) is done at', '{:0.2f}'.format(time.time() - tt), 'seconds!')
+    return new_objs
 
-    if len(objs) == 0: return None
+def get_merged_mesh_objects(scene, objs, hide_original=False):
 
-    objs = [o for o in objs if o.type == 'MESH']
+    # Duplicate objects
+    new_objs = get_duplicated_mesh_objects(scene, objs, hide_original)
+    new_meshes = [obj.data for obj in new_objs]
 
-    # Deselect all objects
-    bpy.ops.object.mode_set(mode='OBJECT')
+    tt = time.time()
+    print('INFO: Merging mesh(es) for baking...')
+
+    # Check if any objects use geometry nodes to output uv
+    any_uv_geonodes = False
+    for obj in new_objs:
+        if any(get_output_uv_names_from_geometry_nodes(obj)):
+            any_uv_geonodes = True
+
+    # Select objects
+    try: bpy.ops.object.mode_set(mode = 'OBJECT')
+    except: pass
     bpy.ops.object.select_all(action='DESELECT')
 
     max_levels = -1
     hi_obj = None
-    for obj in objs:
-
+    for obj in new_objs:
+        set_active_object(obj)
         set_object_select(obj, True)
 
+        # Apply shape keys
+        if obj.data.shape_keys:
+            bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+
+        # Apply modifiers
+        mnames = [m.name for m in obj.modifiers]
         problematic_modifiers = get_problematic_modifiers(obj)
 
-        for mod in obj.modifiers:
+        # Get all uv output from geometry nodes
+        geo_uv_names = get_output_uv_names_from_geometry_nodes(obj)
 
-            # Disable all problematic modifiers
-            if mod in problematic_modifiers:
-                mod.show_render = False
-                mod.show_viewport = False
+        for mname in mnames:
 
-            # Check who has highest multires if available
-            if mod.type == 'MULTIRES':
-                if mod.render_levels > max_levels:
-                    max_levels = mod.render_levels
-                    hi_obj = obj
+            m = obj.modifiers[mname]
 
-    # Check who has highest subsurf if multires modifier is not found
-    if not hi_obj:
-        for obj in objs:
-            if mod.type == 'SUBSURF':
-                if mod.levels > max_levels:
-                    max_levels = mod.levels
-                    hi_obj = obj
+            if m not in problematic_modifiers:
+                if m.type == 'SUBSURF':
+                    if m.render_levels > m.levels:
+                        m.levels = m.render_levels
+                elif m.type == 'MULTIRES':
+                    if m.total_levels > m.levels:
+                        m.levels = m.total_levels
 
-    if not hi_obj: hi_obj = objs[0]
+                # Only apply modifier with show viewport on
+                if m.show_viewport:
+                    try:
+                        bpy.ops.object.modifier_apply(modifier=m.name)
+                        continue
+                    except Exception as e: print(e)
+
+            bpy.ops.object.modifier_remove(modifier=m.name)
+
+        # HACK: Convert all geo uvs attribute to 2D vector 
+        # This is needed since it always produce 3D vector on Blender 3.5
+        # 3D vector can't produce correct tangent so smooth bump can't be baked
+        for guv in geo_uv_names:
+            for i, attr in enumerate(obj.data.attributes):
+                if attr and attr.name == guv:
+                    obj.data.attributes.active_index = i
+                    bpy.ops.geometry.attribute_convert(domain='CORNER', data_type='FLOAT2')
+
+    # Set first index as merged object
+    merged_obj = new_objs[0]
 
     # Set active object
-    set_active_object(hi_obj)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    set_active_object(merged_obj)
+    if merged_obj.mode != 'OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
 
+    # Join
     bpy.ops.object.join()
 
-    return bpy.context.object
+    # Remove temp meshes
+    for nm in new_meshes:
+        if nm != merged_obj.data:
+            bpy.data.meshes.remove(nm)
+
+    print('INFO: Merging mesh(es) is done at', '{:0.2f}'.format(time.time() - tt), 'seconds!')
+    return merged_obj
 
 def resize_image(image, width, height, colorspace='Linear', samples=1, margin=0, segment=None, alpha_aware=True, yp=None, bake_device='GPU'):
 
@@ -1597,19 +1698,7 @@ def resize_image(image, width, height, colorspace='Linear', samples=1, margin=0,
         print('RESIZE IMAGE: Baking resized alpha on', image_name + '...')
         bpy.ops.object.bake()
 
-        # Copy alpha image to scaled image
-        target_pxs = list(scaled_img.pixels)
-        temp_pxs = list(alpha_img.pixels)
-
-        for y in range(height):
-            temp_offset_y = width * 4 * y
-            offset_y = scaled_img.size[0] * 4 * (y + start_y)
-            for x in range(width):
-                temp_offset_x = 4 * x
-                offset_x = 4 * (x + start_x)
-                target_pxs[offset_y + offset_x + 3] = temp_pxs[temp_offset_y + temp_offset_x]
-
-        scaled_img.pixels = target_pxs
+        copy_image_channel_pixels(alpha_img, scaled_img, 0, 3, segment)
 
         # Remove alpha image
         bpy.data.images.remove(alpha_img)
@@ -1671,3 +1760,4 @@ def get_output_uv_names_from_geometry_nodes(obj):
                     if uv: uv_names.append(uv.name)
 
     return uv_names
+

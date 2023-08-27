@@ -458,19 +458,18 @@ def set_transition_bump_nodes(layer, tree, ch, ch_index):
                 'intensity_multiplier', ch.transition_bump_value)
 
     if ch.transition_bump_flip or layer.type == 'BACKGROUND':
-    #if ch.transition_bump_flip:
         #intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
         #tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-        intensity_multiplier.inputs['Sharpen'].default_value = 0.0
-        tb_intensity_multiplier.inputs['Sharpen'].default_value = 1.0
+        set_default_value(intensity_multiplier, 'Sharpen', 0.0)
+        set_default_value(tb_intensity_multiplier, 'Sharpen', 1.0)
     else:
         #intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
         #tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-        intensity_multiplier.inputs['Sharpen'].default_value = 1.0
-        tb_intensity_multiplier.inputs['Sharpen'].default_value = 0.0
+        set_default_value(intensity_multiplier, 'Sharpen', 1.0)
+        set_default_value(tb_intensity_multiplier, 'Sharpen', 0.0)
 
-    intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-    tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
+    set_default_value(intensity_multiplier, 1, ch.transition_bump_value)
+    set_default_value(tb_intensity_multiplier, 1, ch.transition_bump_second_edge_value)
 
 def remove_transition_bump_influence_nodes_to_other_channels(layer, tree):
     # Delete intensity multiplier from ramp

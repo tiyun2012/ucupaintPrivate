@@ -3,6 +3,7 @@ from bpy.props import *
 from .common import *
 
 UDIM_DIR = 'udim_textures__'
+UV_TOLERANCE = 0.1
 
 def fill_tiles(image, color, width=0, height=0):
     if image.source != 'TILED': return
@@ -24,17 +25,6 @@ def fill_tile(image, tilenum, color, width=0, height=0):
 
     image.tiles.active = tile
     bpy.ops.image.tile_fill(override, color=color, width=width, height=height, float=False, alpha=True)
-
-def make_udim_not_dirty(image):
-    if image.is_dirty:
-        if image.packed_file:
-            image.pack()
-        else: image.save()
-
-def duplicate_udim_image(image):
-    # Make sure image is updated
-    make_udim_not_dirty(image)
-    return image.copy()
 
 def copy_udim_pixels(src, dest):
     for tile in src.tiles:
@@ -60,22 +50,40 @@ def get_tile_numbers(objs, uv_name):
 
     if not is_greater_than_330(): return [1001]
 
-    arr = numpy.zeros(0, dtype=numpy.float32)
+    #T = time.time()
+
+    # Get active object
+    obj = bpy.context.object
+    ori_mode = 'OBJECT'
+    if obj in objs and obj.mode != 'OBJECT':
+        ori_mode = obj.mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    arr = numpy.empty(0, dtype=numpy.float32)
 
     # Get all uv coordinates
-    for obj in objs:
-        uv = obj.data.uv_layers.get(uv_name)
+    for o in objs:
+        uv = o.data.uv_layers.get(uv_name)
         if not uv: continue
     
-        uv_arr = numpy.zeros(len(obj.data.loops)*2, dtype=numpy.float32)
+        uv_arr = numpy.zeros(len(o.data.loops)*2, dtype=numpy.float32)
         uv.data.foreach_get('uv', uv_arr)
         arr = numpy.append(arr, uv_arr)
+
+    # Reshape the array to 2D
+    arr.shape = (arr.shape[0]//2, 2)
+
+    # Tolerance to skip value around x.0
+    trange = [UV_TOLERANCE/2.0, 1.0-(UV_TOLERANCE/2.0)]
+    arr = arr[((arr[:,0]-(numpy.floor(arr[:,0]))) >= trange[0]) &
+              ((arr[:,0]-(numpy.floor(arr[:,0]))) <= trange[1]) & 
+              ((arr[:,1]-(numpy.floor(arr[:,1]))) >= trange[0]) &
+              ((arr[:,1]-(numpy.floor(arr[:,1]))) <= trange[1])]
 
     # Floor array to integer
     arr = numpy.floor(arr).astype(int)
 
     # Get unique value only
-    arr.shape = (arr.shape[0]//2, 2)
     arr = numpy.unique(arr, axis=0)
     
     # Get the udim representation
@@ -90,8 +98,46 @@ def get_tile_numbers(objs, uv_name):
         tile = 1001 + u + v*10
         if tile not in tiles:
             tiles.append(tile)
+    
+    if ori_mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode=ori_mode)
+
+    #print('INFO: Getting tile numbers are done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
         
     return tiles
+
+def is_uvmap_udim(objs, uv_name):
+
+    if not is_greater_than_330(): return False
+
+    #T = time.time()
+
+    # Get active object
+    obj = bpy.context.object
+    ori_mode = 'OBJECT'
+    if obj in objs and obj.mode != 'OBJECT':
+        ori_mode = obj.mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    arr = numpy.empty(0, dtype=numpy.float32)
+
+    # Get all uv coordinates
+    for o in objs:
+        uv = o.data.uv_layers.get(uv_name)
+        if not uv: continue
+    
+        uv_arr = numpy.zeros(len(o.data.loops)*2, dtype=numpy.float32)
+        uv.data.foreach_get('uv', uv_arr)
+        arr = numpy.append(arr, uv_arr)
+
+    if ori_mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode=ori_mode)
+
+    is_udim = numpy.any(arr > 1.0 + UV_TOLERANCE/2)
+
+    #print('INFO: UDIM checking is done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+
+    return is_udim
 
 def get_temp_udim_dir():
     if bpy.data.filepath != '':

@@ -10,9 +10,8 @@ from . import lib, Layer, Mask, ImageAtlas, Modifier, MaskModifier
 
 def transfer_uv(objs, mat, entity, uv_map):
 
-    for obj in objs:
-        uv_layers = get_uv_layers(obj)
-        uv_layers.active = uv_layers.get(uv_map)
+    yp = entity.id_data.yp
+    scene = bpy.context.scene
 
     # Check entity
     m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
@@ -28,6 +27,16 @@ def transfer_uv(objs, mat, entity, uv_map):
 
     image = source.image
     if not image: return
+
+    # Merge objects if necessary
+    temp_objs = []
+    if len(objs) > 1 and not is_join_objects_problematic(yp):
+        objs = temp_objs = [get_merged_mesh_objects(scene, objs)]
+
+    # Set active uv
+    for obj in objs:
+        uv_layers = get_uv_layers(obj)
+        uv_layers.active = uv_layers.get(uv_map)
 
     # Get image settings
     segment = None
@@ -128,57 +137,42 @@ def transfer_uv(objs, mat, entity, uv_map):
     mat.node_tree.links.new(emit.outputs[0], output.inputs[0])
 
     # Bake!
-    #return {'FINISHED'}
     bpy.ops.object.bake()
 
-    # Copy results to original image
-    target_pxs = list(image.pixels)
-    temp_pxs = list(temp_image.pixels)
-
-    if segment:
-        start_x = width * segment.tile_x
-        start_y = height * segment.tile_y
-    else:
-        start_x = 0
-        start_y = 0
-
-    for y in range(height):
-        temp_offset_y = width * 4 * y
-        offset_y = image.size[0] * 4 * (y + start_y)
-        for x in range(width):
-            temp_offset_x = 4 * x
-            offset_x = 4 * (x + start_x)
-            for i in range(3):
-                target_pxs[offset_y + offset_x + i] = temp_pxs[temp_offset_y + temp_offset_x + i]
-
     # Bake alpha if using alpha
-    #srgb2lin = None
     if use_alpha:
         #srgb2lin = mat.node_tree.nodes.new('ShaderNodeGroup')
         #srgb2lin.node_tree = get_node_tree_lib(lib.SRGB_2_LINEAR)
 
         #mat.node_tree.links.new(src.outputs[1], srgb2lin.inputs[0])
         #mat.node_tree.links.new(srgb2lin.outputs[0], emit.inputs[0])
+
+        # Create another temp image
+        temp_image1 = temp_image.copy()
+        tex.image = temp_image1
+
         mat.node_tree.links.new(src.outputs[1], emit.inputs[0])
 
         # Temp image should use linear to properly bake alpha
-        temp_image.colorspace_settings.name = 'Linear'
+        temp_image1.colorspace_settings.name = 'Linear'
 
         # Bake again!
         bpy.ops.object.bake()
 
-        temp_pxs = list(temp_image.pixels)
+        # Copy the result to original temp image
+        copy_image_channel_pixels(temp_image1, temp_image, 0, 3)
 
-        for y in range(height):
-            temp_offset_y = width * 4 * y
-            offset_y = image.size[0] * 4 * (y + start_y)
-            for x in range(width):
-                temp_offset_x = 4 * x
-                offset_x = 4 * (x + start_x)
-                target_pxs[offset_y + offset_x + 3] = temp_pxs[temp_offset_y + temp_offset_x]
+        # Remove temp image 1
+        bpy.data.images.remove(temp_image1)
 
-    # Copy back edited pixels to original image
-    image.pixels = target_pxs
+        #if srgb2lin:
+        #    simple_remove_node(mat.node_tree, srgb2lin)
+
+    # Copy back temp/baked image to original image
+    copy_image_pixels(temp_image, image, segment)
+
+    # Remove temp image
+    bpy.data.images.remove(temp_image)
 
     # Remove temp nodes
     simple_remove_node(mat.node_tree, tex)
@@ -188,8 +182,6 @@ def transfer_uv(objs, mat, entity, uv_map):
     simple_remove_node(mat.node_tree, mapp)
     if straight_over:
         simple_remove_node(mat.node_tree, straight_over)
-    #if srgb2lin:
-    #    simple_remove_node(mat.node_tree, srgb2lin)
 
     mat.node_tree.links.new(ori_bsdf, output.inputs[0])
 
@@ -200,6 +192,13 @@ def transfer_uv(objs, mat, entity, uv_map):
 
     # Change uv of entity
     entity.uv_name = uv_map
+
+    # Remove temporary objects
+    if temp_objs:
+        for o in temp_objs:
+            m = o.data
+            bpy.data.objects.remove(o)
+            bpy.data.meshes.remove(m)
 
 class YTransferSomeLayerUV(bpy.types.Operator):
     bl_idname = "node.y_transfer_some_layer_uv"
@@ -607,6 +606,11 @@ class YBakeChannelToVcol(bpy.types.Operator):
     bl_label = "Bake channel to vertex color"
     bl_options = {'REGISTER', 'UNDO'}
 
+    all_materials = BoolProperty(
+            name='Bake All Materials',
+            description='Bake all materials with ucupaint nodes rather than just the active one',
+            default=False)
+
     vcol_name = StringProperty(
             name='Target Vertex Color Name', 
             description="Target vertex color name, it will create one if it doesn't exists",
@@ -674,111 +678,111 @@ class YBakeChannelToVcol(bpy.types.Operator):
             col.prop(self, 'force_first_index', text='')
 
     def execute(self, context):
-        obj = context.object
-        mat = get_active_material()
-        node = get_active_ypaint_node()
-        tree = node.node_tree
-        yp = tree.yp
-        channel = yp.channels[yp.active_channel_index]
-
         if not is_greater_than_292():
             self.report({'ERROR'}, "You need at least Blender 2.92 to use this feature!")
             return {'CANCELLED'}
 
-        #if not obj.mode != 'OBJECT':
-        #    self.report({'ERROR'}, "This operator only works on object mode!")
-        #    return {'CANCELLED'}
+        mat = get_active_material()
+        node = get_active_ypaint_node()
+        yp = node.node_tree.yp
+        channel = yp.channels[yp.active_channel_index]
+        channel_name = channel.name
 
         book = remember_before_bake(yp)
 
-        # Get all objects using material
-        objs = [obj]
-        meshes = [obj.data]
-        if mat.users > 1:
-            # Emptying the lists again in case active object is problematic
-            objs = []
-            meshes = []
-            for ob in get_scene_objects():
-                if ob.type != 'MESH': continue
-                if is_greater_than_280() and ob.hide_viewport: continue
-                if ob.hide_render: continue
-                if not in_renderable_layer_collection(ob): continue
-                if len(get_uv_layers(ob)) == 0: continue
-                if len(ob.data.polygons) == 0: continue
-                for i, m in enumerate(ob.data.materials):
-                    if m == mat:
-                        ob.active_material_index = i
-                        if ob not in objs and ob.data not in meshes:
-                            objs.append(ob)
-                            meshes.append(ob.data)
+        if self.all_materials:
+            mats = get_all_materials_with_yp_nodes()
+        else: mats = [mat]
 
-        # Check vertex color
-        for ob in objs:
-            vcols = get_vertex_colors(ob)
-            vcol = vcols.get(self.vcol_name)
+        for mat in mats:
+            for node in mat.node_tree.nodes:
+                if node.type != 'GROUP' or not node.node_tree or not node.node_tree.yp.is_ypaint_node: continue
+                tree = node.node_tree
+                yp = tree.yp
+                channel = yp.channels.get(channel_name)
+                if not channel: continue
 
-            # Set index to first so new vcol will copy their value
-            if len(vcols) > 0:
-                first_vcol = vcols[0]
-                set_active_vertex_color(ob, first_vcol)
+                # Get all objects using material
+                objs = []
+                meshes = []
+                for ob in get_scene_objects():
+                    if ob.type != 'MESH': continue
+                    if is_greater_than_280() and ob.hide_viewport: continue
+                    #if not in_renderable_layer_collection(ob): continue
+                    if len(ob.data.polygons) == 0: continue
+                    for i, m in enumerate(ob.data.materials):
+                        if m == mat:
+                            ob.active_material_index = i
+                            if ob not in objs and ob.data not in meshes:
+                                objs.append(ob)
+                                meshes.append(ob.data)
 
-            if not vcol:
-                try: 
-                    vcol = new_vertex_color(ob, self.vcol_name)
-                except Exception as e: print(e)
+                if not objs: continue
 
-            # Get newly created vcol name
-            vcol_name = vcol.name
+                set_active_object(objs[i])
 
-            # NOTE: Because of api changes, vertex color shift doesn't work with Blender 3.2
-            if self.force_first_index and not is_version_320():
-                move_vcol(ob, get_vcol_index(ob, vcol.name), 0)
+                # Check vertex color
+                for ob in objs:
+                    vcols = get_vertex_colors(ob)
+                    vcol = vcols.get(self.vcol_name)
 
-            # Get the newly created vcol to avoid pointer error
-            vcol = vcols.get(vcol_name)
-            set_active_vertex_color(ob, vcol)
+                    # Set index to first so new vcol will copy their value
+                    if len(vcols) > 0:
+                        first_vcol = vcols[0]
+                        set_active_vertex_color(ob, first_vcol)
 
-        # Multi materials setup
-        ori_mat_ids = {}
-        for ob in objs:
+                    if not vcol:
+                        try: 
+                            vcol = new_vertex_color(ob, self.vcol_name)
+                        except Exception as e: print(e)
 
-            # Need to assign all polygon to active material if there are multiple materials
-            ori_mat_ids[ob.name] = []
+                    # Get newly created vcol name
+                    vcol_name = vcol.name
 
-            if len(ob.data.materials) > 1:
+                    # NOTE: Because of api changes, vertex color shift doesn't work with Blender 3.2
+                    if self.force_first_index and not is_version_320():
+                        move_vcol(ob, get_vcol_index(ob, vcol.name), 0)
 
-                active_mat_id = [i for i, m in enumerate(ob.data.materials) if m == mat][0]
-                for p in ob.data.polygons:
+                    # Get the newly created vcol to avoid pointer error
+                    vcol = vcols.get(vcol_name)
+                    set_active_vertex_color(ob, vcol)
 
-                    # Set active mat
-                    ori_mat_ids[ob.name].append(p.material_index)
-                    p.material_index = active_mat_id
+                # Multi materials setup
+                ori_mat_ids = {}
+                for ob in objs:
 
-        # Prepare bake settings
-        prepare_bake_settings(book, objs, yp, disable_problematic_modifiers=True, bake_device='CPU', bake_target='VERTEX_COLORS')
+                    # Need to assign all polygon to active material if there are multiple materials
+                    ori_mat_ids[ob.name] = []
 
-        # Get extra channel
-        extra_channel = None
-        if self.show_emission_option and self.add_emission:
-            extra_channel = yp.channels.get('Emission')
+                    if len(ob.data.materials) > 1:
 
-        # Bake channel
-        bake_to_vcol(mat, node, channel, extra_channel, self.emission_multiplier)
-        #return {'FINISHED'}
+                        active_mat_id = [i for i, m in enumerate(ob.data.materials) if m == mat][0]
+                        for p in ob.data.polygons:
+
+                            # Set active mat
+                            ori_mat_ids[ob.name].append(p.material_index)
+                            p.material_index = active_mat_id
+
+                # Prepare bake settings
+                prepare_bake_settings(book, objs, yp, disable_problematic_modifiers=True, bake_device='CPU', bake_target='VERTEX_COLORS')
+
+                # Get extra channel
+                extra_channel = None
+                if self.show_emission_option and self.add_emission:
+                    extra_channel = yp.channels.get('Emission')
+
+                # Bake channel
+                bake_to_vcol(mat, node, channel, extra_channel, self.emission_multiplier)
+
+                for ob in objs:
+                    # Recover material index
+                    if ori_mat_ids[ob.name]:
+                        for i, p in enumerate(ob.data.polygons):
+                            if ori_mat_ids[ob.name][i] != p.material_index:
+                                p.material_index = ori_mat_ids[ob.name][i]
 
         # Recover bake settings
         recover_bake_settings(book, yp)
-
-        for ob in objs:
-            # Recover material index
-            if ori_mat_ids[ob.name]:
-                for i, p in enumerate(ob.data.polygons):
-                    if ori_mat_ids[ob.name][i] != p.material_index:
-                        p.material_index = ori_mat_ids[ob.name][i]
-
-        # Remap vertex color indices
-        #for ob in objs:
-        #    pass
 
         return {'FINISHED'}
 
@@ -1070,84 +1074,12 @@ class YBakeChannels(bpy.types.Operator):
 
         # Join objects if the number of objects is higher than one 
         # or if there are uvs generated by geometry nodes
-        need_join_objects = (len(objs) > 1 or any_uv_geonodes) and not is_join_objects_problematic(yp)
         temp_objs = []
-        temp_meshes = []
         ori_objs = []
-        if need_join_objects:
-            tt = time.time()
-            print('BAKE CHANNELS: Joining meshes for baking...')
-
-            # Duplicate objects first
-            for o in objs:
-                temp_obj = o.copy()
-                link_object(scene, temp_obj)
-                temp_objs.append(temp_obj)
-                temp_obj.data = temp_obj.data.copy()
-                temp_meshes.append(temp_obj.data)
-
-                # Hide render of original object
-                o.hide_render = True
-
-            # Select objects
-            bpy.ops.object.mode_set(mode = 'OBJECT')
-            bpy.ops.object.select_all(action='DESELECT')
-            for o in temp_objs:
-                set_active_object(o)
-                set_object_select(o, True)
-
-                # Apply shape keys
-                if o.data.shape_keys:
-                    bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
-
-                # Apply modifiers
-                mnames = [m.name for m in o.modifiers]
-                problematic_modifiers = get_problematic_modifiers(o)
-
-                # Get all uv output from geometry nodes
-                geo_uv_names = get_output_uv_names_from_geometry_nodes(o)
-
-                for mname in mnames:
-                    m = o.modifiers[mname]
-                    if m not in problematic_modifiers:
-
-                        # Apply modifier
-                        try:
-                            bpy.ops.object.modifier_apply(modifier=m.name)
-                            continue
-                        except Exception as e: print(e)
-
-                    # Remove modifier
-                    bpy.ops.object.modifier_remove(modifier=m.name)
-
-                # HACK: Convert all geo uvs attribute to 2D vector 
-                # This is needed since it always produce 3D vector until blender 3.5
-                # 3D vector can't produce correct tangent so smooth bump can't be baked
-                for guv in geo_uv_names:
-                    for i, attr in enumerate(o.data.attributes):
-                        if attr and attr.name == guv:
-                            o.data.attributes.active_index = i
-                            bpy.ops.geometry.attribute_convert(domain='CORNER', data_type='FLOAT2')
-
-            # Set active object
-            first_obj = temp_objs[0]
-            set_active_object(first_obj)
-
-            # Join
-            if len(objs) > 1:
-                bpy.ops.object.join()
-
-            # Remap pointers
+        if (len(objs) > 1 or any_uv_geonodes) and not is_join_objects_problematic(yp, mat):
             ori_objs = objs
-            objs = temp_objs = [first_obj]
-
-            # Remove temp meshes
-            for tm in temp_meshes:
-                if tm != first_obj.data:
-                    bpy.data.meshes.remove(tm)
-
-            print('BAKE TO LAYER: Joining meshes is done at', '{:0.2f}'.format(time.time() - tt), 'seconds!')
-
+            objs = temp_objs = [get_merged_mesh_objects(scene, objs)]
+            
         # AA setup
         #if self.aa_level > 1:
         margin = self.margin * self.aa_level
@@ -1883,26 +1815,7 @@ class YMergeMask(bpy.types.Operator):
         bpy.ops.object.bake()
 
         # Copy results to original image
-        target_pxs = list(source.image.pixels)
-        temp_pxs = list(img.pixels)
-
-        if segment:
-            start_x = width * segment.tile_x
-            start_y = height * segment.tile_y
-        else:
-            start_x = 0
-            start_y = 0
-
-        for y in range(height):
-            temp_offset_y = width * 4 * y
-            offset_y = source.image.size[0] * 4 * (y + start_y)
-            for x in range(width):
-                temp_offset_x = 4 * x
-                offset_x = 4 * (x + start_x)
-                for i in range(3):
-                    target_pxs[offset_y + offset_x + i] = temp_pxs[temp_offset_y + temp_offset_x + i]
-
-        source.image.pixels = target_pxs
+        copy_image_pixels(img, source.image, segment)
 
         # Remove temp image
         bpy.data.images.remove(img)

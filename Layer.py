@@ -525,6 +525,20 @@ class YNewVcolToOverrideChannel(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def update_new_layer_uv_map(self, context):
+    if not is_greater_than_330(): return
+
+    mat = get_active_material()
+    objs = get_all_objects_with_same_materials(mat)
+    self.use_udim = UDIM.is_uvmap_udim(objs, self.uv_map)
+
+def update_new_layer_mask_uv_map(self, context):
+    if not is_greater_than_330(): return
+
+    mat = get_active_material()
+    objs = get_all_objects_with_same_materials(mat)
+    self.use_udim_for_mask = UDIM.is_uvmap_udim(objs, self.mask_uv_name)
+
 class YNewLayer(bpy.types.Operator):
     bl_idname = "node.y_new_layer"
     bl_label = "New Layer"
@@ -605,7 +619,7 @@ class YNewLayer(bpy.types.Operator):
     mask_width = IntProperty(name='Mask Width', default = 1234, min=1, max=4096)
     mask_height = IntProperty(name='Mask Height', default = 1234, min=1, max=4096)
 
-    mask_uv_name = StringProperty(default='')
+    mask_uv_name = StringProperty(default='', update=update_new_layer_mask_uv_map)
     mask_use_hdr = BoolProperty(name='32 bit Float', default=False)
 
     mask_color_id = FloatVectorProperty(
@@ -615,7 +629,7 @@ class YNewLayer(bpy.types.Operator):
             min=0.0, max=1.0,
             )
 
-    uv_map = StringProperty(default='')
+    uv_map = StringProperty(default='', update=update_new_layer_uv_map)
 
     normal_map_type = EnumProperty(
             name = 'Normal Map Type',
@@ -636,12 +650,12 @@ class YNewLayer(bpy.types.Operator):
     use_image_atlas = BoolProperty(
             name = 'Use Image Atlas',
             description='Use Image Atlas',
-            default=True)
+            default=False)
 
     use_image_atlas_for_mask = BoolProperty(
             name = 'Use Image Atlas for Mask',
             description='Use Image Atlas for Mask',
-            default=True)
+            default=False)
 
     hemi_space = EnumProperty(
             name = 'Fake Lighting Space',
@@ -1477,7 +1491,7 @@ class YOpenMultipleImagesToSingleLayer(bpy.types.Operator, ImportHelper):
     mask_width = IntProperty(name='Mask Width', default = 1234, min=1, max=4096)
     mask_height = IntProperty(name='Mask Height', default = 1234, min=1, max=4096)
 
-    mask_uv_name = StringProperty(default='')
+    mask_uv_name = StringProperty(default='', update=update_new_layer_mask_uv_map)
     mask_use_hdr = BoolProperty(name='32 bit Float', default=False)
 
     use_udim_for_mask = BoolProperty(
@@ -1488,7 +1502,7 @@ class YOpenMultipleImagesToSingleLayer(bpy.types.Operator, ImportHelper):
     use_image_atlas_for_mask = BoolProperty(
             name = 'Use Image Atlas for Mask',
             description='Use Image Atlas for Mask',
-            default=True)
+            default=False)
 
     def generate_paths(self):
         return (fn.name for fn in self.files), self.directory
@@ -3622,7 +3636,7 @@ def duplicate_layer_nodes_and_images(tree, specific_layer=None, make_image_singl
                 # If using different image atlas per yp, just copy the image (unless specific layer is on)
                 elif ypup.unique_image_atlas_per_yp and not specific_layer:
                     if img.name not in copied_image_atlas:
-                        copied_image_atlas[img.name] = img.copy()
+                        copied_image_atlas[img.name] = duplicate_image(img)
                     img_nodes[i].image = copied_image_atlas[img.name]
 
                 else:
@@ -3652,11 +3666,23 @@ def duplicate_layer_nodes_and_images(tree, specific_layer=None, make_image_singl
 
                     img_nodes[i].image = bpy.data.images.new(get_unique_name(img.name, bpy.data.images), 
                             width=img.size[0], height=img.size[1], alpha=alpha, float_buffer=img.is_float)
-                    img_nodes[i].image.generated_color = (0,0,0,0)
-                    #img_nodes[i].image.colorspace_settings.name = 'Linear'
+                    img_nodes[i].image.colorspace_settings.name = img.colorspace_settings.name
+
+                    # Mask will have alpha filled
+                    m = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]', img_users[i].path_from_id())
+                    if m: 
+                        mask_idx = int(m.group(2))
+                        #mask = yp.layers[int(m.group(1))].masks[mask_idx]
+
+                        # Only first mask will be black by default, others will be white
+                        if mask_idx == 0:
+                            img_nodes[i].image.generated_color = (0,0,0,1)
+                        else: img_nodes[i].image.generated_color = (1,1,1,1)
+
+                    else: img_nodes[i].image.generated_color = (0,0,0,0)
 
                 else:
-                    img_nodes[i].image = img.copy()
+                    img_nodes[i].image = duplicate_image(img)
 
                 # Check other nodes using the same image
                 for j, imgg in enumerate(imgs):
