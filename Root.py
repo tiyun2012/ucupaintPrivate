@@ -1002,8 +1002,8 @@ class YConnectYPaintChannel(bpy.types.Operator):
     bl_description = "Connect " + get_addon_title() + " channel to other nodes"
     bl_options = {'REGISTER', 'UNDO'}
 
-    connect_to : StringProperty(name='Connect To', default='') #, update=update_connect_to)
-    input_coll : CollectionProperty(type=YPaintNodeInputCollItem)
+    connect_to = StringProperty(name='Connect To', default='') #, update=update_connect_to)
+    input_coll = CollectionProperty(type=YPaintNodeInputCollItem)
 
     @classmethod
     def poll(cls, context):
