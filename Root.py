@@ -869,7 +869,7 @@ def refresh_input_coll(self, context, ch_type):
             item.node_name = node.name
             item.input_name = inp.name
 
-def reconnect_alpha(mat, node, channel):
+def do_alpha_setup(mat, node, channel):
     tree = mat.node_tree
     yp = node.node_tree.yp
 
@@ -976,7 +976,7 @@ class YConnectYPaintChannelAlpha(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        reconnect_alpha(get_active_material(), get_active_ypaint_node(), context.channel)
+        do_alpha_setup(get_active_material(), get_active_ypaint_node(), context.channel)
         return {'FINISHED'}
 
 class YConnectYPaintChannel(bpy.types.Operator):
@@ -1034,7 +1034,7 @@ class YConnectYPaintChannel(bpy.types.Operator):
             mat.node_tree.links.new(node.outputs[channel.name], inp)
 
             if channel.enable_alpha:
-                reconnect_alpha(mat, node, channel)
+                do_alpha_setup(mat, node, channel)
 
         # Set input default value
         if inp and self.channel.type != 'NORMAL': 
@@ -1162,18 +1162,6 @@ class YNewYPaintChannel(bpy.types.Operator):
             inp = target_node.inputs[item.input_name]
             mat.node_tree.links.new(node.outputs[channel.name], inp)
 
-            # Search for possible alpha input
-            #if self.type == 'RGB':
-            for l in target_node.outputs[0].links:
-                if l.to_node.type == 'MIX_SHADER' and not any([m for m in l.to_node.inputs[0].links]):
-                    for n in l.to_node.inputs[1].links:
-                        if n.from_node.type == 'BSDF_TRANSPARENT':
-                            channel.enable_alpha = True
-                            #mat.node_tree.links.new(node.outputs[channel.io_index+1], l.to_node.inputs[0])
-                            mat.node_tree.links.new(
-                                    node.outputs[channel.name+io_suffix['ALPHA']], l.to_node.inputs[0])
-                            channel.enable_alpha = False
-
         # Set input default value
         if inp and self.type != 'NORMAL': 
             set_input_default_value(node, channel, inp.default_value)
@@ -1193,42 +1181,6 @@ class YNewYPaintChannel(bpy.types.Operator):
         wm.yptimer.time = str(time.time())
 
         return {'FINISHED'}
-
-#def swap_channel_io(root_ch, swap_ch, io_index, io_index_swap, inputs, outputs):
-#    if root_ch.type == 'RGB' and root_ch.enable_alpha:
-#        if swap_ch.type == 'RGB' and swap_ch.enable_alpha:
-#            if io_index > io_index_swap:
-#                inputs.move(io_index, io_index_swap)
-#                inputs.move(io_index+1, io_index_swap+1)
-#                outputs.move(io_index, io_index_swap)
-#                outputs.move(io_index+1, io_index_swap+1)
-#            else:
-#                inputs.move(io_index, io_index_swap)
-#                inputs.move(io_index, io_index_swap+1)
-#                outputs.move(io_index, io_index_swap)
-#                outputs.move(io_index, io_index_swap+1)
-#        else:
-#            if io_index > io_index_swap:
-#                inputs.move(io_index, io_index_swap)
-#                inputs.move(io_index+1, io_index_swap+1)
-#                outputs.move(io_index, io_index_swap)
-#                outputs.move(io_index+1, io_index_swap+1)
-#            else:
-#                inputs.move(io_index+1, io_index_swap)
-#                inputs.move(io_index, io_index_swap-1)
-#                outputs.move(io_index+1, io_index_swap)
-#                outputs.move(io_index, io_index_swap-1)
-#    else:
-#        if swap_ch.type == 'RGB' and swap_ch.enable_alpha:
-#            if io_index > io_index_swap:
-#                inputs.move(io_index, io_index_swap)
-#                outputs.move(io_index, io_index_swap)
-#            else:
-#                inputs.move(io_index, io_index_swap+1)
-#                outputs.move(io_index, io_index_swap+1)
-#        else:
-#            inputs.move(io_index, io_index_swap)
-#            outputs.move(io_index, io_index_swap)
 
 class YMoveYPaintChannel(bpy.types.Operator):
     bl_idname = "node.y_move_ypaint_channel"
@@ -1280,9 +1232,6 @@ class YMoveYPaintChannel(bpy.types.Operator):
         swap_ch = yp.channels[new_index]
         io_index = channel.io_index
         io_index_swap = swap_ch.io_index
-
-        # Move IO
-        #swap_channel_io(channel, swap_ch, io_index, io_index_swap, group_tree.inputs, group_tree.outputs)
 
         # Move channel
         yp.channels.move(index, new_index)
@@ -1336,8 +1285,8 @@ class YRemoveYPaintChannel(bpy.types.Operator):
         ypui = context.window_manager.ypui
         #ypup = context.user_preferences.addons[__name__].preferences
         nodes = group_tree.nodes
-        inputs = group_tree.inputs
-        outputs = group_tree.outputs
+        inputs = get_tree_inputs(group_tree)
+        outputs = get_tree_outputs(group_tree)
 
         # Disable layer preview mode to avoid error
         ori_layer_preview_mode = yp.layer_preview_mode
@@ -1441,14 +1390,6 @@ class YRemoveYPaintChannel(bpy.types.Operator):
             else:
                 for mod in ch.modifiers:
                     Modifier.delete_modifier_nodes(ttree, mod)
-
-            # Remove layer IO
-            #ttree.inputs.remove(ttree.inputs[channel.io_index])
-            #ttree.outputs.remove(ttree.outputs[channel.io_index])
-
-            #if channel.type == 'RGB' and channel.enable_alpha:
-            #    ttree.inputs.remove(ttree.inputs[channel.io_index])
-            #    ttree.outputs.remove(ttree.outputs[channel.io_index])
 
             # Remove transition bump and ramp
             if channel.type == 'NORMAL' and ch.enable_transition_bump:
@@ -2094,22 +2035,22 @@ def update_channel_name(self, context):
     input_index = self.io_index
     output_index = get_output_index(self)
 
-    group_tree.inputs[input_index].name = self.name
-    group_tree.outputs[output_index].name = self.name
+    get_tree_input_by_index(group_tree, input_index).name = self.name
+    get_tree_output_by_index(group_tree, output_index).name = self.name
 
     shift = 1
     if self.enable_alpha:
-        group_tree.inputs[input_index+shift].name = self.name + io_suffix['ALPHA']
-        group_tree.outputs[output_index+shift].name = self.name + io_suffix['ALPHA']
+        get_tree_input_by_index(group_tree, input_index+shift).name = self.name + io_suffix['ALPHA']
+        get_tree_output_by_index(group_tree, output_index+shift).name = self.name + io_suffix['ALPHA']
         shift += 1
 
     if self.type == 'NORMAL':
-        group_tree.inputs[input_index+shift].name = self.name + io_suffix['HEIGHT']
-        group_tree.outputs[output_index+shift].name = self.name + io_suffix['HEIGHT']
+        get_tree_input_by_index(group_tree, input_index+shift).name = self.name + io_suffix['HEIGHT']
+        get_tree_output_by_index(group_tree, output_index+shift).name = self.name + io_suffix['HEIGHT']
 
         shift += 1
 
-        group_tree.outputs[output_index+shift].name = self.name + io_suffix['MAX_HEIGHT']
+        get_tree_output_by_index(group_tree, output_index+shift).name = self.name + io_suffix['MAX_HEIGHT']
 
 
     #check_all_channel_ios(yp)
@@ -2791,8 +2732,8 @@ def update_channel_alpha(self, context):
     group_tree = self.id_data
     yp = group_tree.yp
     nodes = group_tree.nodes
-    inputs = group_tree.inputs
-    outputs = group_tree.outputs
+    inputs = get_tree_inputs(group_tree)
+    outputs = get_tree_outputs(group_tree)
 
     # Baked outside nodes
     frame = get_node(mat.node_tree, yp.baked_outside_frame)
@@ -2894,8 +2835,8 @@ def update_channel_alpha(self, context):
                 alpha_connected = True
 
         # Try to connect alpha without prior memory
-        if not alpha_connected:
-            reconnect_alpha(mat, node, self)
+        if yp.alpha_auto_setup and not alpha_connected:
+            do_alpha_setup(mat, node, self)
 
         # Reset memory
         self.ori_alpha_from.node = ''
@@ -3081,7 +3022,10 @@ class YPaintChannel(bpy.types.PropertyGroup):
     io_index = IntProperty(default=-1)
 
     # Alpha for transparent materials
-    enable_alpha = BoolProperty(default=False, update=update_channel_alpha)
+    enable_alpha = BoolProperty(
+            name = 'Enable Alpha Blend on Channel',
+            description = 'Enable alpha blend on channel',
+            default=False, update=update_channel_alpha)
 
     alpha_blend_mode = EnumProperty(
             name = 'Alpha Blend Mode',
@@ -3436,6 +3380,9 @@ class YPaint(bpy.types.PropertyGroup):
             name = 'Enable Tangent Sign VCol Hacks for Blender 2.80+ Cycles',
             description = "Tangent sign vertex color needed to make sure Blender 2.8 Cycles normal and parallax works.\n(This is because Blender 2.8 normal map node has different behavior than Blender 2.7)",
             default=False, update=update_enable_tangent_sign_hacks)
+
+    # When enabled, alpha can create some node setup, disable this to avoid that
+    alpha_auto_setup = BoolProperty(default=True)
 
     # HACK: Refresh tree to remove glitchy normal
     refresh_tree = BoolProperty(default=False)

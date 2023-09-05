@@ -67,7 +67,7 @@ def transfer_uv(objs, mat, entity, uv_map):
     # Create temp image as bake target
     temp_image = bpy.data.images.new(name='__TEMP',
             width=width, height=height, alpha=True, float_buffer=image.is_float)
-    #temp_image.colorspace_settings.name = 'Linear'
+    #temp_image.colorspace_settings.name = 'Non-Color'
     temp_image.colorspace_settings.name = image.colorspace_settings.name
     temp_image.generated_color = col
 
@@ -154,7 +154,7 @@ def transfer_uv(objs, mat, entity, uv_map):
         mat.node_tree.links.new(src.outputs[1], emit.inputs[0])
 
         # Temp image should use linear to properly bake alpha
-        temp_image1.colorspace_settings.name = 'Linear'
+        temp_image1.colorspace_settings.name = 'Non-Color'
 
         # Bake again!
         bpy.ops.object.bake()
@@ -585,7 +585,7 @@ class YResizeImage(bpy.types.Operator):
             space.image = ori_space_image
 
         else:
-            #scaled_img, new_segment = resize_image(image, self.width, self.height, 'Linear', self.samples, 0, segment)
+            #scaled_img, new_segment = resize_image(image, self.width, self.height, 'Non-Color', self.samples, 0, segment)
             scaled_img, new_segment = resize_image(image, self.width, self.height, image.colorspace_settings.name, self.samples, 0, segment, bake_device='CPU', yp=yp)
 
             if new_segment:
@@ -1552,6 +1552,7 @@ class YMergeLayer(bpy.types.Operator):
 
             # Enable alpha on main channel (will also update all the nodes)
             ori_enable_alpha = main_ch.enable_alpha
+            yp.alpha_auto_setup = False
             main_ch.enable_alpha = True
 
             # Reconnect tree with merged layer ids
@@ -1575,6 +1576,7 @@ class YMergeLayer(bpy.types.Operator):
 
             # Recover original props
             main_ch.enable_alpha = ori_enable_alpha
+            yp.alpha_auto_setup = True
             if main_ch.type != 'NORMAL':
                 ch.blend_type = ori_blend_type
             else: ch.normal_blend_type = ori_blend_type
@@ -1750,7 +1752,7 @@ class YMergeMask(bpy.types.Operator):
                 img.generated_color = (0.0, 0.0, 0.0, 1.0)
             else: img.generated_color = (0.0, 0.0, 0.0, 0.0)
 
-            img.colorspace_settings.name = 'Linear'
+            img.colorspace_settings.name = 'Non-Color'
         else:
             img = source.image.copy()
             width = img.size[0]
