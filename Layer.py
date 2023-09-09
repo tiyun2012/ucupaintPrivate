@@ -526,14 +526,14 @@ class YNewVcolToOverrideChannel(bpy.types.Operator):
         return {'FINISHED'}
 
 def update_new_layer_uv_map(self, context):
-    if not is_greater_than_330(): return
+    if not UDIM.is_udim_supported(): return
 
     mat = get_active_material()
     objs = get_all_objects_with_same_materials(mat)
     self.use_udim = UDIM.is_uvmap_udim(objs, self.uv_map)
 
 def update_new_layer_mask_uv_map(self, context):
-    if not is_greater_than_330(): return
+    if not UDIM.is_udim_supported(): return
 
     mat = get_active_material()
     objs = get_all_objects_with_same_materials(mat)
@@ -787,13 +787,13 @@ class YNewLayer(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=320)
 
     def is_using_udim(self):
-        return self.use_udim and is_greater_than_330()
+        return self.use_udim and UDIM.is_udim_supported()
 
     def is_using_image_atlas(self):
         return self.use_image_atlas and not self.is_using_udim()
 
     def is_mask_using_udim(self):
-        return self.use_udim_for_mask and is_greater_than_330()
+        return self.use_udim_for_mask and UDIM.is_udim_supported()
 
     def is_mask_using_image_atlas(self):
         return self.use_image_atlas_for_mask and not self.is_mask_using_udim()
@@ -899,7 +899,7 @@ class YNewLayer(bpy.types.Operator):
                         col.label(text='Mask Width:')
                         col.label(text='Mask Height:')
                         col.label(text='Mask UV Map:')
-                        if is_greater_than_330():
+                        if UDIM.is_udim_supported():
                             col.label(text='')
                         col.label(text='')
                 if is_greater_than_320() and self.mask_type == 'VCOL':
@@ -956,7 +956,7 @@ class YNewLayer(bpy.types.Operator):
                 crow.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
 
         if self.type == 'IMAGE':
-            if is_greater_than_330():
+            if UDIM.is_udim_supported():
                 col.prop(self, 'use_udim')
             ccol = col.column()
             ccol.active = not self.use_udim
@@ -976,7 +976,7 @@ class YNewLayer(bpy.types.Operator):
                         col.prop(self, 'mask_height', text='')
                         #col.prop_search(self, "mask_uv_name", obj.data, "uv_layers", text='', icon='GROUP_UVS')
                         col.prop_search(self, "mask_uv_name", self, "uv_map_coll", text='', icon='GROUP_UVS')
-                        if is_greater_than_330():
+                        if UDIM.is_udim_supported():
                             col.prop(self, 'use_udim_for_mask')
                         ccol = col.column()
                         ccol.active = not self.use_udim_for_mask
@@ -1011,11 +1011,14 @@ class YNewLayer(bpy.types.Operator):
             self.report({'ERROR'}, "Vertex color only works with mesh object!")
             return {'CANCELLED'}
 
-        if (    ((self.type == 'VCOL' or (self.add_mask and self.mask_type == 'VCOL')) 
+        if (not is_greater_than_330() and
+                (
+                ((self.type == 'VCOL' or (self.add_mask and self.mask_type == 'VCOL')) 
                 and len(vcols) >= 8) 
             or
                 ((self.type == 'VCOL' and (self.add_mask and self.mask_type == 'VCOL')) 
                 and len(vcols) >= 7)
+                )
             ):
             self.report({'ERROR'}, "Mesh can only use 8 vertex colors!")
             return {'CANCELLED'}
@@ -1060,6 +1063,7 @@ class YNewLayer(bpy.types.Operator):
                     tilenums = UDIM.get_tile_numbers(objs, self.uv_map)
                     for tilenum in tilenums:
                         UDIM.fill_tile(img, tilenum, color, self.width, self.height)
+                    print(tilenums)
                     UDIM.initial_pack_udim(img)
 
                     # Remember base color
@@ -1508,7 +1512,7 @@ class YOpenMultipleImagesToSingleLayer(bpy.types.Operator, ImportHelper):
         return (fn.name for fn in self.files), self.directory
 
     def is_mask_using_udim(self):
-        return self.use_udim_for_mask and is_greater_than_330()
+        return self.use_udim_for_mask and UDIM.is_udim_supported()
 
     def is_mask_using_image_atlas(self):
         return self.use_image_atlas_for_mask and not self.is_mask_using_udim()
@@ -1606,7 +1610,7 @@ class YOpenMultipleImagesToSingleLayer(bpy.types.Operator, ImportHelper):
                 col.prop(self, 'mask_height', text='')
                 #col.prop_search(self, "mask_uv_name", obj.data, "uv_layers", text='', icon='GROUP_UVS')
                 col.prop_search(self, "mask_uv_name", self, "uv_map_coll", text='', icon='GROUP_UVS')
-                if is_greater_than_330():
+                if UDIM.is_udim_supported():
                     col.prop(self, 'use_udim_for_mask')
                 ccol = col.column()
                 ccol.active = not self.use_udim_for_mask
@@ -3102,11 +3106,6 @@ def replace_layer_type(layer, new_type, item_name='', remove_data=False):
     else:
         remove_node(source_tree, layer, 'source', remove_data=remove_data)
 
-    # Disable modifier tree
-    if (layer.type not in {'IMAGE', 'VCOL', 'BACKGROUND', 'COLOR', 'HEMI', 'MUSGRAVE'} and 
-            new_type in {'IMAGE', 'VCOL', 'BACKGROUND', 'COLOR', 'HEMI', 'MUSGRAVE'}):
-        Modifier.disable_modifiers_tree(layer)
-
     # Try to get available cache
     cache = None
     if new_type not in {'IMAGE', 'VCOL', 'BACKGROUND', 'GROUP', 'HEMI'}:
@@ -3138,9 +3137,8 @@ def replace_layer_type(layer, new_type, item_name='', remove_data=False):
     ori_type = layer.type
     layer.type = new_type
 
-    # Enable modifiers tree if generated texture is used
-    if layer.type not in {'IMAGE', 'VCOL', 'BACKGROUND'}:
-        Modifier.enable_modifiers_tree(layer)
+    # Check modifiers tree
+    Modifier.check_modifiers_trees(layer)
 
     # Update group ios
     check_all_layer_channel_io_and_nodes(layer, tree)
@@ -3290,8 +3288,9 @@ def replace_mask_type(mask, new_type, item_name='', remove_data=False):
     mask.type = new_type
 
     # Enable modifiers tree if generated texture is used
-    if mask.type not in {'IMAGE', 'VCOL', 'BACKGROUND'}:
-        Modifier.enable_modifiers_tree(mask)
+    #if mask.type not in {'IMAGE', 'VCOL', 'BACKGROUND'}:
+    #    Modifier.enable_modifiers_tree(mask)
+    Modifier.check_modifiers_trees(mask)
 
     # Update group ios
     check_all_layer_channel_io_and_nodes(layer, tree)

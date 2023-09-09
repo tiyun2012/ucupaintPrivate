@@ -133,7 +133,7 @@ class YRemoveBakeInfoOtherObject(bpy.types.Operator):
         return {'FINISHED'}
 
 def update_bake_to_layer_uv_map(self, context):
-    if not is_greater_than_330(): return
+    if not UDIM.is_udim_supported(): return
 
     mat = get_active_material()
     objs = get_all_objects_with_same_materials(mat)
@@ -294,7 +294,7 @@ class YBakeToLayer(bpy.types.Operator):
             default=False)
 
     def is_using_udim(self):
-        return self.use_udim and is_greater_than_330()
+        return self.use_udim and UDIM.is_udim_supported()
 
     def is_using_image_atlas(self):
         return self.use_image_atlas and not self.is_using_udim()
@@ -1300,10 +1300,10 @@ class YBakeToLayer(bpy.types.Operator):
                         oyp.active_channel_index = get_channel_index(och)
                         bake_type = 'EMIT'
 
-                colorspace = 'Linear' if root_ch.colorspace == 'LINEAR' else 'sRGB'
+                colorspace = 'Non-Color' if root_ch.colorspace == 'LINEAR' else 'sRGB'
 
             elif self.type in {'BEVEL_NORMAL', 'MULTIRES_NORMAL', 'OTHER_OBJECT_NORMAL'}:
-                colorspace = 'Linear'
+                colorspace = 'Non-Color'
 
             # Base color of baked image
             if self.type == 'AO':
@@ -2038,7 +2038,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         # Create image
         image = bpy.data.images.new(name=self.name,
                 width=self.width, height=self.height, alpha=True, float_buffer=self.hdr)
-        image.colorspace_settings.name = 'Linear'
+        image.colorspace_settings.name = 'Non-Color'
 
         # Set bake image
         tex.image = image
