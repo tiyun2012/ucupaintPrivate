@@ -2,29 +2,36 @@ import bpy, numpy, os, tempfile
 from bpy.props import *
 from .common import *
 
-UDIM_DIR = 'udim_textures__'
+UDIM_DIR = 'UDIM__'
 UV_TOLERANCE = 0.1
 
 def is_udim_supported():
     return is_greater_than_340()
 
-def fill_tiles(image, color, width=0, height=0):
+def fill_tiles(image, color, width=0, height=0, empty_only=False):
     if image.source != 'TILED': return
     for tile in image.tiles:
-        fill_tile(image, tile.number, color, width, height)
+        fill_tile(image, tile.number, color, width, height, empty_only)
 
-def fill_tile(image, tilenum, color, width=0, height=0):
+def fill_tile(image, tilenum, color, width=0, height=0, empty_only=False):
     if image.source != 'TILED': return
     tile = image.tiles.get(tilenum)
+    new_tile = False
     if not tile:
         tile = image.tiles.new(tile_number=tilenum)
+        new_tile = True
+
+    if tile.size[0] == 0 or tile.size[1] == 0:
+        new_tile = True
+
+    image.tiles.active = tile
+
+    if not new_tile and empty_only: return
 
     if width == 0: width = tile.size[0]
     if height == 0: height = tile.size[1]
     if width == 0: width = 1024
     if height == 0: height = 1024
-
-    image.tiles.active = tile
 
     # NOTE: Override operator won't work on Blender 4.0
     #override = bpy.context.copy()
@@ -60,9 +67,9 @@ def copy_udim_pixels(src, dest):
 
 def get_tile_numbers(objs, uv_name):
 
-    if not is_greater_than_330(): return [1001]
+    if not is_udim_supported(): return [1001]
 
-    #T = time.time()
+    T = time.time()
 
     # Get active object
     obj = bpy.context.object
@@ -114,15 +121,15 @@ def get_tile_numbers(objs, uv_name):
     if ori_mode != 'OBJECT':
         bpy.ops.object.mode_set(mode=ori_mode)
 
-    #print('INFO: Getting tile numbers are done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+    print('INFO: Getting tile numbers are done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
         
     return tiles
 
 def is_uvmap_udim(objs, uv_name):
 
-    if not is_greater_than_330(): return False
+    if not is_udim_supported(): return False
 
-    #T = time.time()
+    T = time.time()
 
     # Get active object
     obj = bpy.context.object
@@ -147,7 +154,7 @@ def is_uvmap_udim(objs, uv_name):
 
     is_udim = numpy.any(arr > 1.0 + UV_TOLERANCE/2)
 
-    #print('INFO: UDIM checking is done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+    print('INFO: UDIM checking is done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
 
     return is_udim
 
@@ -158,12 +165,21 @@ def get_temp_udim_dir():
 
     return tempfile.gettempdir()
 
+def is_using_temp_dir(image):
+    directory = os.path.dirname(bpy.path.abspath(image.filepath))
+    if directory == get_temp_udim_dir() or directory == tempfile.gettempdir():
+        return True
+    return False
+
 def remove_udim_files_from_disk(image, directory, remove_dir=False):
     # Get filenames
     img_names = []
-    for f in os.listdir(directory):
-        if f.startswith(image.name) and f.endswith('.png'):
-            img_names.append(f)
+    filename = bpy.path.basename(image.filepath)
+    prefix = filename.split('.<UDIM>.')[0]
+    if os.path.isdir(directory):
+        for f in os.listdir(directory):
+            m = re.match(r'' + re.escape(prefix) + '\.\d{4}\.*', f)
+            if m: img_names.append(f)
 
     # Remove images
     for f in img_names:
@@ -177,25 +193,61 @@ def remove_udim_files_from_disk(image, directory, remove_dir=False):
 
 def set_udim_filepath(image, filename, directory):
     filepath = os.path.join(directory, filename + '.<UDIM>.png')
-    try: image.filepath = bpy.path.relpath(filepath)
-    except: image.filepath = filepath
+    if directory != tempfile.gettempdir():
+        try: image.filepath = bpy.path.relpath(filepath)
+        except: image.filepath = filepath
+    else: image.filepath = filepath
+
+def is_image_filepath_unique(image):
+    for img in bpy.data.images:
+        if img != image and img.filepath == image.filepath:
+            return False
+    return True
 
 # UDIM need filepath to work, 
 # So there's need to initialize filepath for every udim image created
-def initial_pack_udim(image):
+def initial_pack_udim(image, base_color=None):
 
     # Get temporary directory
     temp_dir = get_temp_udim_dir()
 
-    # Set filepath
-    set_udim_filepath(image, image.name, temp_dir)
+    # Check if image is already packed
+    use_packed = False 
+    if image.packed_file: use_packed = True
+
+    # Check if image already use temporary filepath
+    use_temp_dir = is_using_temp_dir(image)
+
+    # Set temporary filepath
+    if (image.filepath == '' or # Set image filepath if it's still empty
+        not is_image_filepath_unique(image) # Force set new filepath when image filepath is not unique
+        ):
+        use_temp_dir = True
+        set_udim_filepath(image, image.name, temp_dir)
+
+    # When blend file is copied to another PC, there's a chance directory is missing
+    directory = os.path.dirname(bpy.path.abspath(image.filepath))
+    if not use_temp_dir and not os.path.isdir(directory):
+        ori_ui_type = bpy.context.area.ui_type
+        bpy.context.area.ui_type = 'IMAGE_EDITOR'
+        bpy.context.space_data.image = image
+        path = temp_dir + os.sep + image.name + '.<UDIM>.png'
+        bpy.ops.image.save_as(filepath=path , relative_path=True)
+        bpy.context.area.ui_type = ori_ui_type
+        use_temp_dir = True
 
     # Save then pack
     image.save()
-    image.pack()
+    if use_packed or use_temp_dir:
+        image.pack()
 
     # Remove temporary files
-    remove_udim_files_from_disk(image, temp_dir, True)
+    if use_temp_dir:
+        remove_udim_files_from_disk(image, temp_dir, True)
+
+    # Remember base color
+    if base_color:
+        image.yui.base_color = base_color
 
 def swap_tile(image, tilenum0, tilenum1):
 
@@ -207,13 +259,12 @@ def swap_tile(image, tilenum0, tilenum1):
     str0 = '.' + str(tilenum0) + '.'
     str1 = '.' + str(tilenum1) + '.'
     filename = bpy.path.basename(image.filepath)
-    prefix = filename.split('<UDIM>')[0]
+    prefix = filename.split('.<UDIM>.')[0]
     directory = os.path.dirname(bpy.path.abspath(image.filepath))
 
     # Remember stuff
     ori_packed = False
-    if image.packed_file:
-        ori_packed = True
+    if image.packed_file: ori_packed = True
 
     # Save the image first
     image.save()
@@ -222,7 +273,8 @@ def swap_tile(image, tilenum0, tilenum1):
     path0 = ''
     path1 = ''
     for f in os.listdir(directory):
-        if f.startswith(prefix) and f.endswith('.png'):
+        m = re.match(r'' + re.escape(prefix) + '\.\d{4}\.*', f)
+        if m:
             if str0 in f: path0 = os.path.join(directory, f)
             elif str1 in f: path1 = os.path.join(directory, f)
     
@@ -240,14 +292,49 @@ def swap_tile(image, tilenum0, tilenum1):
         image.pack()
 
         # Remove file if they are using temporary directory
-        if directory == get_temp_udim_dir() or directory == tempfile.gettempdir():
+        if is_using_temp_dir(image):
             remove_udim_files_from_disk(image, directory, True)
 
 class YRefillUDIMTiles(bpy.types.Operator):
     bl_idname = "node.y_refill_udim_tiles"
     bl_label = "Refill UDIM Tiles"
-    bl_description = "Refill UDIM tiles (Use this after unwrapping your objects to new tile)"
+    bl_description = "Refill all UDIM tiles used by all layers and masks based on their UV"
     bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node()
+
+    def execute(self, context):
+        yp = context.layer.id_data.yp
+        entities, images, segments = get_yp_entities_images_and_segments(yp)
+
+        mat = get_active_material()
+
+        for i, image in enumerate(images):
+            if image.source != 'TILED': continue
+            ents = entities[i]
+            entity = ents[0]
+
+            # Get width and height
+            width = 1024
+            height = 1024
+            if image.size[0] != 0: width = image.size[0]
+            if image.size[1] != 0: height = image.size[1]
+
+            # Get tile numbers based from uv
+            uv_name = entity.uv_name
+            objs = get_all_objects_with_same_materials(mat, True, uv_name)
+            tilenums = get_tile_numbers(objs, uv_name)
+
+            color = image.yui.base_color
+
+            for tilenum in tilenums:
+                fill_tile(image, tilenum, color, width, height, empty_only=True)
+
+            initial_pack_udim(image)
+
+        return {'FINISHED'}
 
 class YUDIMAtlasSegments(bpy.types.PropertyGroup):
 
@@ -288,14 +375,20 @@ class YUDIMAtlas(bpy.types.PropertyGroup):
 
     segments = CollectionProperty(type=YUDIMAtlasSegments)
 
+class YUDIMInfo(bpy.types.PropertyGroup):
+    base_color = FloatVectorProperty(subtype='COLOR', size=4, min=0.0, max=1.0, default=(0.0, 0.0, 0.0, 0.0))
+
 def register():
     bpy.utils.register_class(YRefillUDIMTiles)
     bpy.utils.register_class(YUDIMAtlasSegments)
     bpy.utils.register_class(YUDIMAtlas)
+    bpy.utils.register_class(YUDIMInfo)
 
-    bpy.types.Image.yua = PointerProperty(type=YUDIMAtlas)
+    #bpy.types.Image.yua = PointerProperty(type=YUDIMAtlas)
+    bpy.types.Image.yui = PointerProperty(type=YUDIMInfo)
 
 def unregister():
     bpy.utils.unregister_class(YRefillUDIMTiles)
     bpy.utils.unregister_class(YUDIMAtlasSegments)
     bpy.utils.unregister_class(YUDIMAtlas)
+    bpy.utils.unregister_class(YUDIMInfo)

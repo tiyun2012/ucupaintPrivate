@@ -64,9 +64,22 @@ def transfer_uv(objs, mat, entity, uv_map):
             col = (0.0, 0.0, 0.0, 0.0)
             use_alpha = True
 
+    # Get tile numbers
+    tilenums = UDIM.get_tile_numbers(objs, uv_map)
+
     # Create temp image as bake target
-    temp_image = bpy.data.images.new(name='__TEMP',
-            width=width, height=height, alpha=True, float_buffer=image.is_float)
+    if len(tilenums) > 1:
+        temp_image = bpy.data.images.new(name='__TEMP',
+                width=width, height=height, alpha=True, float_buffer=image.is_float, tiled=True)
+
+        # Fill tiles
+        for tilenum in tilenums:
+            UDIM.fill_tile(temp_image, tilenum, col, width, height)
+        UDIM.initial_pack_udim(temp_image, col)
+    else:
+        temp_image = bpy.data.images.new(name='__TEMP',
+                width=width, height=height, alpha=True, float_buffer=image.is_float)
+
     #temp_image.colorspace_settings.name = 'Non-Color'
     temp_image.colorspace_settings.name = image.colorspace_settings.name
     temp_image.generated_color = col
@@ -141,15 +154,14 @@ def transfer_uv(objs, mat, entity, uv_map):
 
     # Bake alpha if using alpha
     if use_alpha:
-        #srgb2lin = mat.node_tree.nodes.new('ShaderNodeGroup')
-        #srgb2lin.node_tree = get_node_tree_lib(lib.SRGB_2_LINEAR)
-
-        #mat.node_tree.links.new(src.outputs[1], srgb2lin.inputs[0])
-        #mat.node_tree.links.new(srgb2lin.outputs[0], emit.inputs[0])
 
         # Create another temp image
         temp_image1 = temp_image.copy()
         tex.image = temp_image1
+
+        if temp_image1.source == 'TILED':
+            temp_image1.name = '__TEMP1'
+            UDIM.initial_pack_udim(temp_image1)
 
         mat.node_tree.links.new(src.outputs[1], emit.inputs[0])
 
@@ -159,20 +171,35 @@ def transfer_uv(objs, mat, entity, uv_map):
         # Bake again!
         bpy.ops.object.bake()
 
-        # Copy the result to original temp image
-        copy_image_channel_pixels(temp_image1, temp_image, 0, 3)
+        # Set tile pixels
+        for tilenum in tilenums:
+
+            # Swap tile
+            if tilenum != 1001:
+                UDIM.swap_tile(temp_image, 1001, tilenum)
+                UDIM.swap_tile(temp_image1, 1001, tilenum)
+
+            # Copy the result to original temp image
+            copy_image_channel_pixels(temp_image1, temp_image, 0, 3)
+
+            # Swap tile again to recover
+            if tilenum != 1001:
+                UDIM.swap_tile(temp_image, 1001, tilenum)
+                UDIM.swap_tile(temp_image1, 1001, tilenum)
 
         # Remove temp image 1
         bpy.data.images.remove(temp_image1)
 
-        #if srgb2lin:
-        #    simple_remove_node(mat.node_tree, srgb2lin)
+    # Replace image if both images don't have the same source
+    if ((temp_image.source == 'TILED' and image.source != 'TILED') or
+        (temp_image.source != 'TILED' and image.source == 'TILED')):
+        replace_image(image, temp_image)
+    else:
+        # Copy back temp/baked image to original image
+        copy_image_pixels(temp_image, image, segment)
 
-    # Copy back temp/baked image to original image
-    copy_image_pixels(temp_image, image, segment)
-
-    # Remove temp image
-    bpy.data.images.remove(temp_image)
+        # Remove temp image
+        bpy.data.images.remove(temp_image)
 
     # Remove temp nodes
     simple_remove_node(mat.node_tree, tex)
@@ -485,21 +512,29 @@ class YResizeImage(bpy.types.Operator):
             description='Bake Samples, more means less jagged on generated image', 
             default=1, min=1)
 
+    all_tiles = BoolProperty(name='Resize All Tiles',
+            description='Resize all tiles',
+            default=False)
+
+    tile_number = IntProperty(name='Tile Number',
+            description='Tile number that will be resized',
+            default=1001, min=1001, max=2000)
+
     @classmethod
     def poll(cls, context):
-        #return hasattr(context, 'image') and hasattr(context, 'layer')
         return get_active_ypaint_node() and context.object.type == 'MESH'
 
     def invoke(self, context, event):
         ypup = get_user_preferences()
-
-        #if hasattr(context, 'image') and hasattr(context, 'layer'):
-        #    self.image = context.image
-        #    self.layer = context.layer
+        image = bpy.data.images.get(self.image_name)
 
         # Use user preference default image size if input uses default image size
         if self.width == 1234 and self.height == 1234:
             self.width = self.height = ypup.default_new_image_size
+
+        if image.source == 'TILED':
+            tile = image.tiles.active
+            self.tile_number = tile.number
 
         return context.window_manager.invoke_props_dialog(self, width=320)
 
@@ -507,27 +542,36 @@ class YResizeImage(bpy.types.Operator):
         if is_greater_than_280():
             row = self.layout.split(factor=0.4)
         else: row = self.layout.split(percentage=0.4)
-        col = row.column(align=True)
+
+        image = bpy.data.images.get(self.image_name)
+
+        col = row.column(align=False)
 
         col.label(text='Width:')
         col.label(text='Height:')
-        col.label(text='Samples:')
 
-        col = row.column(align=True)
+        if image.yia.is_image_atlas or not is_greater_than_281():
+            col.label(text='Samples:')
+
+        if image.source == 'TILED':
+            col.label(text='')
+            if not self.all_tiles:
+                col.label(text='Tile Number:')
+
+        col = row.column(align=False)
 
         col.prop(self, 'width', text='')
         col.prop(self, 'height', text='')
-        col.prop(self, 'samples', text='')
+
+        if image.yia.is_image_atlas or not is_greater_than_281():
+            col.prop(self, 'samples', text='')
+
+        if image.source == 'TILED':
+            col.prop(self, 'all_tiles')
+            if not self.all_tiles:
+                col.prop(self, 'tile_number', text='')
 
     def execute(self, context):
-
-        #if not hasattr(self, 'image') or not hasattr(self, 'layer'):
-        #    self.report({'ERROR'}, "No active image/layer found!")
-        #    return {'CANCELLED'}
-
-        #image = self.image
-        #layer = self.layer
-        #yp = layer.id_data.yp
 
         yp = get_active_ypaint_node().node_tree.yp
         layer = yp.layers.get(self.layer_name)
@@ -566,23 +610,23 @@ class YResizeImage(bpy.types.Operator):
 
         if not image.yia.is_image_atlas and is_greater_than_281():
 
-            # Search for context
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    space = area.spaces[0]
-                    ori_space_image = space.image
-                    space.image = image
+            tilenums = [self.tile_number]
+            if image.source == 'TILED' and self.all_tiles:
+                tilenums = [t.number for t in image.tiles]
 
-                    override_context = context.copy()
+            ori_ui_type = bpy.context.area.ui_type
+            bpy.context.area.ui_type = 'UV'
+            bpy.context.space_data.image = image
 
-                    override_context['area'] = area
-                    override_context['space_data'] = space
-                    break
+            for tilenum in tilenums:
+                if image.source == 'TILED':
+                    tile = image.tiles.get(tilenum)
+                    if not tile: continue
+                    image.tiles.active = tile
 
-        if override_context:
-            # Resize image
-            bpy.ops.image.resize(override_context, size=(self.width, self.height))
-            space.image = ori_space_image
+                bpy.ops.image.resize(size=(self.width, self.height))
+
+            bpy.context.area.ui_type = ori_ui_type
 
         else:
             scaled_img, new_segment = resize_image(image, self.width, self.height, image.colorspace_settings.name, self.samples, 0, segment, bake_device='CPU', yp=yp)

@@ -906,7 +906,7 @@ class YBakeToLayer(bpy.types.Operator):
 
         # Join objects then extend with other objects
         elif self.type.startswith('OTHER_OBJECT_'):
-            if len(objs) > 1 and self.type != 'OTHER_OBJECT_CHANNELS':
+            if len(objs) > 1:
                 objs = [get_merged_mesh_objects(scene, objs)]
                 temp_objs = objs.copy()
 
@@ -915,6 +915,8 @@ class YBakeToLayer(bpy.types.Operator):
         # Join objects if the number of objects is higher than one
         elif len(objs) > 1 and not is_join_objects_problematic(yp):
             objs = temp_objs = [get_merged_mesh_objects(scene, objs, True)]
+
+        print(other_objs)
 
         fill_mode = 'FACE'
         obj_vertex_indices = {}
@@ -1332,7 +1334,7 @@ class YBakeToLayer(bpy.types.Operator):
                 # Fill tiles
                 for tilenum in tilenums:
                     UDIM.fill_tile(image, tilenum, color, width, height)
-                UDIM.initial_pack_udim(image)
+                UDIM.initial_pack_udim(image, color)
 
                 # Remember base color
                 image.yia.color = 'TRANSPARENT'
@@ -1773,7 +1775,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
 
     name = StringProperty(default='')
 
-    uv_map = StringProperty(default='')
+    uv_map = StringProperty(default='', update=update_bake_to_layer_uv_map)
     uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
 
     hdr = BoolProperty(name='32 bit Float', default=False)
@@ -1815,6 +1817,17 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             name = 'Disable current layer/mask',
             description='Disable current layer/mask',
             default=True)
+
+    use_udim = BoolProperty(
+            name = 'Use UDIM Tiles',
+            description='Use UDIM Tiles',
+            default=False)
+
+    def is_using_udim(self):
+        return self.use_udim and UDIM.is_udim_supported()
+
+    def is_using_image_atlas(self):
+        return self.use_image_atlas and not self.is_using_udim()
 
     @classmethod
     def poll(cls, context):
@@ -1882,7 +1895,7 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         ypup = get_user_preferences()
 
         # New image cannot use more pixels than the image atlas
-        if self.use_image_atlas:
+        if self.is_using_image_atlas():
             if self.hdr: max_size = ypup.hdr_image_atlas_size
             else: max_size = ypup.image_atlas_size
             if self.width > max_size: self.width = max_size
@@ -1927,7 +1940,9 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             col.prop(self, 'bake_device', text='')
         col.separator()
         col.prop(self, 'fxaa')
-        col.prop(self, 'use_image_atlas')
+        ccol = col.column(align=True)
+        ccol.active = not self.use_udim
+        ccol.prop(self, 'use_image_atlas')
         if self.mask:
             col.prop(self, 'disable_current', text='Disable Current Mask')
         else: col.prop(self, 'disable_current', text='Disable Current Layer')
@@ -2035,10 +2050,35 @@ class YDuplicateLayerToImage(bpy.types.Operator):
         # Create bake nodes
         tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
 
+        if self.mask:
+            color = (0,0,0,1)
+            color_str = 'BLACK'
+            colorspace = 'Non-Color'
+        else: 
+            color = (0,0,0,0)
+            color_str = 'TRANSPARENT'
+            colorspace = 'sRGB'
+
         # Create image
-        image = bpy.data.images.new(name=self.name,
-                width=self.width, height=self.height, alpha=True, float_buffer=self.hdr)
-        image.colorspace_settings.name = 'Non-Color'
+        if self.is_using_udim():
+            image = bpy.data.images.new(name=self.name,
+                    width=self.width, height=self.height, alpha=True, float_buffer=self.hdr, tiled=True)
+
+            tilenums = UDIM.get_tile_numbers(objs, self.uv_map)
+
+            # Fill tiles
+            for tilenum in tilenums:
+                UDIM.fill_tile(image, tilenum, color, self.width, self.height)
+            UDIM.initial_pack_udim(image, color)
+
+            # Remember base color
+            image.yia.color = color_str
+        else:
+            image = bpy.data.images.new(name=self.name,
+                    width=self.width, height=self.height, alpha=True, float_buffer=self.hdr)
+
+        image.generated_color = color
+        image.colorspace_settings.name = colorspace
 
         # Set bake image
         tex.image = image
@@ -2053,10 +2093,10 @@ class YDuplicateLayerToImage(bpy.types.Operator):
             blur_image(image, False, bake_device=self.bake_device, factor=self.blur_factor, samples=samples)
 
         if self.mask:
-            mask_name = image.name if not self.use_image_atlas else self.name
+            mask_name = image.name if not self.is_using_image_atlas() else self.name
 
             segment = None
-            if self.use_image_atlas:
+            if self.is_using_image_atlas():
                 mask_name = get_unique_name(mask_name, self.layer.masks)
 
                 # Clearing unused image atlas segments

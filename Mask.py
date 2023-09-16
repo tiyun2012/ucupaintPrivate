@@ -176,6 +176,9 @@ def get_new_mask_name(obj, layer, mask_type):
 
 def update_new_mask_uv_map(self, context):
     if not UDIM.is_udim_supported(): return
+    if self.type != 'IMAGE': 
+        self.use_udim = False
+        return
 
     mat = get_active_material()
     objs = get_all_objects_with_same_materials(mat)
@@ -518,10 +521,7 @@ class YNewLayerMask(bpy.types.Operator):
                     tilenums = UDIM.get_tile_numbers(objs, self.uv_name)
                     for tilenum in tilenums:
                         UDIM.fill_tile(img, tilenum, color, self.width, self.height)
-                    UDIM.initial_pack_udim(img)
-
-                    # Remember base color
-                    img.yia.color = self.color_option
+                    UDIM.initial_pack_udim(img, color)
 
                 else:
                     img = bpy.data.images.new(name=self.name, 
