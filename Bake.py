@@ -20,9 +20,11 @@ def transfer_uv(objs, mat, entity, uv_map):
     if m1: 
         source = get_layer_source(entity)
         mapping = get_layer_mapping(entity)
+        index = int(m1.group(1))
     elif m2: 
         source = get_mask_source(entity)
         mapping = get_mask_mapping(entity)
+        index = int(m2.group(2))
     else: return
 
     image = source.image
@@ -60,6 +62,11 @@ def transfer_uv(objs, mat, entity, uv_map):
             col = (0.73, 0.73, 0.73, 1.0)
         elif 'AO' in image.name:
             col = (1.0, 1.0, 1.0, 1.0)
+        elif m2: # Possible mask base color
+            if index == 0:
+                col = (0.0, 0.0, 0.0, 1.0)
+            else:
+                col = (1.0, 1.0, 1.0, 1.0)
         else:
             col = (0.0, 0.0, 0.0, 0.0)
             use_alpha = True
@@ -75,7 +82,7 @@ def transfer_uv(objs, mat, entity, uv_map):
         # Fill tiles
         for tilenum in tilenums:
             UDIM.fill_tile(temp_image, tilenum, col, width, height)
-        UDIM.initial_pack_udim(temp_image, col)
+        UDIM.initial_pack_udim(temp_image, col, image.name)
     else:
         temp_image = bpy.data.images.new(name='__TEMP',
                 width=width, height=height, alpha=True, float_buffer=image.is_float)
@@ -190,9 +197,8 @@ def transfer_uv(objs, mat, entity, uv_map):
         # Remove temp image 1
         bpy.data.images.remove(temp_image1)
 
-    # Replace image if both images don't have the same source
-    if ((temp_image.source == 'TILED' and image.source != 'TILED') or
-        (temp_image.source != 'TILED' and image.source == 'TILED')):
+    # Replace image if any of the images is using UDIM
+    if temp_image.source == 'TILED' or image.source == 'TILED':
         replace_image(image, temp_image)
     else:
         # Copy back temp/baked image to original image
