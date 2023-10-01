@@ -344,6 +344,11 @@ def load_custom_icons():
     custom_icons.load('collapsed_vector_channel', filepath + 'collapsed_vector_channel_icon.png', 'IMAGE')
     custom_icons.load('uncollapsed_vector_channel', filepath + 'uncollapsed_vector_channel_icon.png', 'IMAGE')
 
+    custom_icons.load('r', filepath + 'r_icon.png', 'IMAGE')
+    custom_icons.load('g', filepath + 'g_icon.png', 'IMAGE')
+    custom_icons.load('b', filepath + 'b_icon.png', 'IMAGE')
+    custom_icons.load('a', filepath + 'a_icon.png', 'IMAGE')
+
 
 def get_icon(custom_icon_name):
     return custom_icons[custom_icon_name].icon_id

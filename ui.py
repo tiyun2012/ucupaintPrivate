@@ -41,6 +41,7 @@ def update_yp_ui():
             ypui.channel_ui.expand_parallax_settings = channel.expand_parallax_settings
             ypui.channel_ui.expand_alpha_settings = channel.expand_alpha_settings
             ypui.channel_ui.expand_smooth_bump_settings = channel.expand_smooth_bump_settings
+            ypui.channel_ui.expand_bake_target_settings = channel.expand_bake_target_settings
             ypui.channel_ui.modifiers.clear()
 
             # Construct channel UI objects
@@ -977,6 +978,116 @@ def draw_root_channels_ui(context, layout, node): #, custom_icon_enable):
                 #split = brow.row(align=False)
                 split.label(text='Space:')
                 split.prop(channel, 'colorspace', text='')
+
+            if channel.type in {'VALUE'}:
+                brow = bcol.row(align=True)
+                #if custom_icon_enable:
+                if chui.expand_bake_target_settings:
+                    icon_value = lib.custom_icons["uncollapsed_input"].icon_id
+                else: icon_value = lib.custom_icons["collapsed_input"].icon_id
+                brow.prop(chui, 'expand_bake_target_settings', text='', emboss=False, icon_value=icon_value)
+
+                if is_greater_than_280():
+                    split = brow.split(factor=0.375, align=True)
+                else: split = brow.split(percentage=0.375)
+
+                #split.label(text='Bake Target:')
+                #split.prop(channel, 'bake_target', text='')
+
+                channel_letter = get_pack_channel_letter(channel)
+
+                #rbrow = brow.row(align=True)
+                label = 'Bake Target'
+                if channel_letter != '':
+                    label += ' (' + channel_letter + ')'
+                label += ':'
+                split.label(text=label)
+                split.prop(channel, 'bake_target', text='')
+
+                if chui.expand_bake_target_settings:
+                    brow = bcol.row(align=True)
+                    brow.label(text='', icon='BLANK1')
+                    bbox = brow.box()
+                    bbcol = bbox.column() #align=True)
+                    bbcol.active = channel.bake_target == 'PACKED'
+                    #bbcol.label(text='This is Bake Target Settings')
+
+                    baked = nodes.get(channel.baked)
+                    baked_image_name = '-'
+                    if baked and baked.image:
+                        baked_image_name = baked.image.name
+
+                    if is_greater_than_280():
+                        split = bbcol.split(factor=0.45, align=True)
+                    else: split = bbcol.split(percentage=0.45)
+
+                    split.label(text='Target Image:')
+                    image_name = group_tree.name
+                    if channel.bake_target == 'PACKED':
+                        image_name += '_' + get_pack_image_suffixes(channel)
+                    else:
+                        image_name += ' ' + channel.name
+
+                    split.label(text=image_name)
+                    #split.prop(channel, 'packed_image_target', text='')
+
+                    if is_greater_than_280():
+                        split = bbcol.split(factor=0.45, align=True)
+                    else: split = bbcol.split(percentage=0.45)
+
+                    split.label(text='Image Channel:')
+
+                    pack_channel_letters_dict = {
+                            'R' : 'Red',
+                            'G' : 'Green',
+                            'B' : 'Blue',
+                            'A' : 'Alpha',
+                            '' : '-',
+                            }
+                    #split.label(text=pack_channel_letters_dict[channel_letter])
+
+                    row = split.row(align=True)
+                    #row.prop(channel, 'packed_image_channel_target', text='')
+                    #if channel.packed_image_channel_target == 'AUTO':
+                        #row.separator()
+                    row.label(text=pack_channel_letters_dict[channel_letter])
+                    #else:
+                        #for letter in packed_channel_letters:
+                        #    row.prop(channel, 'packed_use_' + letter.lower() + '_channel', text='', icon_value=lib.get_icon(letter.lower()))
+                        #row.prop(channel, 'packed_image_channel', text='')
+
+                    #row = bbcol.row(align=True)
+                    #row.label(text='Bake Target: ' + baked_image_name)
+
+                    #row = bbcol.row(align=True)
+                    #if channel_letter == '':
+                    #    row.label(text=channel.name + " will use all RGB channel of baked image")
+                    #else:
+                    #    row.label(text=channel.name + " will use '" + channel_letter + "' channel of the baked image")
+
+                    if is_greater_than_280():
+                        split = bbcol.split(factor=0.45, align=True)
+                    else: split = bbcol.split(percentage=0.45)
+
+                    split.label(text='Custom Suffix:')
+                    row = split.row(align=True)
+                    row.prop(channel, 'packed_use_custom_suffix', text='')
+                    if channel.packed_use_custom_suffix:
+                        row.prop(channel, 'packed_custom_suffix', text='')
+
+                    #row = bbcol.row(align=True)
+                    #if channel.packed_use_custom_suffix:
+                    #    if is_greater_than_280():
+                    #        split = row.split(factor=0.6, align=True)
+                    #    else: split = row.split(percentage=0.6)
+
+                    #    split.label(text='Custom Suffix:')
+                    #    srow = split.row(align=False)
+                    #    srow.prop(channel, 'packed_custom_suffix', text='')
+                    #    srow.prop(channel, 'packed_use_custom_suffix', text='')
+                    #else:
+                    #    row.label(text='Custom Suffix:')
+                    #    row.prop(channel, 'packed_use_custom_suffix', text='')
 
 def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, is_a_mesh): #, custom_icon_enable):
     obj = context.object
@@ -3054,8 +3165,11 @@ class NODE_UL_YPaint_channels(bpy.types.UIList):
         icon_value = lib.custom_icons[lib.channel_custom_icon_dict[item.type]].icon_id
         row.prop(item, 'name', text='', emboss=False, icon_value=icon_value)
 
+        is_packed_channel =  item.type == 'VALUE' and item.bake_target == 'PACKED'
+
         if not yp.use_baked or item.no_layer_using:
-            if item.type == 'RGB':
+
+            if item.type == 'RGB' or is_packed_channel:
                 row = row.row(align=True)
 
             if len(inputs[input_index].links) == 0:
@@ -3076,6 +3190,8 @@ class NODE_UL_YPaint_channels(bpy.types.UIList):
 
                 if is_output_unconnected(group_node, output_index+1, item):
                     row.label(text='', icon='ERROR')
+        if is_packed_channel:
+            row.label(text='', icon_value=lib.get_icon(get_pack_channel_letter(item).lower()))
 
 class NODE_UL_YPaint_layers(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
@@ -4663,6 +4779,8 @@ def update_channel_ui(self, context):
         ch.expand_alpha_settings = self.expand_alpha_settings
     if hasattr(ch, 'expand_smooth_bump_settings'):
         ch.expand_smooth_bump_settings = self.expand_smooth_bump_settings
+    if hasattr(ch, 'expand_bake_target_settings'):
+        ch.expand_bake_target_settings = self.expand_bake_target_settings
     if hasattr(ch, 'expand_intensity_settings'):
         ch.expand_intensity_settings = self.expand_intensity_settings
     if hasattr(ch, 'expand_transition_bump_settings'):
@@ -4727,6 +4845,7 @@ class YChannelUI(bpy.types.PropertyGroup):
     expand_parallax_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_alpha_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_smooth_bump_settings : BoolProperty(default=False, update=update_channel_ui)
+    expand_bake_target_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_input_settings : BoolProperty(default=True, update=update_channel_ui)
     expand_source : BoolProperty(default=True, update=update_channel_ui)
     expand_source_1 : BoolProperty(default=True, update=update_channel_ui)

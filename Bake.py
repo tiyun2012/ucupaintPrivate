@@ -1209,13 +1209,41 @@ class YBakeChannels(bpy.types.Operator):
         # Prepare bake settings
         prepare_bake_settings(book, objs, yp, self.samples, margin, self.uv_map, disable_problematic_modifiers=True, bake_device=self.bake_device)
 
-        # Bake channels
+        # Dealing with packed bake target
+        pack_images = []
+        pack_indexes = []
+        img = None
         for ch in yp.channels:
+
+            pack_index = get_pack_channel_index(ch)
+            #pack_letter = get_pack_channel_letter(ch)
+
+            # Create new image at first index
+            if pack_index == 0:
+                suffixes = get_pack_image_suffixes(ch)
+                img_name = tree.name + '_' + suffixes
+
+                img = bpy.data.images.get(img_name)
+                if not img:
+                    img = bpy.data.images.new(name=img_name,
+                            width=width, height=height, alpha=True, float_buffer=False)
+
+            if pack_index != -1:
+                pack_images.append(img)
+            else: pack_images.append(None)
+
+            pack_indexes.append(pack_index)
+
+        #for i, pi in enumerate(pack_images):
+        #    print(pack_indexes[i], pi)
+
+        # Bake channels
+        for i, ch in enumerate(yp.channels):
             ch.no_layer_using = not is_any_layer_using_channel(ch, node)
             if not ch.no_layer_using:
-                #if ch.type != 'NORMAL': continue
                 use_hdr = not ch.use_clamp
-                bake_channel(self.uv_map, mat, node, ch, width, height, use_hdr=use_hdr)
+                bake_channel(self.uv_map, mat, node, ch, width, height, 
+                        pack_image=pack_images[i], pack_index=pack_indexes[i], use_hdr=use_hdr)
 
         # AA process
         if self.aa_level > 1:

@@ -468,9 +468,9 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
             ccol.label(text='Channels:')
 
             ccol.label(text='')
+            ccol.label(text='')
             if self.type == 'BSDF_PRINCIPLED':
                 ccol.label(text='')
-            ccol.label(text='')
             ccol.label(text='')
 
         col = row.column()
@@ -479,9 +479,9 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
             ccol = col.column(align=True)
             ccol.prop(self, 'color', toggle=True)
             ccol.prop(self, 'ao', toggle=True)
+            ccol.prop(self, 'roughness', toggle=True)
             if self.type == 'BSDF_PRINCIPLED':
                 ccol.prop(self, 'metallic', toggle=True)
-            ccol.prop(self, 'roughness', toggle=True)
             ccol.prop(self, 'normal', toggle=True)
 
         if is_greater_than_280():
@@ -634,13 +634,13 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
 
         if self.type != 'EMISSION':
             if self.ao:
-                ch_ao = create_new_yp_channel(group_tree, 'Ambient Occlusion', 'RGB', non_color=True)
-
-            if self.type == 'BSDF_PRINCIPLED' and self.metallic:
-                ch_metallic = create_new_yp_channel(group_tree, 'Metallic', 'VALUE', non_color=True)
+                ch_ao = create_new_yp_channel(group_tree, 'Ambient Occlusion', 'VALUE', non_color=True)
 
             if self.roughness:
                 ch_roughness = create_new_yp_channel(group_tree, 'Roughness', 'VALUE', non_color=True)
+
+            if self.type == 'BSDF_PRINCIPLED' and self.metallic:
+                ch_metallic = create_new_yp_channel(group_tree, 'Metallic', 'VALUE', non_color=True)
 
             if self.normal:
                 ch_normal = create_new_yp_channel(group_tree, 'Normal', 'NORMAL')
@@ -671,7 +671,8 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
                 links.new(node.outputs[ch_color.name], inp)
 
         if ch_ao:
-            set_input_default_value(node, ch_ao, (1,1,1))
+            #set_input_default_value(node, ch_ao, (1,1,1))
+            set_input_default_value(node, ch_ao, 1.0)
 
         if ch_metallic:
             inp = main_bsdf.inputs['Metallic']
@@ -2905,6 +2906,19 @@ def update_channel_main_uv(self, context):
     if self.type == 'NORMAL':
         self.enable_smooth_bump = self.enable_smooth_bump
 
+def update_packed_use_custom_suffix(self, context):
+    yp = self.id_data.yp
+
+    # Set initial custom suffix
+    if self.packed_use_custom_suffix and self.packed_custom_suffix == '':
+        self.packed_custom_suffix = self.name[0]
+
+def update_packed_use_channel(self, context):
+    yp = self.id_data.yp
+
+    for letter in packed_channel_letters:
+        pass
+
 #def update_col_input(self, context):
 #    group_node = get_active_ypaint_node()
 #    group_tree = group_node.node_tree
@@ -3159,6 +3173,92 @@ class YPaintChannel(bpy.types.PropertyGroup):
             default=False, update=Bake.update_subdiv_setup
             )
 
+    #pack_bake_target : BoolProperty(
+    #        name = 'Pack Bake Target',
+    #        description = 'Pack baked channel to single channel of an image',
+    #        default=False, 
+    #        )
+
+    bake_target : EnumProperty(
+            name = 'Bake Target',
+            description = 'Target for baking channel',
+            items = (
+                ('SINGLE', 'Single Image', ''),
+                ('PACKED', 'Packed Image', ''),
+                ),
+            default = 'SINGLE',
+            #update=Bake.update_subdiv_standard_type
+            )
+
+    packed_use_custom_suffix : BoolProperty(
+            name = 'Use Packed Custom Suffix',
+            description = 'The default suffix for packed bake target is the first letter of the channel name. You can use custom suffix to override it',
+            default=False, 
+            update=update_packed_use_custom_suffix,
+            )
+
+    packed_custom_suffix : StringProperty(
+            name = 'Packed Custom Suffix',
+            description = 'Custom suffix that will be used at the end of baked image',
+            default='', 
+            )
+
+    #packed_image_target : EnumProperty(
+    #        description = 'Target for baking channel',
+    #        items = (
+    #            ('AUTO', 'Auto', ''),
+    #            ('CUSTOM', 'Custom Image', ''),
+    #            ),
+    #        default = 'AUTO',
+    #        #update=Bake.update_subdiv_standard_type
+    #        )
+
+    #packed_image_channel_target : EnumProperty(
+    #        description = 'Image channel target',
+    #        items = (
+    #            ('AUTO', 'Auto', ''),
+    #            ('CUSTOM', 'Custom', ''),
+    #            ),
+    #        default = 'AUTO',
+    #        #update=Bake.update_subdiv_standard_type
+    #        )
+
+    #packed_image_channel : EnumProperty(
+    #        description = 'Packed Image channel',
+    #        items = (
+    #            ('R', 'Red', ''),
+    #            ('G', 'Green', ''),
+    #            ('B', 'Blue', ''),
+    #            ('A', 'Alpha', ''),
+    #            ),
+    #        default = 'R',
+    #        )
+
+    #packed_ori_r_channel : BoolProperty(default = False)
+    #packed_ori_g_channel : BoolProperty(default = False)
+    #packed_ori_b_channel : BoolProperty(default = False)
+    #packed_ori_a_channel : BoolProperty(default = False)
+
+    #packed_use_r_channel : BoolProperty(
+    #        default = False,
+    #        update=update_packed_use_channel,
+    #        )
+
+    #packed_use_g_channel : BoolProperty(
+    #        default = False,
+    #        update=update_packed_use_channel,
+    #        )
+
+    #packed_use_b_channel : BoolProperty(
+    #        default = False,
+    #        update=update_packed_use_channel,
+    #        )
+
+    #packed_use_a_channel : BoolProperty(
+    #        default = False,
+    #        update=update_packed_use_channel,
+    #        )
+
     # Main uv is used for normal calculation of normal channel
     main_uv : StringProperty(default='', update=update_channel_main_uv)
 
@@ -3191,6 +3291,8 @@ class YPaintChannel(bpy.types.PropertyGroup):
     baked_disp : StringProperty(default='')
     baked_normal_overlay : StringProperty(default='')
 
+    baked_unpack : StringProperty(default='')
+
     # Outside baked nodes
     baked_outside : StringProperty(default='')
     baked_outside_disp : StringProperty(default='')
@@ -3206,6 +3308,7 @@ class YPaintChannel(bpy.types.PropertyGroup):
     expand_parallax_settings : BoolProperty(default=False)
     expand_alpha_settings : BoolProperty(default=False)
     expand_smooth_bump_settings : BoolProperty(default=False)
+    expand_bake_target_settings : BoolProperty(default=False)
 
     # Connection related
     ori_alpha_to : CollectionProperty(type=YNodeConnections)

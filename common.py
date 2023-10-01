@@ -407,6 +407,8 @@ limited_mask_blend_types = {
     'LINEAR_LIGHT',
     }
 
+packed_channel_letters = ['R', 'G', 'B', 'A']
+
 TEXCOORD_IO_PREFIX = 'Texcoord '
 PARALLAX_MIX_PREFIX = 'Parallax Mix '
 PARALLAX_DELTA_PREFIX = 'Parallax Delta '
@@ -5155,6 +5157,63 @@ def get_closest_bsdf_forward(node, valid_types=[]):
             else:
                 n = get_closest_bsdf_forward(link.to_node, valid_types)
                 if n: return n
+
+    return None
+
+def get_pack_channel_letter(root_ch):
+    pack_index = get_pack_channel_index(root_ch)
+    if pack_index != -1:
+        return packed_channel_letters[pack_index]
+    return ''
+
+def get_pack_channel_index(root_ch):
+    yp = root_ch.id_data.yp
+    counts = 0
+    for c in yp.channels:
+        if c.type == 'VALUE' and c.bake_target == 'PACKED':
+            pack_index = counts % 4
+            if c == root_ch:
+                return pack_index
+            counts += 1
+
+    return -1
+
+def get_pack_image_suffixes(root_ch):
+    yp = root_ch.id_data.yp
+    suffixes = ''
+    ch_found = False
+    counts = 0
+    for c in yp.channels:
+        pack_index = -1
+        if c.type == 'VALUE' and c.bake_target == 'PACKED':
+            pack_index = counts % 4
+            counts += 1
+
+        if pack_index == 0:
+            # Break if pack index back to 0
+            if ch_found: break
+            # Or reset suffixes
+            else: suffixes = ''
+
+        # Get suffix from channel
+        if pack_index != -1:
+            if c.packed_use_custom_suffix:
+                suffixes += c.packed_custom_suffix
+            else: suffixes += c.name[0]
+
+        if c == root_ch:
+            ch_found = True
+
+
+    return suffixes
+
+def get_channel_baked_node(root_ch):
+    tree = root_ch.id_data
+    yp = tree.yp
+
+    baked = tree.nodes.get(root_ch.baked)
+    if baked:
+        return baked
 
     return None
 

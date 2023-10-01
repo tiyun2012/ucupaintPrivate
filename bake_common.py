@@ -1036,7 +1036,7 @@ def get_valid_filepath(img, use_hdr):
 
     return img.filepath
 
-def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_layer=None, use_hdr=False, aa_level=1):
+def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_layer=None, pack_image=None, pack_index=-1, use_hdr=False, aa_level=1):
 
     print('BAKE CHANNEL: Baking', root_ch.name + ' channel...')
 
@@ -1083,6 +1083,9 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
 
         ch = target_layer.channels[get_channel_index(root_ch)]
 
+    #if pack_index != -1 and pack_image:
+    #    img = pack_image
+
     # Create setup nodes
     tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
     emit = mat.node_tree.nodes.new('ShaderNodeEmission')
@@ -1105,17 +1108,21 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
     mat.node_tree.links.new(emit.outputs[0], output.inputs[0])
 
     # Image name
-    if segment:
-        img_name = '__TEMP_SEGMENT_'
+    if segment or pack_index != -1:
+        img_name = '__TEMP_BAKE_TARGET_'
         filepath = ''
     elif not img:
         img_name = tree.name + ' ' + root_ch.name
         filepath = ''
     else:
         img_name = img.name
-        #filepath = img.filepath
         filepath = get_valid_filepath(img, use_hdr)
 
+    #if pack_index != -1:
+    #    suffixes = get_pack_image_suffixes(root_ch)
+    #    print(suffixes)
+    #    #img_name = tree.name + '_' + suffixes
+    
     if not target_layer:
         # Set nodes
         baked = tree.nodes.get(root_ch.baked)
@@ -1127,7 +1134,7 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
             if root_ch.colorspace == 'LINEAR' or root_ch.type == 'NORMAL':
                 baked.color_space = 'NONE'
             else: baked.color_space = 'COLOR'
-        
+
         # Normal related nodes
         if root_ch.type == 'NORMAL':
             baked_normal = tree.nodes.get(root_ch.baked_normal)
@@ -1144,14 +1151,15 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
                 else: baked_normal_prep.node_tree = get_node_tree_lib(lib.NORMAL_MAP_PREP_LEGACY)
 
         # Check if image is available
-        if baked.image:
-            img_name = baked.image.name
+        if baked.image and pack_index == -1:
+
             if root_ch.type == 'NORMAL':
                 filepath = baked.image.filepath
             else: filepath = get_valid_filepath(baked.image, use_hdr)
+
+            # Rename image on baked node to temporary name
+            img_name = baked.image.name
             baked.image.name = '____TEMP'
-            #if baked.image.users == 1:
-            #    bpy.data.images.remove(baked.image)
 
     if not img:
 
@@ -1440,7 +1448,7 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
         # Remove temp image
         bpy.data.images.remove(alpha_img)
 
-    if not target_layer:
+    if not target_layer and pack_index == -1:
         # Set image to baked node and replace all previously original users
         if baked.image:
             temp = baked.image
@@ -1450,6 +1458,25 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
             bpy.data.images.remove(temp)
         else:
             baked.image = img
+
+    # Transfer baked image to packed image
+    if pack_index != -1 and pack_image:
+        print('BAKE CHANNEL: Packing baked ' + root_ch.name + ' channel...')
+
+        pack_index = get_pack_channel_index(root_ch)
+
+        # Copy alpha pixels to main image alpha channel
+        img_pxs = list(img.pixels)
+        pack_pxs = list(pack_image.pixels)
+
+        for y in range(height):
+            offset_y = width * 4 * y
+            for x in range(width):
+                c = img_pxs[offset_y + (x*4)]
+                #a = srgb_to_linear_per_element(a)
+                pack_pxs[offset_y + (x*4) + pack_index] = c
+
+        pack_image.pixels = pack_pxs
 
     simple_remove_node(mat.node_tree, tex)
     simple_remove_node(mat.node_tree, emit)
