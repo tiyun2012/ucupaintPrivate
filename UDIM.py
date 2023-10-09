@@ -67,7 +67,9 @@ def copy_udim_pixels(src, dest):
 
 def get_tile_numbers(objs, uv_name):
 
-    if not is_udim_supported(): return [1001]
+    tiles = [1001]
+
+    if not is_udim_supported(): return tiles
 
     T = time.time()
 
@@ -106,7 +108,6 @@ def get_tile_numbers(objs, uv_name):
     arr = numpy.unique(arr, axis=0)
     
     # Get the udim representation
-    tiles = []
     for i in arr:
 
         # UV value can only be within 0 .. 10 range
@@ -194,9 +195,11 @@ def remove_udim_files_from_disk(image, directory, remove_dir=False):
 def set_udim_filepath(image, filename, directory):
     filepath = os.path.join(directory, filename + '.<UDIM>.png')
     if directory != tempfile.gettempdir():
-        try: image.filepath = bpy.path.relpath(filepath)
-        except: image.filepath = filepath
-    else: image.filepath = filepath
+        try: filepath = bpy.path.relpath(filepath)
+        except: pass
+    #if not os.path.exists(directory):
+    #    os.makedirs(directory)
+    image.filepath = filepath
 
 def is_image_filepath_unique(image):
     for img in bpy.data.images:
@@ -206,7 +209,7 @@ def is_image_filepath_unique(image):
 
 # UDIM need filepath to work, 
 # So there's need to initialize filepath for every udim image created
-def initial_pack_udim(image, base_color=None):
+def initial_pack_udim(image, base_color=None, filename=''):
 
     # Get temporary directory
     temp_dir = get_temp_udim_dir()
@@ -223,7 +226,8 @@ def initial_pack_udim(image, base_color=None):
         not is_image_filepath_unique(image) # Force set new filepath when image filepath is not unique
         ):
         use_temp_dir = True
-        set_udim_filepath(image, image.name, temp_dir)
+        filename = filename if filename != '' else image.name
+        set_udim_filepath(image, filename, temp_dir)
 
     # When blend file is copied to another PC, there's a chance directory is missing
     directory = os.path.dirname(bpy.path.abspath(image.filepath))

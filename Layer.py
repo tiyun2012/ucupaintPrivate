@@ -217,6 +217,9 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     layer.texcoord_type = texcoord_type
 
     # Set layer spread fix
+    #if image and image.is_float:
+    #    layer.divide_rgb_by_alpha = True
+    #else: 
     layer.divide_rgb_by_alpha = use_divider_alpha
 
     # Add channels to current layer
@@ -366,9 +369,6 @@ class YUseLinearColorSpace(bpy.types.Operator):
         return hasattr(context, 'layer') #and hasattr(context, 'channel') and hasattr(context, 'image') and context.image
 
     def execute(self, context):
-        #set_uv_neighbor_resolution(context.layer)
-        #print(context.image.name)
-        #context.image.colorspace_settings.name = 'Non-Color'
         yp = context.layer.id_data.yp
         check_yp_linear_nodes(yp)
 
@@ -661,7 +661,7 @@ class YNewLayer(bpy.types.Operator):
 
     use_divider_alpha = BoolProperty(
             name = 'Spread Fix',
-            description='Use spread fix (very recommended for vertex color layer)',
+            description='Use spread fix (very recommended for vertex color or image layer)',
             default=False)
 
     uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
@@ -699,7 +699,7 @@ class YNewLayer(bpy.types.Operator):
             self.add_mask = False
 
         # Set spread fix by default on vertex color layer
-        self.use_divider_alpha = True if self.type == 'VCOL' else False
+        self.use_divider_alpha = True if self.type in {'VCOL'} else False
 
         # Use white color mask as default for group
         if self.type == 'GROUP':
@@ -825,11 +825,9 @@ class YNewLayer(bpy.types.Operator):
         if self.type == 'COLOR':
             col.label(text='Color:')
 
-        if self.type == 'VCOL':
-            if is_greater_than_320():
-                col.label(text='Domain:')
-                col.label(text='Data Type:')
-            col.label(text='')
+        if self.type == 'VCOL' and is_greater_than_320():
+            col.label(text='Domain:')
+            col.label(text='Data Type:')
 
         #if self.type == 'IMAGE':
         #    col.label(text='')
@@ -845,6 +843,9 @@ class YNewLayer(bpy.types.Operator):
 
         if self.type not in {'VCOL', 'GROUP', 'COLOR', 'BACKGROUND', 'HEMI'}:
             col.label(text='Vector:')
+
+        if self.type in {'VCOL'}:
+            col.label(text='')
 
         if self.type == 'IMAGE':
             col.label(text='')
@@ -886,13 +887,11 @@ class YNewLayer(bpy.types.Operator):
         if self.type == 'COLOR':
             col.prop(self, 'solid_color', text='')
 
-        if self.type == 'VCOL':
-            if is_greater_than_320():
-                crow = col.row(align=True)
-                crow.prop(self, 'vcol_domain', expand=True)
-                crow = col.row(align=True)
-                crow.prop(self, 'vcol_data_type', expand=True)
-            col.prop(self, 'use_divider_alpha')
+        if self.type == 'VCOL' and is_greater_than_320():
+            crow = col.row(align=True)
+            crow.prop(self, 'vcol_domain', expand=True)
+            crow = col.row(align=True)
+            crow.prop(self, 'vcol_data_type', expand=True)
 
         if self.type == 'HEMI':
             col.prop(self, 'hemi_space', text='')
@@ -909,6 +908,9 @@ class YNewLayer(bpy.types.Operator):
             if obj.type == 'MESH' and self.texcoord_type == 'UV':
                 #crow.prop_search(self, "uv_map", obj.data, "uv_layers", text='', icon='GROUP_UVS')
                 crow.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
+
+        if self.type in {'VCOL'}:
+            col.prop(self, 'use_divider_alpha')
 
         if self.type == 'IMAGE':
             if UDIM.is_udim_supported():
@@ -3112,15 +3114,10 @@ def replace_layer_type(layer, new_type, item_name='', remove_data=False):
             root_ch.colorspace = root_ch.colorspace
 
     # Check childrens which need rearrange
-    #for i in child_ids:
-        #lay = yp.layers[i]
     for lay in yp.layers:
         check_all_layer_channel_io_and_nodes(lay)
         rearrange_layer_nodes(lay)
         reconnect_layer_nodes(lay)
-
-    #rearrange_layer_nodes(layer)
-    #reconnect_layer_nodes(layer)
 
     if layer.type in {'BACKGROUND', 'GROUP'} or ori_type == 'GROUP':
         rearrange_yp_nodes(layer.id_data)
@@ -3593,22 +3590,29 @@ def duplicate_layer_nodes_and_images(tree, specific_layer=None, make_image_singl
                         alpha = img.use_alpha
                     else: alpha = True
 
-                    img_nodes[i].image = bpy.data.images.new(get_unique_name(img.name, bpy.data.images), 
-                            width=img.size[0], height=img.size[1], alpha=alpha, float_buffer=img.is_float)
-                    img_nodes[i].image.colorspace_settings.name = img.colorspace_settings.name
-
                     # Mask will have alpha filled
                     m = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]', img_users[i].path_from_id())
                     if m: 
                         mask_idx = int(m.group(2))
-                        #mask = yp.layers[int(m.group(1))].masks[mask_idx]
 
                         # Only first mask will be black by default, others will be white
                         if mask_idx == 0:
-                            img_nodes[i].image.generated_color = (0,0,0,1)
-                        else: img_nodes[i].image.generated_color = (1,1,1,1)
+                            color = (0,0,0,1)
+                        else: color = (1,1,1,1)
+                    else: color = (0,0,0,0)
 
-                    else: img_nodes[i].image.generated_color = (0,0,0,0)
+                    img_name = get_unique_name(img.name, bpy.data.images)
+
+                    if img.source == 'TILED':
+                        img_nodes[i].image = img.copy()
+                        UDIM.fill_tiles(img_nodes[i].image, color)
+                        UDIM.initial_pack_udim(img_nodes[i].image, color)
+                    else:
+                        img_nodes[i].image = bpy.data.images.new(img_name,
+                                width=img.size[0], height=img.size[1], alpha=alpha, float_buffer=img.is_float)
+                        img_nodes[i].image.generated_color = color
+
+                    img_nodes[i].image.colorspace_settings.name = img.colorspace_settings.name
 
                 else:
                     img_nodes[i].image = duplicate_image(img)
@@ -4030,41 +4034,6 @@ def update_channel_enable(self, context):
         ch.active_edit = False
         ch.active_edit_1 = False
 
-    #print(ch.enable)
-
-    #return
-
-    #mute = not layer.enable or not ch.enable
-
-    #blend = tree.nodes.get(ch.blend)
-    #if blend:
-    #    if yp.disable_quick_toggle:
-    #        blend.mute = mute
-    #    else: blend.mute = False
-
-    #if root_ch.type == 'NORMAL':
-    #    height_blend = tree.nodes.get(ch.height_blend)
-    #    if height_blend:
-    #        if yp.disable_quick_toggle:
-    #            height_blend.mute = mute
-    #        else: height_blend.mute = False
-
-    #    for d in neighbor_directions:
-    #        hb = tree.nodes.get(getattr(ch, 'height_blend_' + d))
-    #        if hb:
-    #            if yp.disable_quick_toggle:
-    #                hb.mute = mute
-    #            else: hb.mute = False
-
-    #update_channel_intensity_value(ch, context)
-
-    #if root_ch.type == 'NORMAL':
-    #    transition.check_transition_bump_nodes(layer, tree, ch)
-
-        #need_reconnect = check_extra_alpha(layer)
-        #if need_reconnect:
-        #    pass
-
     print('INFO: Channel', root_ch.name, ' of ' + layer.name + ' is changed at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
     wm.yptimer.time = str(time.time())
 
@@ -4201,9 +4170,6 @@ def update_uv_name(self, context):
 
     nodes = tree.nodes
 
-    if layer.type in {'HEMI', 'GROUP', 'COLOR'} or layer.texcoord_type != 'UV':
-        return
-
     # Use first uv if temp uv or empty is selected
     if layer.uv_name in {TEMP_UV, ''}:
         if len(yp.uvs) > 0:
@@ -4224,9 +4190,7 @@ def update_uv_name(self, context):
         check_uvmap_on_other_objects_with_same_mat(mat, layer.uv_name)
 
     # Update global uv
-    #yp_dirty = check_uv_nodes(yp)
     check_uv_nodes(yp)
-    #layer_dirty = False
 
     # Update uv neighbor
     smooth_bump_ch = get_smooth_bump_channel(layer)
@@ -4240,19 +4204,13 @@ def update_uv_name(self, context):
                     lib.get_neighbor_uv_tree_name(layer.texcoord_type, entity=layer), 
                     return_status=False, hard_replace=True)
             set_uv_neighbor_resolution(smooth_bump_ch, uv_neighbor)
-    #else:
-    #    remove_node(tree, layer, 'uv_neighbor')
 
     # Update neighbor uv if mask bump is active
     for i, mask in enumerate(layer.masks):
         set_mask_uv_neighbor(tree, layer, mask, i)
-        #if set_mask_uv_neighbor(tree, layer, mask, i):
-        #    layer_dirty = True
 
     # Update layer tree inputs
     check_layer_tree_ios(layer, tree)
-    #if check_layer_tree_ios(layer, tree):
-        #yp_dirty = True
 
     #if yp_dirty or layer_dirty: #and not yp.halt_reconnect:
     rearrange_layer_nodes(layer)
@@ -4433,8 +4391,6 @@ def update_layer_enable(self, context):
 
     #group_trash_update(yp)
 
-    #for ch in layer.channels:
-    #    update_channel_enable(ch, context)
     height_root_ch = get_root_height_channel(yp)
     if height_root_ch:
         update_displacement_height_ratio(height_root_ch)
@@ -5060,7 +5016,7 @@ class YLayer(bpy.types.PropertyGroup):
 
     divide_rgb_by_alpha = BoolProperty(
             name = 'Spread Fix',
-            description = "Spread fix will divide RGB value by its alpha, this can be useful for some source, like vertex color",
+            description = "Spread fix will divide RGB value by its alpha\nThis can be useful remove dark outline on painted image/vertex color\nWARNING: This is a hack solution so the result might not looks right",
             default = False,
             update=update_divide_rgb_by_alpha)
 

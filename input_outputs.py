@@ -32,24 +32,36 @@ def get_tree_output_index_400(interface, item):
     return index
 
 def fix_tree_input_index_400(interface, item, correct_index):
-    if get_tree_input_index_400(interface, item) == correct_index:
-        return
-    
-    # HACK: Try to move using all index because interface move is still inconsistent
-    for i in range(len(interface.items_tree)):
-        interface.move(item, i)
+    if item.in_out != 'BOTH':
+        outputs = [it for it in interface.items_tree if it.in_out in {'OUTPUT', 'BOTH'}]
+        offset = len(outputs)
+        cur_index = [i for i, it in enumerate(interface.items_tree) if it == item]
+        if cur_index and cur_index[0] != correct_index + offset:
+            interface.move(item, correct_index + offset)
+    else:
         if get_tree_input_index_400(interface, item) == correct_index:
             return
 
+        # HACK: Try to move using all index because interface move is still inconsistent
+        for i in range(len(interface.items_tree)):
+            interface.move(item, i)
+            if get_tree_input_index_400(interface, item) == correct_index:
+                return
+
 def fix_tree_output_index_400(interface, item, correct_index):
-    if get_tree_output_index_400(interface, item) == correct_index:
-        return
-    
-    # HACK: Try to move using all index because interface move is still inconsistent
-    for i in range(len(interface.items_tree)):
-        interface.move(item, i)
+    if item.in_out != 'BOTH':
+        cur_index = [i for i, it in enumerate(interface.items_tree) if it == item]
+        if cur_index and cur_index[0] != correct_index:
+            interface.move(item, correct_index)
+    else:
         if get_tree_output_index_400(interface, item) == correct_index:
             return
+
+        # HACK: Try to move using all index because interface move is still inconsistent
+        for i in range(len(interface.items_tree)):
+            interface.move(item, i)
+            if get_tree_output_index_400(interface, item) == correct_index:
+                return
 
 def fix_tree_input_index(tree, item, correct_index):
     if not is_greater_than_400():
@@ -81,6 +93,12 @@ def create_input(tree, name, socket_type, valid_inputs, index,
     fix_tree_input_index(tree, inp, index)
 
     return dirty
+
+def make_outputs_first_400(interface):
+    outputs = []
+    for i, item in enumerate(interface.items_tree):
+        if item.in_out == 'OUTPUT':
+            pass
 
 def create_output(tree, name, socket_type, valid_outputs, index, dirty=False, default_value=None):
 
@@ -261,7 +279,7 @@ def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #,
     check_layer_bump_process(layer, tree)
 
     # Check the need of divider alpha
-    check_layer_divider_alpha(layer, tree)
+    check_layer_divider_alpha(layer)
 
     #print(specific_ch.enable)
 
@@ -285,6 +303,9 @@ def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #,
     # Mask nodes
     #for mask in layer.masks:
     #    check_mask_image_linear_node(mask)
+
+    # Linear nodes
+    check_yp_linear_nodes(yp, layer, False)
 
 def check_layer_tree_ios(layer, tree=None):
 

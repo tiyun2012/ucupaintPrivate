@@ -433,6 +433,8 @@ def get_alpha_suffix():
     bl_info = sys.modules[get_addon_name()].bl_info
     if 'Alpha' in bl_info['warning']:
         return ' Alpha'
+    elif 'Beta' in bl_info['warning']:
+        return ' Beta'
     return ''
 
 def get_current_version_str():
@@ -1469,16 +1471,16 @@ def create_info_nodes(tree):
         info.width = 250.0
 
     info.use_custom_color = True
-    info.color = (1.0, 1.0, 1.0)
-    info.height = 30.0
+    info.color = (0.5, 0.5, 0.5)
+    info.height = 60.0
     infos.append(info)
 
     info = nodes.new('NodeFrame')
     info.label = 'Get the addon from github.com/ucupumar/ucupaint'
     info.use_custom_color = True
-    info.color = (1.0, 1.0, 1.0)
-    info.width = 620.0
-    info.height = 30.0
+    info.color = (0.5, 0.5, 0.5)
+    info.width = 520.0
+    info.height = 60.0
     infos.append(info)
 
     info = nodes.new('NodeFrame')
@@ -1486,7 +1488,7 @@ def create_info_nodes(tree):
     info.use_custom_color = True
     info.color = (1.0, 0.5, 0.5)
     info.width = 450.0
-    info.height = 30.0
+    info.height = 60.0
     infos.append(info)
 
     info = nodes.new('NodeFrame')
@@ -1495,7 +1497,7 @@ def create_info_nodes(tree):
     info.use_custom_color = True
     info.color = (1.0, 0.5, 0.5)
     info.width = 580.0
-    info.height = 30.0
+    info.height = 60.0
     infos.append(info)
 
     if tree_type in {'LAYER', 'ROOT'}:
@@ -1505,7 +1507,7 @@ def create_info_nodes(tree):
         for info in reversed(infos):
             info.name = INFO_PREFIX + info.name
 
-            loc.y += 40
+            loc.y += 80
             info.location = loc
     else:
 
@@ -2158,7 +2160,10 @@ def new_tree_input(tree, name, socket_type, description='', use_both=False):
         subtype = 'FACTOR'
 
     inp = None
-    if use_both:
+
+    # NOTE: Used to be working on Blender 4.0 Alpha, 'BOTH' in_out is no longer supported
+    # Keep the code just in case it will work again someday
+    if use_both and False:
         # Check if output with same name already exists
         items = [it for it in tree.interface.items_tree if it.name == name and it.socket_type == socket_type and it.in_out == 'OUTPUT']
         if items:
@@ -2179,7 +2184,10 @@ def new_tree_output(tree, name, socket_type, description='', use_both=False):
     if socket_type == 'NodeSocketFloatFactor': socket_type = 'NodeSocketFloat'
 
     outp = None
-    if use_both:
+
+    # NOTE: Used to be working on Blender 4.0 Alpha, 'BOTH' in_out is no longer supported
+    # Keep the code just in case it will work again someday
+    if use_both and False:
         # Check if input with same name already exists
         items = [it for it in tree.interface.items_tree if it.name == name and it.socket_type == socket_type and it.in_out == 'INPUT']
         if items:
@@ -2763,26 +2771,16 @@ def update_mapping(entity):
 
 def is_active_uv_map_match_entity(obj, entity):
 
-    if entity.type != 'IMAGE' or entity.texcoord_type != 'UV': return False
+    m = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
+
+    #if entity.type != 'IMAGE' or entity.texcoord_type != 'UV': return False
+    if (m and not is_layer_using_vector(entity)) or entity.texcoord_type != 'UV': return False
     mapping = get_entity_mapping(entity)
-
-    #m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
-    #m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
-
-    ## Get source
-    #if m1: 
-    #    source = get_layer_source(entity)
-    #    mapping = get_layer_mapping(entity)
-    #elif m2: 
-    #    source = get_mask_source(entity)
-    #    mapping = get_mask_mapping(entity)
-    #else:
-    #    return
 
     uv_layers = get_uv_layers(obj)
     uv_layer = uv_layers.active
 
-    if is_transformed(mapping) and obj.mode == 'TEXTURE_PAINT':
+    if mapping and is_transformed(mapping) and obj.mode == 'TEXTURE_PAINT':
         if uv_layer.name != TEMP_UV:
             return True
 
@@ -2978,6 +2976,8 @@ def refresh_temp_uv(obj, entity):
         mapping = get_layer_mapping(layer)
         #print('Channel!')
     else: return False
+
+    if not hasattr(source, 'image'): return False
 
     img = source.image
     if not img or not is_transformed(mapping):
@@ -4342,12 +4342,16 @@ def is_colorid_vcol_still_being_used(objs):
 
     return False
 
-def is_image_source_srgb(image, source):
+def is_image_source_srgb(image, source, root_ch=None):
     if not is_greater_than_280():
         return source.color_space == 'COLOR'
 
     # HACK: Sometimes just loaded UDIM images has empty colorspace settings name
     if image.source == 'TILED' and image.colorspace_settings.name == '':
+        return True
+
+    # Float images is behaving like srgb for some reason in blender
+    if root_ch and root_ch.colorspace == 'SRGB' and image.is_float and image.colorspace_settings.name != 'sRGB':
         return True
 
     return image.colorspace_settings.name == 'sRGB'
@@ -4356,7 +4360,8 @@ def any_linear_images_problem(yp):
     for layer in yp.layers:
         layer_tree = get_tree(layer)
 
-        for ch in layer.channels:
+        for i, ch in enumerate(layer.channels):
+            root_ch = yp.channels[i]
             if ch.override_type == 'IMAGE':
                 source_tree = get_channel_source_tree(ch)
                 linear = source_tree.nodes.get(ch.linear)
@@ -4366,8 +4371,8 @@ def any_linear_images_problem(yp):
                 image = source.image
                 if not image: continue
                 if (
-                    (is_image_source_srgb(image, source) and not linear) or
-                    (not is_image_source_srgb(image, source) and linear)
+                    (is_image_source_srgb(image, source, root_ch) and not linear) or
+                    (not is_image_source_srgb(image, source, root_ch) and linear)
                     ):
                     return True
 

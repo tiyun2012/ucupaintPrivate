@@ -548,8 +548,10 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
         if not main_bsdf:
             if self.type == 'BSDF_PRINCIPLED':
                 main_bsdf = nodes.new('ShaderNodeBsdfPrincipled')
-                main_bsdf.inputs[2].default_value = (1.0, 0.2, 0.1) # Use eevee default value
-                main_bsdf.inputs[3].default_value = (0.8, 0.8, 0.8, 1.0) # Use eevee default value
+                if 'Subsurface Radius' in main_bsdf.inputs:
+                    main_bsdf.inputs['Subsurface Radius'].default_value = (1.0, 0.2, 0.1) # Use eevee default value
+                if 'Subsurface Color' in main_bsdf.inputs:
+                    main_bsdf.inputs['Subsurface Color'].default_value = (0.8, 0.8, 0.8, 1.0) # Use eevee default value
             elif self.type == 'BSDF_DIFFUSE':
                 main_bsdf = nodes.new('ShaderNodeBsdfDiffuse')
             elif self.type == 'EMISSION':
@@ -794,11 +796,6 @@ class YNewYPaintNode(bpy.types.Operator):
         return result
 
 def new_channel_items(self, context):
-    #if is_greater_than_280():
-    #    items = [('VALUE', 'Value', '', lib.channel_icon_dict['VALUE'], 0),
-    #             ('RGB', 'RGB', '', lib.channel_icon_dict['RGB'], 1),
-    #             ('NORMAL', 'Normal', '', lib.channel_icon_dict['NORMAL'], 2)]
-    #else:
     items = [('VALUE', 'Value', '', lib.custom_icons[lib.channel_custom_icon_dict['VALUE']].icon_id, 0),
              ('RGB', 'RGB', '', lib.custom_icons[lib.channel_custom_icon_dict['RGB']].icon_id, 1),
              ('NORMAL', 'Normal', '', lib.custom_icons[lib.channel_custom_icon_dict['NORMAL']].icon_id, 2)]

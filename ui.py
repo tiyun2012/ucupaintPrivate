@@ -148,7 +148,9 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
 
     if image.y_bake_info.is_baked:
         bi = image.y_bake_info
-        col.label(text=image.name + ' (Baked)', icon_value=lib.get_icon('image'))
+        if image.yia.is_image_atlas:
+            col.label(text=image.name + ' (Baked)', icon_value=lib.get_icon('image'))
+        else: col.template_ID(source, "image", unlink='node.y_remove_layer')
         col.label(text='Type: ' + bake_type_labels[bi.bake_type], icon_value=lib.get_icon('bake'))
 
         draw_bake_info(bi, col, entity)
@@ -1027,10 +1029,15 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
     row.context_pointer_set('layer_ui', lui)
 
     if obj.mode == 'EDIT':
-        if obj.type == 'MESH' and obj.data.uv_layers.active and obj.data.uv_layers.active.name == TEMP_UV:
-            row = row.row(align=True)
-            row.alert = True
-            row.operator('node.y_back_to_original_uv', icon='EDITMODE_HLT', text='Edit Original UV')
+        if obj.type == 'MESH' and obj.data.uv_layers.active:
+            if layer.type != 'IMAGE' and is_layer_using_vector(layer) and obj.data.uv_layers.active.name != layer.uv_name:
+                row = row.row(align=True)
+                row.alert = True
+                row.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
+            elif obj.data.uv_layers.active.name == TEMP_UV:
+                row = row.row(align=True)
+                row.alert = True
+                row.operator('node.y_back_to_original_uv', icon='EDITMODE_HLT', text='Edit Original UV')
     else:
         #if ypui.disable_auto_temp_uv_update and yp.need_temp_uv_refresh:
         #if yp.need_temp_uv_refresh or is_active_uv_map_match_entity(obj, layer):
@@ -1092,7 +1099,10 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
         #    row.prop(lui, 'expand_source', text='', emboss=True, icon=icon)
 
         if image:
-            row.label(text='Source: ' + image.name)
+            image_name = image.name
+            if image.y_bake_info.is_baked:
+                image_name += ' (Baked)'
+            row.label(text='Source: ' + image_name)
         elif vcol:
             row.label(text='Source: ' + vcol.name)
         else: row.label(text='Source: ' + layer.name)
@@ -1107,6 +1117,8 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                 bbox.operator('node.y_disable_temp_image', icon='FILE_REFRESH', text='Disable Baked Temp')
             elif image:
                 draw_image_props(context, source, bbox, layer, show_flip_y=True)
+                if hasattr(layer, 'divide_rgb_by_alpha'):
+                    bbox.prop(layer, 'divide_rgb_by_alpha', text='Spread Fix')
             elif layer.type == 'COLOR':
                 draw_solid_color_props(layer, source, bbox)
             elif layer.type == 'VCOL':
@@ -2947,7 +2959,7 @@ class NODE_PT_YPaint(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return (context.object and context.object.type in possible_object_types 
-                and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE'} and context.space_data.tree_type == 'ShaderNodeTree')
+                and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'} and context.space_data.tree_type == 'ShaderNodeTree')
 
     def draw(self, context):
         main_draw(self, context)
@@ -2961,7 +2973,7 @@ class NODE_PT_YPaintUI(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return (context.object and context.object.type in possible_object_types 
-                and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE'} and context.space_data.tree_type == 'ShaderNodeTree')
+                and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'} and context.space_data.tree_type == 'ShaderNodeTree')
 
     def draw(self, context):
         main_draw(self, context)
@@ -2974,7 +2986,7 @@ class VIEW3D_PT_YPaint_tools(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.object and context.object.type in possible_object_types and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE'}
+        return context.object and context.object.type in possible_object_types and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}
 
     def draw(self, context):
         main_draw(self, context)
@@ -2989,7 +3001,7 @@ class VIEW3D_PT_YPaint_ui(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.object and context.object.type in possible_object_types and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE'}
+        return context.object and context.object.type in possible_object_types and context.scene.render.engine in {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}
 
     def draw(self, context):
         main_draw(self, context)
@@ -4718,7 +4730,7 @@ class YPaintUI(bpy.types.PropertyGroup):
     #random_prop = BoolProperty(default=False)
 
 def add_new_ypaint_node_menu(self, context):
-    if context.space_data.tree_type != 'ShaderNodeTree' or context.scene.render.engine not in {'CYCLES', 'BLENDER_EEVEE'}: return
+    if context.space_data.tree_type != 'ShaderNodeTree' or context.scene.render.engine not in {'CYCLES', 'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}: return
     l = self.layout
     l.operator_context = 'INVOKE_REGION_WIN'
     l.separator()
