@@ -41,7 +41,7 @@ from datetime import datetime, timedelta
 # Blender imports, used in limited cases.
 import bpy
 import addon_utils
-# from .common import *
+from .common import *
 
 # -----------------------------------------------------------------------------
 # The main class
@@ -106,8 +106,9 @@ class SingletonUpdater:
         self._check_thread = None
         self._select_link = None
         self.skip_tag = None
-        self.legacy_blender = bpy.app.version <= (2, 7, 9) 
+        self.legacy_blender = not is_greater_than_280() 
         # self.legacy_blender = not is_greater_than_281() 
+        self.using_development_build = False
 
         # Get data from the running blender module (addon).
         self._addon = __package__.lower()
@@ -286,7 +287,11 @@ class SingletonUpdater:
     def include_branch_list(self, value):
         try:
             if value is None:
-                self._include_branch_list = ['master']
+                if self.legacy_blender:
+                    self._include_branch_list = ['blender_279']
+                else:
+                    self._include_branch_list = ['master']
+
             elif not isinstance(value, list) or len(value) == 0:
                 raise ValueError(
                     "include_branch_list should be a list of valid branches")
@@ -684,26 +689,40 @@ class SingletonUpdater:
                     "Most recent tag found:" + str(self._tags[n]['name']))
     
     def get_branches(self):
-        request = self.form_branch_list_url()
-        self.print_verbose("Getting branches from server "+request)
-        
-        all_branches = self.get_api(request)
         self._include_branch_list.clear()
         self._tags.clear()
 
-        for br in all_branches:
-            branch = br["name"]
-            legacy_version = "279" in branch
-            if  legacy_version == self.legacy_blender:
-                request_br = self.form_branch_url(branch)
-                include = {
-                    "name": branch.title(),
-                    "label": branch.title(),
-                    "zipball_url": request_br
-                }
+        if self.legacy_blender:
+            default_branch = "blender_279"
+        else:
+            default_branch = "master"
+            
+        self._include_branch_list.append(default_branch)
+        self._tags.append(self.get_branch_obj(default_branch))
+
+        if not self.legacy_blender:
+            request = self.form_branch_list_url()
+            self.print_verbose("Getting branches from server "+request)
+            all_branches = self.get_api(request)
+
+            for br in all_branches:
+                branch = br["name"]
+                if branch == "master" or branch == "blender_279": # skip default branches
+                    continue
+                include = self.get_branch_obj(branch)
                 self._tags = [include] + self._tags  # append to front
                 self._include_branch_list.append(branch)
+        
         self._json["branches"] = self._include_branch_list
+
+    def get_branch_obj(self, branch_name):
+        request_br = self.form_branch_url(branch_name)
+
+        return {
+            "name": branch_name,
+            "label": branch_name,
+            "zipball_url": request_br
+        }
 
     def get_raw(self, url):
         """All API calls to base url."""
@@ -1027,6 +1046,11 @@ class SingletonUpdater:
         # Change to True to trigger the handler on other side if allowing
         # reloading within same blender session.
         self._json["just_updated"] = True
+        self._json["using_development_build"] = self.using_development_build
+        
+        if self.legacy_blender:
+            bpy.ops.wm.save_userpref()
+
         self.save_updater_json()
         self.reload_addon()
         self._update_ready = False
@@ -1191,7 +1215,10 @@ class SingletonUpdater:
                     self._tags = [include] + self._tags  # append to front
             if dev_build:
                 self._update_ready = dev_build
-                
+
+        if "using_development_build" in saved_json.keys():
+            self.using_development_build = saved_json["using_development_build"]
+
     def clear_state(self):
         self._update_ready = None
         self._update_link = None
@@ -1395,7 +1422,7 @@ class SingletonUpdater:
 
         else:
             # Situation where branches not included.
-            if new_version > self._current_version:
+            if  self.using_development_build or new_version > self._current_version:
 
                 self._update_ready = True
                 self._update_version = new_version
@@ -1466,6 +1493,18 @@ class SingletonUpdater:
         # self._update_version = None
         # self._update_link = None
         # return (False, None, None)
+
+    def on_dev_mode_change(self, dev_mode):
+        self.use_releases = not dev_mode
+        self.include_branches = dev_mode
+        self.clear_state()
+
+        if self.legacy_blender and dev_mode:
+            self.get_branches()
+            link = self.select_link(self, self._tags[0]) # last selected branch
+            self._update_ready = True
+            self._update_link = link
+            self.save_updater_json()
 
     def set_tag(self, name):
         """Assign the tag name and url to update to"""
@@ -1643,6 +1682,7 @@ class SingletonUpdater:
             self._json = {
                 "last_check": "",
                 "backup_date": "",
+                "using_development_build" : self.using_development_build,
                 "update_ready": False,
                 "ignore": False,
                 "just_restored": False,

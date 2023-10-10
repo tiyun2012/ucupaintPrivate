@@ -122,7 +122,7 @@ class AddonUpdaterInstallPopup(bpy.types.Operator):
     # if true, run clean install - ie remove all files before adding new
     # equivalent to deleting the addon and reinstalling, except the
     # updater folder/backup folder remains
-    clean_install : BoolProperty(
+    clean_install = BoolProperty(
         name="Clean install",
         description=("If enabled, completely clear the addon's folder before "
                      "installing new update, creating a fresh install"),
@@ -130,7 +130,7 @@ class AddonUpdaterInstallPopup(bpy.types.Operator):
         options={'HIDDEN'}
     )
 
-    ignore_enum : EnumProperty(
+    ignore_enum = EnumProperty(
         name="Process update",
         description="Decide to install, ignore, or defer new addon update",
         items=[
@@ -271,7 +271,7 @@ class AddonUpdaterUpdateNow(bpy.types.Operator):
     # If true, run clean install - ie remove all files before adding new
     # equivalent to deleting the addon and reinstalling, except the updater
     # folder/backup folder remains.
-    clean_install : BoolProperty(
+    clean_install = BoolProperty(
         name="Clean install",
         description=("If enabled, completely clear the addon's folder before "
                      "installing new update, creating a fresh install"),
@@ -290,7 +290,9 @@ class AddonUpdaterUpdateNow(bpy.types.Operator):
         if updater.update_ready:
             # if it fails, offer to open the website instead
             try:
-                settings:YPaintPreferences = get_user_preferences()
+                settings = get_user_preferences()
+                updater.using_development_build = settings.development_build
+
                 if settings.development_build:
                     res = updater.run_update(force=False,
                                             revert_tag=settings.branches,
@@ -348,7 +350,7 @@ class AddonUpdaterUpdateTarget(bpy.types.Operator):
             i += 1
         return ret
 
-    target : EnumProperty(
+    target = EnumProperty(
         name="Target version to install",
         description="Select the version to install",
         items=target_version
@@ -357,7 +359,7 @@ class AddonUpdaterUpdateTarget(bpy.types.Operator):
     # If true, run clean install - ie remove all files before adding new
     # equivalent to deleting the addon and reinstalling, except the
     # updater folder/backup folder remains.
-    clean_install : BoolProperty(
+    clean_install = BoolProperty(
         name="Clean install",
         description=("If enabled, completely clear the addon's folder before "
                      "installing new update, creating a fresh install"),
@@ -414,7 +416,7 @@ class AddonUpdaterInstallManually(bpy.types.Operator):
     bl_description = "Proceed to manually install update"
     bl_options = {'REGISTER', 'INTERNAL'}
 
-    error : StringProperty(
+    error = StringProperty(
         name="Error Occurred",
         default="",
         options={'HIDDEN'}
@@ -480,7 +482,7 @@ class AddonUpdaterUpdatedSuccessful(bpy.types.Operator):
     bl_description = "Update installation response"
     bl_options = {'REGISTER', 'INTERNAL', 'UNDO'}
 
-    error : StringProperty(
+    error = StringProperty(
         name="Error Occurred",
         default="",
         options={'HIDDEN'}
@@ -633,15 +635,15 @@ ran_update_success_popup = False
 ran_background_check = False
 
 def update_development_build(self, context):
-    updater.use_releases = not self.development_build
-    updater.include_branches = self.development_build
-    updater.clear_state()
+    updater.on_dev_mode_change(self.development_build)
+     # if latest 
+
+
 
 def list_branches(self, context):
-    retval = [('master','master',"")]
+    retval = list()
     for br in updater.include_branch_list:
-        if br != 'master':
-            retval.append((br,br,""))
+        retval.append((br,br,""))
     return retval 
 
 @persistent
@@ -967,7 +969,7 @@ def update_settings_ui(self, context, element=None):
         box.label(text="Error initializing updater code:")
         box.label(text=updater.error_msg)
         return
-    settings:YPaintPreferences = get_user_preferences()
+    settings = get_user_preferences()
     if not settings:
         box.label(text="Error getting updater preferences", icon='ERROR')
         return
@@ -1011,12 +1013,11 @@ def update_settings_ui(self, context, element=None):
     row.prop(settings, 'development_build')
 
     dev_mode = settings.development_build
-    if dev_mode:
+    if dev_mode and not updater.legacy_blender:
         row.prop(settings, 'branches', text="Branch")
 
     # print("use releases", updater.use_releases, "| use branch", updater.include_branches)
     check_operator = RefreshBranchesNow.bl_idname if dev_mode else AddonUpdaterCheckNow.bl_idname
-    # update_operator = RefreshBranchesNow.bl_idname if dev_mode else AddonUpdaterUpdateNow.bl_idname
     
     # print("include br", updater.include_branches, " dev_mode", dev_mode)
     # Checking / managing updates.
@@ -1036,7 +1037,9 @@ def update_settings_ui(self, context, element=None):
         split = sub_col.split(align=True)
         split.operator(check_operator,
                     text="", icon="FILE_REFRESH")
-
+    elif updater.legacy_blender and dev_mode:
+        row.operator(AddonUpdaterUpdateNow.bl_idname,
+                    text="Update now")
     elif updater.update_ready is None and not updater.async_checking:
         row.operator(check_operator)
     elif updater.update_ready is None:  # async is running
@@ -1280,7 +1283,7 @@ def register(bl_info):
     # 			/addons/{__package__}/{__package__}_updater
 
     # Auto create a backup of the addon when installing other versions.
-    updater.backup_current = True  # True by default
+    updater.backup_current = not updater.legacy_blender  # True by default
 
     # Sample ignore patterns for when creating backup of current during update.
     updater.backup_ignore_patterns = ["__pycache__"]
@@ -1410,7 +1413,7 @@ def register(bl_info):
     # Special situation: we just updated the addon, show a popup to tell the
     # user it worked. Could enclosed in try/catch in case other issues arise.
     show_reload_popup()
-    pref:YPaintPreferences = get_user_preferences()
+    pref = get_user_preferences()
     update_development_build(pref, None)
     updater.restore_saved_branches(pref.development_build)
 
