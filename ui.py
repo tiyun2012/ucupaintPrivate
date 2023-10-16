@@ -3,7 +3,6 @@ from bpy.props import *
 from bpy.app.handlers import persistent
 from . import lib, Modifier, MaskModifier, NormalMapModifier, Root, UDIM
 from .common import *
-#from .subtree import *
 
 def update_yp_ui():
 
@@ -2696,12 +2695,42 @@ def main_draw(self, context):
     #layout.operator("node.y_debug_mesh", icon='MESH_DATA')
     #layout.operator("node.y_test_ray", icon='MESH_DATA')
 
+    from . import addon_updater_ops
+
+    row_update = layout.row()
+    updater = addon_updater_ops.updater
+
+    if not updater.auto_reload_post_update:
+        saved_state = updater.json
+        if "just_updated" in saved_state and saved_state["just_updated"]:
+            row_update.alert = True
+            row_update.operator("wm.quit_blender",
+                         text="Restart blender to complete update",
+                         icon="ERROR")
+            return
+        
+    if updater.update_ready and not ypui.hide_update:
+        row_update.alert = True
+        if updater.using_development_build:
+            update_now_txt = "Update to latest commit on '{}' branch".format(updater.current_branch)
+            row_update.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname, text=update_now_txt)
+        else:
+            row_update.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname,
+                        text="Update now to " + str(updater.update_version))
+        row_update.alert = False
+
+        row_update.operator(addon_updater_ops.UpdaterPendingUpdate.bl_idname, icon="X", text="")
+
     icon = 'TRIA_DOWN' if ypui.show_object else 'TRIA_RIGHT'
     row = layout.row(align=True)
     row.prop(ypui, 'show_object', emboss=False, text='', icon=icon)
     if obj:
         row.label(text='Object: ' + obj.name)
     else: row.label(text='Object: -')
+
+    if not is_greater_than_280():
+        row.menu("NODE_MT_ypaint_about_menu", text='', icon='INFO')
+    else: row.popover("NODE_MT_ypaint_about_popover", text='', icon='INFO')
 
     if ypui.show_object:
         box = layout.box()
@@ -3396,6 +3425,69 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
             if layer.enable: eye_icon = 'HIDE_OFF'
             else: eye_icon = 'HIDE_ON'
         row.prop(layer, 'enable', emboss=False, text='', icon=eye_icon)
+
+def draw_ypaint_about(self, context):
+    col = self.layout.column(align=True)
+    col.label(text=get_addon_title() + ' is created by:')
+    col.operator('wm.url_open', text='ucupumar', icon='ARMATURE_DATA').url = 'https://www.patreon.com/ucupumar'
+    col.operator('wm.url_open', text='arsa', icon='ARMATURE_DATA').url = 'https://sites.google.com/view/arsanagara'
+    col.operator('wm.url_open', text='swifterik', icon='ARMATURE_DATA').url = 'https://jblaha.art/'
+    col.operator('wm.url_open', text='rifai', icon='ARMATURE_DATA').url = 'https://github.com/rifai'
+    col.separator()
+
+    from . import addon_updater_ops
+    updater = addon_updater_ops.updater
+
+    row = col.row()            
+    if updater.using_development_build:
+        row.label(text="Branch: "+updater.current_branch)
+    else:
+        row.label(text="Branch: Stable "+str(updater.current_version))
+    if not is_greater_than_280():
+        col.operator(updater.addon + '.updater_update_target', text="Change Branch", icon="FILE_SCRIPT")
+        col.operator(updater.addon + '.branches_releases_refresh', text="Check for update", icon="FILE_REFRESH")
+    else:
+        row.menu("NODE_MT_updater_setting_menu", text='', icon='PREFERENCES')
+
+    if updater.async_checking:
+        col.enabled = False
+        col.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname, text="Checking...")
+    elif updater.update_ready:
+        col.alert = True
+        if updater.using_development_build:
+            update_now_txt = "Update to latest commit on '{}' branch".format(
+                updater.current_branch)
+            col.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname, text=update_now_txt)
+            
+        else:
+            col.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname,
+                        text="Update now to " + str(updater.update_version))
+
+class YPaintAboutPopover(bpy.types.Panel):
+    bl_idname = "NODE_MT_ypaint_about_popover"
+    bl_label = get_addon_title() + " About"
+    bl_description = get_addon_title() + " About"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        draw_ypaint_about(self, context)
+
+class YPaintAboutMenu(bpy.types.Menu):
+    bl_idname = "NODE_MT_ypaint_about_menu"
+    bl_label = get_addon_title() + " About"
+    bl_description = get_addon_title() + " About"
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        draw_ypaint_about(self, context)
 
 class YPaintSpecialMenu(bpy.types.Menu):
     bl_idname = "NODE_MT_ypaint_special_menu"
@@ -4727,6 +4819,7 @@ class YPaintUI(bpy.types.PropertyGroup):
     active_mat = StringProperty(default='')
     active_ypaint_node = StringProperty(default='')
 
+    hide_update = BoolProperty(default=False)
     #random_prop = BoolProperty(default=False)
 
 def add_new_ypaint_node_menu(self, context):
@@ -4774,6 +4867,8 @@ def yp_load_ui_settings(scene):
     wmui.need_update = True
 
 def register():
+    bpy.utils.register_class(YPaintAboutMenu)
+    bpy.utils.register_class(YPaintAboutPopover)
     bpy.utils.register_class(YPaintSpecialMenu)
     bpy.utils.register_class(YNewLayerMenu)
     bpy.utils.register_class(YBakedImageMenu)
@@ -4821,6 +4916,8 @@ def register():
     bpy.app.handlers.save_pre.append(yp_save_ui_settings)
 
 def unregister():
+    bpy.utils.unregister_class(YPaintAboutMenu)
+    bpy.utils.unregister_class(YPaintAboutPopover)
     bpy.utils.unregister_class(YPaintSpecialMenu)
     bpy.utils.unregister_class(YNewLayerMenu)
     bpy.utils.unregister_class(YBakedImageMenu)
