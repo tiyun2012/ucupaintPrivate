@@ -46,7 +46,7 @@ from .common import *
 # -----------------------------------------------------------------------------
 # The main class
 # -----------------------------------------------------------------------------
-
+LEGACY_BRANCH = "blender_279"
 
 class SingletonUpdater:
     """Addon updater service class.
@@ -290,7 +290,7 @@ class SingletonUpdater:
         try:
             if value is None:
                 if self.legacy_blender:
-                    self._include_branch_list = ['blender_279']
+                    self._include_branch_list = [LEGACY_BRANCH]
                 else:
                     self._include_branch_list = ['master']
 
@@ -433,6 +433,8 @@ class SingletonUpdater:
             nm = tag["name"]
             if "label" in tag.keys():
                 label = tag["label"]
+                if label == LEGACY_BRANCH:
+                    label = "Master (2.79)"
             else:
                 label = "Stable ("+nm+")"
             tag_names.append((nm, label, "Select to install " + nm))
@@ -689,29 +691,28 @@ class SingletonUpdater:
         self._include_branch_list.clear()
         self._tags.clear()
 
-        if not self.legacy_blender:
-            request = self.form_branch_list_url()
-            self.print_verbose("Getting branches from server "+request)
-            all_branches = self.get_api(request)
-            if all_branches is None:
-                all_branches = list()
+        request = self.form_branch_list_url()
+        self.print_verbose("Getting branches from server "+request)
+        all_branches = self.get_api(request)
 
-            for br in all_branches:
-                branch = br["name"]
-                include = self.get_branch_obj(branch, br["commit"]["sha"])
+        if all_branches is None:
+            all_branches = list()
 
-                if branch == "master" or branch == "blender_279": 
-                    if (branch == "master" and not self.legacy_blender) or (branch == "blender_279" and self.legacy_blender) : # skip default branches
-                        self._tags = [include] + self._tags
-                    else: # skip default branches
-                        continue
+        for br in all_branches:
+            branch = br["name"]
+            include = self.get_branch_obj(branch, br["commit"]["sha"])
+
+            if self.legacy_blender:
+                if branch == LEGACY_BRANCH:
+                    self._tags.append(include)
+                    self._include_branch_list.append(branch)
+            elif branch != LEGACY_BRANCH:
+                if branch == "master": 
+                    self._tags = [include] + self._tags
                 else:
                     self._tags.append(include)
-
                 self._include_branch_list.append(branch)
 
-        print("branches", self._include_branch_list)
-        
     def get_branch_obj(self, branch_name, last_commit):
         request_br = self.form_branch_url(branch_name)
 
@@ -1578,6 +1579,9 @@ class SingletonUpdater:
         self._json["ignore"] = False  # clear ignore flag
         self._json["version_text"] = dict()
 
+        # in case error
+        prev_data = (self.using_development_build, self.current_branch)
+
         if revert_tag is not None:
             self.set_tag(revert_tag)
             self._update_ready = True
@@ -1629,6 +1633,11 @@ class SingletonUpdater:
             res = self.stage_repository(self._update_link)
             if not res:
                 print("Error in staging repository: " + str(res))
+                # revert
+                self._update_ready = False
+                self.using_development_build = prev_data[0] 
+                self.current_branch = prev_data[1]
+                
                 if callback is not None:
                     callback(self._addon_package, self._error_msg)
                 return self._error_msg
@@ -1647,6 +1656,11 @@ class SingletonUpdater:
             res = self.stage_repository(self._update_link)
             if not res:
                 print("Error in staging repository: " + str(res))
+                # revert
+                self._update_ready = False
+                self.using_development_build = prev_data[0] 
+                self.current_branch = prev_data[1]
+                
                 if callback:
                     callback(self._addon_package, self._error_msg)
                 return self._error_msg
@@ -1866,7 +1880,7 @@ class SingletonUpdater:
         try:
             self.check_for_branches(update_last_check=False)
             self._update_ready = None
-            self.check_for_update(update_last_check=False)
+            self.check_for_update(update_last_check=True)
         except Exception as exception:
             print("Checking for update error:")
             print(exception)
