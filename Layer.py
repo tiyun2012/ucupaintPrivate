@@ -3613,8 +3613,8 @@ def duplicate_layer_nodes_and_images(tree, specific_layer=None, make_image_singl
                 segment = img.yua.segments.get(img_users[i].segment_name)
                 new_segment = None
 
-                tilenums = UDIM.get_udim_atlas_base_tilenums(img)
-                segment_tilenums = UDIM.get_udim_segment_tilenums(img, segment)
+                tilenums = UDIM.get_udim_segment_base_tilenums(segment)
+                segment_tilenums = UDIM.get_udim_segment_tilenums(segment)
 
                 # create new segment based on previous one
                 if make_image_blank:
@@ -3666,6 +3666,7 @@ def duplicate_layer_nodes_and_images(tree, specific_layer=None, make_image_singl
 
                     if img.source == 'TILED':
                         img_nodes[i].image = img.copy()
+                        img_nodes[i].image.name = img_name
                         UDIM.fill_tiles(img_nodes[i].image, color)
                         UDIM.initial_pack_udim(img_nodes[i].image, color)
                     else:

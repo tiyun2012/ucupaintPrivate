@@ -175,12 +175,12 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
                 row.label(text='Width: ' + str(segment.width))
                 row.label(text='Height: ' + str(segment.height))
             else:
-                row = col.row()
-                index = [i for i, s in enumerate(image.yua.segments) if s == segment]
-                if len(index) > 0:
-                    index = index[0]
-                    row.label(text='Index: ' + str(index))
-                row.label(text='Offset Y: ' + str(image.yua.offset_y))
+                split = col.split(factor=0.4)
+                split.label(text='Tile Numbers: ')
+                row = split.row(align=True)
+                segment_tilenums = UDIM.get_udim_segment_tilenums(segment)
+                for tilenum in segment_tilenums:
+                    row.label(text=str(tilenum))
 
             if segment.bake_info.is_baked:
                 draw_bake_info(segment.bake_info, col, entity)
@@ -3453,14 +3453,16 @@ def draw_ypaint_about(self, context):
 
     row = col.row()            
     if updater.using_development_build:
-        row.label(text="Branch: "+updater.current_branch)
+        if addon_updater_ops.updater.legacy_blender:
+            row.label(text="Branch: Master (2.79)")
+        else:
+            row.label(text="Branch: "+updater.current_branch)
     else:
         row.label(text="Branch: Stable "+str(updater.current_version))
-    if not is_greater_than_280():
-        col.operator(updater.addon + '.updater_update_target', text="Change Branch", icon="FILE_SCRIPT")
-        col.operator(updater.addon + '.branches_releases_refresh', text="Check for update", icon="FILE_REFRESH")
+    if addon_updater_ops.updater.legacy_blender:
+        col.operator(addon_updater_ops.AddonUpdaterUpdateTarget.bl_idname, text="Change Branch", icon="FILE_SCRIPT")
     else:
-        row.menu("NODE_MT_updater_setting_menu", text='', icon='PREFERENCES')
+        row.menu(addon_updater_ops.UpdaterSettingMenu.bl_idname, text='', icon='PREFERENCES')
 
     if updater.async_checking:
         col.enabled = False
@@ -3475,6 +3477,8 @@ def draw_ypaint_about(self, context):
         else:
             col.operator(addon_updater_ops.AddonUpdaterUpdateNow.bl_idname,
                         text="Update now to " + str(updater.update_version))
+    else:
+        col.operator(addon_updater_ops.RefreshBranchesReleasesNow.bl_idname, text="Check for update", icon="FILE_REFRESH")
 
 class YPaintAboutPopover(bpy.types.Panel):
     bl_idname = "NODE_PT_ypaint_about_popover"

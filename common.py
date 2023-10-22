@@ -1583,12 +1583,12 @@ def get_node_tree_lib(name):
 
         # Load node groups
         exist_groups = [ng.name for ng in bpy.data.node_groups]
-        for ng in data_from.node_groups:
+        from_ngs = data_from.node_groups if hasattr(data_from, 'node_groups') else getattr(data_from, 'node groups')
+        to_ngs = data_to.node_groups if hasattr(data_to, 'node_groups') else getattr(data_to, 'node groups')
+        for ng in from_ngs:
             if ng == name: # and ng not in exist_groups:
-
-                data_to.node_groups.append(ng)
+                to_ngs.append(ng)
                 #appended = True
-
                 break
 
     node_tree = bpy.data.node_groups.get(name)
@@ -2699,6 +2699,26 @@ def set_uv_neighbor_resolution(entity, uv_neighbor=None, source=None):
     uv_neighbor.inputs['ResX'].default_value = res_x
     uv_neighbor.inputs['ResY'].default_value = res_y
 
+def get_tilenums_height(tilenums):
+    min_y = int(min(tilenums) / 10)
+    max_y = int(max(tilenums) / 10)
+
+    return max_y - min_y + 1
+
+def get_udim_segment_tiles_height(segment):
+    tilenums = [btile.number for btile in segment.base_tiles]
+    return get_tilenums_height(tilenums)
+
+def get_udim_segment_mapping_offset(segment):
+    image = segment.id_data
+
+    offset_y = 0 
+    for i, seg in enumerate(image.yua.segments):
+        if seg == segment:
+            return offset_y
+        tiles_height = get_udim_segment_tiles_height(seg)
+        offset_y += tiles_height + 1
+
 def clear_mapping(entity):
 
     m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
@@ -2746,13 +2766,7 @@ def update_mapping(entity):
         image = source.image
         if image.source == 'TILED':
             segment = image.yua.segments.get(entity.segment_name)
-
-            offset_y = 0
-            for i, seg in enumerate(image.yua.segments):
-                if seg == segment:
-                    offset_y = image.yua.offset_y * i
-                    break
-
+            offset_y = get_udim_segment_mapping_offset(segment) 
             mapping.inputs[1].default_value[1] = offset_y
         else:
             segment = image.yia.segments.get(entity.segment_name)
@@ -5035,17 +5049,66 @@ def set_image_pixels(image, color, segment=None):
 
         image.pixels = pxs
 
+def is_image_filepath_unique(image):
+    abspath = bpy.path.abspath(image.filepath)
+    for img in bpy.data.images:
+        if img != image and bpy.path.abspath(img.filepath) == abspath:
+            return False
+    return True
+
 def duplicate_image(image):
     # Make sure UDIM image is updated
     if image.source == 'TILED' and image.is_dirty:
-
-        # WARNING: This will cause a problem if UDIM image is originally from disk
-        # Since duplicated image will point to same source
         if image.packed_file:
             image.pack()
         else: image.save()
 
+    # Get new name
+    new_name = get_unique_name(image.name, bpy.data.images)
+
+    # Copy image
     new_image = image.copy()
+    new_image.name = new_name
+
+    if image.source == 'TILED'  or not image.packed_file:
+
+        # NOTE: Duplicated image will always be packed for now
+        if not image.packed_file:
+            new_image.pack()
+
+        directory = os.path.dirname(bpy.path.abspath(image.filepath))
+        filename = bpy.path.basename(new_image.filepath)
+
+        # Get base name
+        if image.source == 'TILED':
+            splits = filename.split('.<UDIM>.')
+            infix = '.<UDIM>.'
+        else: 
+            splits = os.path.splitext(filename)
+            infix = ''
+
+        basename = new_name
+        extension = splits[1]
+
+        # Try to get the counter
+        m = re.match(r'^(.+)\s(\d*)$', basename)
+        if m:
+            basename = m.group(1)
+            counter = int(m.group(2))
+        else: counter = 1
+
+        # Try to set the image filepath with added counter
+        while True:
+            new_name = basename + ' ' + str(counter)
+            new_path = os.path.join(directory, new_name + infix + extension)
+            new_image.filepath = new_path
+            if is_image_filepath_unique(new_image):
+                break
+            counter += 1
+
+        # Trying to set the filepath to relative
+        try: new_image.filepath = bpy.path.relpath(new_image.filepath)
+        except: pass
 
     # Copied image is not updated by default if it's dirty,
     # So copy the pixels

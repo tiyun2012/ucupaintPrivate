@@ -40,6 +40,9 @@ def transfer_uv(objs, mat, entity, uv_map):
         uv_layers = get_uv_layers(obj)
         uv_layers.active = uv_layers.get(uv_map)
 
+    # Get tile numbers
+    tilenums = UDIM.get_tile_numbers(objs, uv_map)
+
     # Get image settings
     segment = None
     use_alpha = False
@@ -54,6 +57,19 @@ def transfer_uv(objs, mat, entity, uv_map):
         else: 
             col = (0.0, 0.0, 0.0, 0.0)
             use_alpha = True
+    elif image.yua.is_udim_atlas and entity.segment_name != '':
+        segment = image.yua.segments.get(entity.segment_name)
+        segment_tilenums = UDIM.get_udim_segment_tilenums(segment)
+
+        # Get the highest resolution
+        for i, st in enumerate(segment_tilenums):
+            if i == 0 : width = height = 1
+            tile = image.tiles.get(st)
+            if tile.size[0] > width: width = tile.size[0]
+            if tile.size[1] > height: height = tile.size[1]
+
+        col = segment.base_color
+        use_alpha = True if col[3] < 0.5 else False
     else:
         width = image.size[0]
         height = image.size[1]
@@ -71,18 +87,20 @@ def transfer_uv(objs, mat, entity, uv_map):
             col = (0.0, 0.0, 0.0, 0.0)
             use_alpha = True
 
-    # Get tile numbers
-    tilenums = UDIM.get_tile_numbers(objs, uv_map)
-
     # Create temp image as bake target
-    if len(tilenums) > 1:
+    if len(tilenums) > 1 or (segment and image.source == 'TILED'):
         temp_image = bpy.data.images.new(name='__TEMP',
                 width=width, height=height, alpha=True, float_buffer=image.is_float, tiled=True)
 
         # Fill tiles
         for tilenum in tilenums:
             UDIM.fill_tile(temp_image, tilenum, col, width, height)
-        UDIM.initial_pack_udim(temp_image, col, image.name)
+
+        # Initial pack
+        if image.yua.is_udim_atlas:
+            UDIM.initial_pack_udim(temp_image, col)
+        else: UDIM.initial_pack_udim(temp_image, col, image.name)
+
     else:
         temp_image = bpy.data.images.new(name='__TEMP',
                 width=width, height=height, alpha=True, float_buffer=image.is_float)
@@ -197,8 +215,26 @@ def transfer_uv(objs, mat, entity, uv_map):
         # Remove temp image 1
         bpy.data.images.remove(temp_image1)
 
-    # Replace image if any of the images is using UDIM
-    if temp_image.source == 'TILED' or image.source == 'TILED':
+    if segment and image.source == 'TILED':
+
+        # Remove original segment
+        UDIM.remove_udim_atlas_segment_by_name(image, segment.name, yp)
+
+        # Create new segment
+        new_segment = UDIM.get_set_udim_atlas_segment(tilenums, 
+                width=width, height=height, color=col, 
+                colorspace=image.colorspace_settings.name, hdr=image.is_float, yp=yp, 
+                source_image=temp_image, source_tilenums=tilenums)
+
+        # Set image
+        if image != new_segment.id_data:
+            source.image = new_segment.id_data
+
+        # Remove temp image
+        bpy.data.images.remove(temp_image)
+
+    elif temp_image.source == 'TILED' or image.source == 'TILED':
+        # Replace image if any of the images is using UDIM
         replace_image(image, temp_image)
     else:
         # Copy back temp/baked image to original image
@@ -225,6 +261,9 @@ def transfer_uv(objs, mat, entity, uv_map):
 
     # Change uv of entity
     entity.uv_name = uv_map
+
+    # Update mapping
+    update_mapping(entity)
 
     # Remove temporary objects
     if temp_objs:
@@ -502,6 +541,28 @@ class YTransferLayerUV(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def get_resize_image_entity_and_image(self, context):
+    yp = get_active_ypaint_node().node_tree.yp
+    entity = yp.layers.get(self.layer_name)
+    image = bpy.data.images.get(self.image_name)
+
+    if entity:
+        for mask in entity.masks:
+            if mask.active_edit:
+                entity = mask
+                break
+    
+    return entity, image
+
+def update_resize_image_tile_number(self, context):
+    entity, image = get_resize_image_entity_and_image(self, context)
+
+    if image and image.source == 'TILED':
+        tile = image.tiles.get(int(self.tile_number))
+        if tile:
+            self.width = tile.size[0]
+            self.height = tile.size[1]
+
 class YResizeImage(bpy.types.Operator):
     bl_idname = "node.y_resize_image"
     bl_label = "Resize Image Layer/Mask"
@@ -511,8 +572,8 @@ class YResizeImage(bpy.types.Operator):
     layer_name = StringProperty(default='')
     image_name = StringProperty(default='')
 
-    width = IntProperty(name='Width', default = 1234, min=1, max=4096)
-    height = IntProperty(name='Height', default = 1234, min=1, max=4096)
+    width = IntProperty(name='Width', default = 1024, min=1, max=4096)
+    height = IntProperty(name='Height', default = 1024, min=1, max=4096)
 
     samples = IntProperty(name='Bake Samples', 
             description='Bake Samples, more means less jagged on generated image', 
@@ -522,79 +583,78 @@ class YResizeImage(bpy.types.Operator):
             description='Resize all tiles',
             default=False)
 
-    tile_number = IntProperty(name='Tile Number',
+    tile_number = EnumProperty(name='Tile Number',
             description='Tile number that will be resized',
-            default=1001, min=1001, max=2000)
+            items = UDIM.udim_tilenum_items,
+            update=update_resize_image_tile_number)
 
     @classmethod
     def poll(cls, context):
         return get_active_ypaint_node() and context.object.type == 'MESH'
 
     def invoke(self, context, event):
-        ypup = get_user_preferences()
-        image = bpy.data.images.get(self.image_name)
+        entity, image = get_resize_image_entity_and_image(self, context)
 
-        # Use user preference default image size if input uses default image size
-        if self.width == 1234 and self.height == 1234:
-            self.width = self.height = ypup.default_new_image_size
+        if image:
+            self.width = image.size[0]
+            self.height = image.size[1]
 
-        if image.source == 'TILED':
-            tile = image.tiles.active
-            self.tile_number = tile.number
+            if image.source == 'TILED':
+                tile = image.tiles.get(int(self.tile_number))
+                if tile:
+                    self.width = tile.size[0]
+                    self.height = tile.size[1]
+
+            elif entity and image.yia.is_image_atlas:
+                segment = image.yia.segments.get(entity.segment_name)
+                self.width = segment.width
+                self.height = segment.height
 
         return context.window_manager.invoke_props_dialog(self, width=320)
 
     def draw(self, context):
+        image = bpy.data.images.get(self.image_name)
+
         if is_greater_than_280():
             row = self.layout.split(factor=0.4)
         else: row = self.layout.split(percentage=0.4)
-
-        image = bpy.data.images.get(self.image_name)
 
         col = row.column(align=False)
 
         col.label(text='Width:')
         col.label(text='Height:')
 
-        if image.yia.is_image_atlas or not is_greater_than_281():
-            col.label(text='Samples:')
+        if image:
+            if image.yia.is_image_atlas or not is_greater_than_281():
+                col.label(text='Samples:')
 
-        if image.source == 'TILED':
-            col.label(text='')
-            if not self.all_tiles:
-                col.label(text='Tile Number:')
+            if image.source == 'TILED':
+                col.label(text='')
+                if not self.all_tiles:
+                    col.label(text='Tile Number:')
 
         col = row.column(align=False)
 
         col.prop(self, 'width', text='')
         col.prop(self, 'height', text='')
 
-        if image.yia.is_image_atlas or not is_greater_than_281():
-            col.prop(self, 'samples', text='')
+        if image:
+            if image.yia.is_image_atlas or not is_greater_than_281():
+                col.prop(self, 'samples', text='')
 
-        if image.source == 'TILED':
-            col.prop(self, 'all_tiles')
-            if not self.all_tiles:
-                col.prop(self, 'tile_number', text='')
+            if image.source == 'TILED':
+                col.prop(self, 'all_tiles')
+                if not self.all_tiles:
+                    col.prop(self, 'tile_number', text='')
 
     def execute(self, context):
 
         yp = get_active_ypaint_node().node_tree.yp
-        layer = yp.layers.get(self.layer_name)
-        image = bpy.data.images.get(self.image_name)
+        entity, image = get_resize_image_entity_and_image(self, context)
 
-        if not layer or not image:
-            self.report({'ERROR'}, "Image/layer is not found!")
+        if not entity or not image:
+            self.report({'ERROR'}, "There is no active image!")
             return {'CANCELLED'}
-
-        # Get entity
-        entity = layer
-        mask_entity = False
-        for mask in layer.masks:
-            if mask.active_edit:
-                entity = mask
-                mask_entity = True
-                break
 
         # Get original size
         segment = None
@@ -602,6 +662,10 @@ class YResizeImage(bpy.types.Operator):
             segment = image.yia.segments.get(entity.segment_name)
             ori_width = segment.width
             ori_height = segment.height
+        if image.source == 'TILED':
+            tile = image.tiles.get(int(self.tile_number))
+            ori_width = tile.size[0]
+            ori_height = tile.size[1]
         else:
             ori_width = image.size[0]
             ori_height = image.size[1]
@@ -616,9 +680,13 @@ class YResizeImage(bpy.types.Operator):
 
         if not image.yia.is_image_atlas and is_greater_than_281():
 
-            tilenums = [self.tile_number]
+            tilenums = [int(self.tile_number)]
             if image.source == 'TILED' and self.all_tiles:
-                tilenums = [t.number for t in image.tiles]
+                if image.yua.is_udim_atlas:
+                    segment = image.yua.segments.get(entity.segment_name)
+                    tilenums = UDIM.get_udim_segment_tilenums(segment)
+                else:
+                    tilenums = [t.number for t in image.tiles]
 
             ori_ui_type = bpy.context.area.ui_type
             bpy.context.area.ui_type = 'UV'

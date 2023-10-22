@@ -508,7 +508,7 @@ class YBakeToLayer(bpy.types.Operator):
                         self.height = segment.height
                     else: 
                         segment = source.image.yua.segments.get(overwrite_entity.segment_name)
-                        tilenums = UDIM.get_udim_segment_tilenums(source.image, segment)
+                        tilenums = UDIM.get_udim_segment_tilenums(segment)
                         if len(tilenums) > 0:
                             tile = source.image.tiles.get(tilenums[0])
                             self.width = tile.size[0]
@@ -1485,7 +1485,7 @@ class YBakeToLayer(bpy.types.Operator):
                     if self.use_udim:
                         need_to_create_new_segment = ia_image.is_float != self.hdr
                         if need_to_create_new_segment:
-                            UDIM.remove_udim_atlas_segment_by_name(ia_image, segment.name, tilenums, yp)
+                            UDIM.remove_udim_atlas_segment_by_name(ia_image, segment.name, yp)
                     else:
                         need_to_create_new_segment = self.width != segment.width or self.height != segment.height or ia_image.is_float != self.hdr
                         if need_to_create_new_segment:
@@ -1510,10 +1510,10 @@ class YBakeToLayer(bpy.types.Operator):
 
                 # Set baked image to segment
                 if self.use_udim:
-                    segment_index = UDIM.get_udim_segment_index(ia_image, segment)
+                    offset = get_udim_segment_mapping_offset(segment) * 10
                     copy_dict = {}
                     for tilenum in tilenums:
-                        copy_dict[tilenum] = tilenum + ia_image.yua.offset_y * segment_index * 10
+                        copy_dict[tilenum] = tilenum + offset
                     UDIM.copy_tiles(image, ia_image, copy_dict)
                 else: copy_image_pixels(image, ia_image, segment)
                 temp_img = image
@@ -2185,10 +2185,10 @@ class YDuplicateLayerToImage(bpy.types.Operator):
 
                 # Set baked image to segment
                 if self.use_udim:
-                    segment_index = UDIM.get_udim_segment_index(ia_image, segment)
+                    offset = get_udim_segment_mapping_offset(segment) * 10
                     copy_dict = {}
                     for tilenum in tilenums:
-                        copy_dict[tilenum] = tilenum + ia_image.yua.offset_y * segment_index * 10
+                        copy_dict[tilenum] = tilenum + offset
                     UDIM.copy_tiles(image, ia_image, copy_dict)
                 else: copy_image_pixels(image, ia_image, segment)
                 temp_img = image
