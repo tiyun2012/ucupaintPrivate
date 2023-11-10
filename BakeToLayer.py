@@ -213,12 +213,16 @@ class YBakeToLayer(bpy.types.Operator):
             )
 
     fxaa = BoolProperty(name='Use FXAA', 
-            description = "Use FXAA to baked image (doesn't work with float images)",
+            description = "Use FXAA on baked image (doesn't work with float images)",
             default=True)
 
     ssaa = BoolProperty(name='Use SSAA', 
-            description = "Use Supersample AA to baked image",
+            description = "Use Supersample AA on baked image",
             default=False)
+
+    denoise = BoolProperty(name='Use Denoise', 
+            description = "Use Denoise on baked image",
+            default=True)
 
     width = IntProperty(name='Width', default = 1234, min=1, max=4096)
     height = IntProperty(name='Height', default = 1234, min=1, max=4096)
@@ -693,6 +697,9 @@ class YBakeToLayer(bpy.types.Operator):
             col.prop(self, 'ssaa')
         else: col.prop(self, 'fxaa')
 
+        if self.type in {'AO'} and is_greater_than_281():
+            col.prop(self, 'denoise')
+
         col.separator()
 
         #if not self.type.startswith('MULTIRES_') or self.type not in {'SELECTED_VERTICES'}:
@@ -856,6 +863,9 @@ class YBakeToLayer(bpy.types.Operator):
         # For now SSAA only works with other object baking
         use_ssaa = self.ssaa and self.type.startswith('OTHER_OBJECT_')
 
+        # Denoising only available for AO bake for now
+        use_denoise = self.denoise and self.type in {'AO'} and is_greater_than_281()
+
         # SSAA will multiply size by 2 then resize it back
         if use_ssaa:
             width = self.width * 2
@@ -972,10 +982,21 @@ class YBakeToLayer(bpy.types.Operator):
 
         #return {'FINISHED'}
 
-        # Prepare bake settings
+        # Check if there's channel using alpha
+        alpha_outp = None
+        for c in yp.channels:
+            if c.enable_alpha:
+                alpha_outp = node.outputs.get(c.name + io_suffix['ALPHA'])
+                if alpha_outp: break
 
+        # Prepare bake settings
         if self.type == 'AO':
-            bake_type = 'AO'
+            if alpha_outp:
+                # If there's alpha channel use standard AO bake, which has lesser quality denoising
+                bake_type = 'AO'
+            else: 
+                # When there is no alpha channel use combined render bake, which has better denoising
+                bake_type = 'COMBINED'
         elif self.type == 'MULTIRES_NORMAL':
             bake_type = 'NORMALS'
         elif self.type == 'MULTIRES_DISPLACEMENT':
@@ -1002,7 +1023,7 @@ class YBakeToLayer(bpy.types.Operator):
                 bake_from_multires=self.type.startswith('MULTIRES_'), tile_x = tile_x, tile_y = tile_y, 
                 use_selected_to_active=self.type.startswith('OTHER_OBJECT_'),
                 max_ray_distance=self.max_ray_distance, cage_extrusion=self.cage_extrusion,
-                source_objs=other_objs,
+                source_objs=other_objs, use_denoising=False,
                 )
 
         # Set multires level
@@ -1183,13 +1204,28 @@ class YBakeToLayer(bpy.types.Operator):
         ori_bsdf = output.inputs[0].links[0].from_socket
 
         if self.type == 'AO':
-            src = None
+            # If there's alpha channel use standard AO bake, which has lesser quality denoising
+            if alpha_outp:
+                src = None
 
-            if hasattr(context.scene.cycles, 'use_fast_gi'):
-                context.scene.cycles.use_fast_gi = True
+                if hasattr(context.scene.cycles, 'use_fast_gi'):
+                    context.scene.cycles.use_fast_gi = True
 
-            if context.scene.world:
-                context.scene.world.light_settings.distance = self.ao_distance
+                if context.scene.world:
+                    context.scene.world.light_settings.distance = self.ao_distance
+            # When there is no alpha channel use combined render bake, which has better denoising
+            else:
+                src = mat.node_tree.nodes.new('ShaderNodeAmbientOcclusion')
+
+                if 'Distance' in src.inputs:
+                    src.inputs['Distance'].default_value = self.ao_distance
+
+                # Links
+                if not is_greater_than_280():
+                    mat.node_tree.links.new(src.outputs[0], output.inputs[0])
+                else:
+                    mat.node_tree.links.new(src.outputs['AO'], bsdf.inputs[0])
+                    mat.node_tree.links.new(bsdf.outputs[0], output.inputs[0])
 
         elif self.type == 'POINTINESS':
             src = mat.node_tree.nodes.new('ShaderNodeNewGeometry')
@@ -1474,6 +1510,10 @@ class YBakeToLayer(bpy.types.Operator):
             # Back to original size if using SSA
             if use_ssaa:
                 image, temp_segment = resize_image(image, self.width, self.height, image.colorspace_settings.name, alpha_aware=True, bake_device=self.bake_device)
+
+            # Denoise AO image
+            if use_denoise:
+                image = denoise_image(image)
 
             new_segment_created = False
 

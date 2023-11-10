@@ -1,4 +1,4 @@
-import bpy, time, os, numpy
+import bpy, time, os, numpy, tempfile
 from .common import *
 from .node_connections import *
 from . import lib, Layer, ImageAtlas, UDIM
@@ -343,7 +343,7 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
         disable_problematic_modifiers=False, hide_other_objs=True, bake_from_multires=False, 
         tile_x=64, tile_y=64, use_selected_to_active=False, max_ray_distance=0.0, cage_extrusion=0.0,
         bake_target = 'IMAGE_TEXTURES',
-        source_objs=[], bake_device='GPU'):
+        source_objs=[], bake_device='GPU', use_denoising=False):
 
     scene = bpy.context.scene
     ypui = bpy.context.window_manager.ypui
@@ -365,7 +365,7 @@ def prepare_bake_settings(book, objs, yp=None, samples=1, margin=5, uv_map='', b
         scene.render.tile_y = tile_y
 
     if hasattr(scene.cycles, 'use_denoising'):
-        scene.cycles.use_denoising = False
+        scene.cycles.use_denoising = use_denoising
 
     if hasattr(scene.render.bake, 'target'):
         scene.render.bake.target = bake_target
@@ -702,9 +702,139 @@ def recover_bake_settings(book, yp=None, recover_active_uv=False, mat=None):
                 #act_uv = m.node_tree.nodes.get(ACTIVE_UV_NODE)
                 #if act_uv: m.node_tree.nodes.remove(act_uv)
 
+def prepare_composite_settings(res_x=1024, res_y=1024, use_hdr=False):
+    book = {}
+
+    # Remember original scene
+    book['ori_scene_name'] = bpy.context.scene.name
+
+    # Check if original viewport is using camera view
+    area = bpy.context.area
+    book['ori_camera_view'] = area.type == 'VIEW_3D' and area.spaces[0].region_3d.view_perspective == 'CAMERA'
+
+    # Create new temporary scene
+    scene = bpy.data.scenes.new(name='TEMP_COMPOSITE_SCENE')
+    bpy.context.window.scene = scene
+
+    # Set up render settings
+    scene.cycles.samples = 1
+    if hasattr(scene, 'eevee'):
+        scene.eevee.taa_render_samples = 1
+    scene.render.resolution_x = res_x
+    scene.render.resolution_y = res_y
+    scene.render.resolution_percentage = 100
+    scene.render.pixel_aspect_x = 1.0
+    scene.render.pixel_aspect_y = 1.0
+    scene.use_nodes = True
+    scene.view_settings.view_transform = 'Standard' if is_greater_than_280() else 'Default'
+
+    # Float/HDR image related
+    scene.render.image_settings.file_format = 'OPEN_EXR' if use_hdr else 'PNG'
+    scene.render.image_settings.color_mode = 'RGBA'
+    scene.render.image_settings.color_depth = '32' if use_hdr else '8'
+
+    # Remember temp scene name
+    book['temp_scene_name'] = scene.name
+
+    # Create temporary camera
+    if not scene.camera:
+        cam_data = bpy.data.cameras.new('TEMP_CAM')
+        cam_obj = bpy.data.objects.new('TEMP_CAM', cam_data)
+        link_object(scene, cam_obj)
+        scene.camera = cam_obj
+        book['temp_camera_name'] = cam_obj.name
+
+    return book
+
+def recover_composite_settings(book):
+    scene = bpy.data.scenes.get(book['temp_scene_name'])
+
+    # Remove temporary objects
+    if 'temp_camera_name' in book:
+        cam_obj = bpy.data.objects.get(book['temp_camera_name'])
+        if cam_obj:
+            cam = cam_obj.data
+            bpy.data.objects.remove(cam_obj)
+            bpy.data.cameras.remove(cam)
+
+    # Remove temp scene
+    bpy.data.scenes.remove(scene)
+
+    # Go back to original scene
+    scene = bpy.data.scenes.get(book['ori_scene_name'])
+    bpy.context.window.scene = scene
+
+    # Recover camera view
+    if book['ori_camera_view']:
+        bpy.context.area.spaces[0].region_3d.view_perspective = 'CAMERA'
+
+def denoise_image(image):
+    if not is_greater_than_281(): return image
+
+    T = time.time()
+    print('DENOISE: Doing Denoise pass on', image.name + '...')
+
+    # Preparing settings
+    book = prepare_composite_settings(use_hdr=image.is_float)
+    scene = bpy.context.scene
+
+    # Set up compositor
+    tree = scene.node_tree
+    composite = [n for n in tree.nodes if n.type == 'COMPOSITE'][0]
+    denoise = tree.nodes.new('CompositorNodeDenoise')
+    denoise.use_hdr = image.is_float
+    image_node = tree.nodes.new('CompositorNodeImage')
+    image_node.image = image
+
+    tree.links.new(image_node.outputs[0], denoise.inputs['Image'])
+    tree.links.new(denoise.outputs[0], composite.inputs[0])
+
+    if image.source == 'TILED':
+        tilenums = [tile.number for tile in image.tiles]
+    else: tilenums = [1001]
+
+    # Get temporary filepath
+    ext = 'exr' if image.is_float else 'png'
+    filepath = os.path.join(tempfile.gettempdir(), 'TEST_RENDER__.' + ext)
+
+    for tilenum in tilenums:
+
+        # Swap tile to 1001 to access the data
+        if tilenum != 1001:
+            UDIM.swap_tile(image, 1001, tilenum)
+
+        # Set render resolution
+        scene.render.resolution_x = image.size[0]
+        scene.render.resolution_y = image.size[1]
+
+        # Render image!
+        bpy.ops.render.render()
+
+        # Save the image
+        render_result = next(img for img in bpy.data.images if img.type == "RENDER_RESULT")
+        render_result.save_render(filepath)
+        temp_image = bpy.data.images.load(filepath)
+
+        # Copy image pixels
+        copy_image_pixels(temp_image, image)
+
+        # Remove temp image
+        bpy.data.images.remove(temp_image)
+        os.remove(filepath)
+
+        # Swap back the tile
+        if tilenum != 1001:
+            UDIM.swap_tile(image, 1001, tilenum)
+
+    # Recover settings
+    recover_composite_settings(book)
+
+    print('DENOISE:', image.name, 'denoise pass is done at', '{:0.2f}'.format(time.time() - T), 'seconds!')
+    return image
+
 def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GPU'):
     T = time.time()
-    print('FXAA: Doing Blur pass on', image.name + '...')
+    print('BLUR: Doing Blur pass on', image.name + '...')
     book = remember_before_bake()
 
     width = image.size[0]
