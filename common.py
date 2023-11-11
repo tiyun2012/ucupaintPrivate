@@ -778,6 +778,7 @@ def copy_id_props(source, dest, extras = []):
     for prop in props:
         if prop.startswith('__'): continue
         if prop in filters: continue
+        #if hasattr(prop, 'is_readonly'): continue
         #print(prop)
         try: val = getattr(source, prop)
         except:

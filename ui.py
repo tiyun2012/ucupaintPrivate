@@ -1148,23 +1148,36 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                 row = rcol.row(align=True)
                 row.label(text='', icon='BLANK1')
                 bbox = row.box()
+                boxcol = bbox.column()
                 if image and (image.yia.is_image_atlas or image.yua.is_udim_atlas):
-                    #bbox.label(text="Transform vector with image atlas is not possible!")
+                    #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
-                    crow = row.column()
-                    bbox.prop(layer, 'translation', text='Offset')
-                    bbox.prop(layer, 'rotation')
-                    bbox.prop(layer, 'scale')
+                    #rrow = boxcol.row()
+                    #mapping = get_layer_mapping(layer)
+                    #rrow.label(text='Offset:')
+                    #rrow.prop(mapping, 'vector_type', text='')
+                    #if is_greater_than_281():
+                    #    boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                    #    boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                    #    boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    #else:
+                    #    boxcol.prop(mapping, 'translation', text='')
+                    #    boxcol.prop(mapping, 'rotation')
+                    #    boxcol.prop(mapping, 'scale')
+
+                    boxcol.prop(layer, 'translation', text='')
+                    boxcol.prop(layer, 'rotation')
+                    boxcol.prop(layer, 'scale')
 
                     if yp.need_temp_uv_refresh: # or is_active_uv_map_match_entity(obj, layer):
                     #if yp.need_temp_uv_refresh or is_active_uv_map_match_active_entity(obj, layer):
-                        rrow = bbox.row(align=True)
+                        rrow = boxcol.row(align=True)
                         rrow.alert = True
                         rrow.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
 
                 # Blur row
-                rrow = bbox.row(align=True)
+                rrow = boxcol.row(align=True)
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if layer.enable_blur_vector:
@@ -2004,23 +2017,37 @@ def draw_layer_masks(context, layout, layer):
                 rrow = rrcol.row(align=True)
                 rrow.label(text='', icon='BLANK1')
                 rbox = rrow.box()
+                boxcol = rbox.column()
                 if mask_image and (mask_image.yia.is_image_atlas or mask_image.yua.is_udim_atlas):
-                    #rbox.label(text="Transform vector with image atlas is not possible!")
+                    #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
-                    rbox.prop(mask, 'translation', text='Offset')
-                    rbox.prop(mask, 'rotation')
-                    rbox.prop(mask, 'scale')
+                    #rrow = boxcol.row()
+                    #mapping = get_mask_mapping(mask)
+                    #rrow.label(text='Offset:')
+                    #rrow.prop(mapping, 'vector_type', text='')
+                    #if is_greater_than_281():
+                    #    boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                    #    boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                    #    boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    #else:
+                    #    boxcol.prop(mapping, 'translation', text='')
+                    #    boxcol.prop(mapping, 'rotation')
+                    #    boxcol.prop(mapping, 'scale')
+
+                    boxcol.prop(mask, 'translation', text='Offset')
+                    boxcol.prop(mask, 'rotation')
+                    boxcol.prop(mask, 'scale')
 
                     if mask.type == 'IMAGE' and mask.active_edit and (
                             yp.need_temp_uv_refresh  #or is_active_uv_map_match_entity(obj, mask)
                             ):
-                        rrow = rbox.row(align=True)
+                        rrow = boxcol.row(align=True)
                         rrow.alert = True
                         rrow.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
             
                 # Blur row
-                rrow = rbox.row(align=True)
+                rrow = boxcol.row(align=True)
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if mask.enable_blur_vector:
