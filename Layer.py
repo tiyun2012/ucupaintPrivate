@@ -4658,6 +4658,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     # Height related
     height_proc : StringProperty(default='')
     height_blend : StringProperty(default='')
+    bump_distance_ignorer : StringProperty(default='')
 
     # For pack/unpack height io
     height_group_unpack : StringProperty(default='')

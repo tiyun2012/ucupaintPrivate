@@ -1746,6 +1746,17 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     max_height = get_displacement_max_height(root_ch, layer)
     update_displacement_height_ratio(root_ch)
 
+    # Bump distance ignorer
+    if not is_bump_distance_relevant(layer, ch):
+        bump_distance_ignorer, dirty = check_new_node(
+                tree, ch, 'bump_distance_ignorer', 'ShaderNodeMath', 'Bump Distance Ignorer', True)
+        if dirty: need_reconnect = True
+        bump_distance_ignorer.operation = 'MULTIPLY'
+        bump_distance_ignorer.inputs[1].default_value = 0.0
+    else:
+        dirty = remove_node(tree, ch, 'bump_distance_ignorer')
+        if dirty: need_reconnect = True
+
     # Height Process
     if ch.normal_map_type == 'NORMAL_MAP':
         if root_ch.enable_smooth_bump:

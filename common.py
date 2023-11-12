@@ -1173,10 +1173,12 @@ def is_vcol_being_used(tree, vcol_name, exception_node=None):
     return False
 
 def remove_node(tree, entity, prop, remove_data=True, parent=None):
-    if not hasattr(entity, prop): return
-    if not tree: return
-    #if prop not in entity: return
 
+    dirty = False
+
+    if not hasattr(entity, prop): return dirty
+    if not tree: return dirty
+    #if prop not in entity: return dirty
 
     scene = bpy.context.scene
     node = tree.nodes.get(getattr(entity, prop))
@@ -1186,7 +1188,7 @@ def remove_node(tree, entity, prop, remove_data=True, parent=None):
 
         if parent and node.parent != parent:
             setattr(entity, prop, '')
-            return
+            return dirty
 
         if remove_data:
             # Remove image data if the node is the only user
@@ -1231,9 +1233,12 @@ def remove_node(tree, entity, prop, remove_data=True, parent=None):
         # Remove the node itself
         #print('Node ' + prop + ' from ' + str(entity) + ' removed!')
         tree.nodes.remove(node)
+        dirty = True
 
     setattr(entity, prop, '')
     #entity[prop] = ''
+
+    return dirty
 
 def create_essential_nodes(tree, solid_value=False, texcoord=False, geometry=False):
 

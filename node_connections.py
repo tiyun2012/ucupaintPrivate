@@ -2441,6 +2441,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                         end_chain_w = alpha_w
 
             if 'Value Max Height' in height_proc.inputs and ch_bump_distance:
+                bump_distance_ignorer = nodes.get(ch.bump_distance_ignorer)
+                if bump_distance_ignorer:
+                    ch_bump_distance = create_link(tree, ch_bump_distance, bump_distance_ignorer.inputs[0])[0]
                 create_link(tree, ch_bump_distance, height_proc.inputs['Value Max Height'])
 
             if 'Value' in height_proc.inputs:

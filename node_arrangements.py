@@ -204,6 +204,7 @@ def rearrange_layer_frame_nodes(layer, tree=None):
             #check_set_node_parent(tree, ch.spread_alpha_e, frame)
             #check_set_node_parent(tree, ch.spread_alpha_w, frame)
             
+            check_set_node_parent(tree, ch.bump_distance_ignorer, frame)
             check_set_node_parent(tree, ch.height_proc, frame)
 
             check_set_node_parent(tree, ch.height_blend, frame)
@@ -1262,6 +1263,9 @@ def rearrange_layer_nodes(layer, tree=None):
 
             #    loc.y = save_y
             #    loc.x += 200
+
+            if check_set_node_loc(tree, ch.bump_distance_ignorer, loc):
+                loc.x += 200
 
             #elif spread_alpha:
             if check_set_node_loc(tree, ch.spread_alpha, loc):
