@@ -312,6 +312,7 @@ def check_layer_tree_ios(layer, tree=None):
     yp = layer.id_data.yp
     if not tree: tree = get_tree(layer)
     root_tree = layer.id_data
+    layer_node = root_tree.nodes.get(layer.group_node)
 
     dirty = False
 
@@ -340,9 +341,21 @@ def check_layer_tree_ios(layer, tree=None):
         input_index += 1
 
         # Set default value
-        layer_node = root_tree.nodes.get(layer.group_node)
         inp = layer_node.inputs.get(name)
-        inp.default_value = default_value
+        inp.default_value = ch.intensity_value
+
+        if root_ch.type == 'NORMAL':
+
+            # Height/bump distance input
+            name = root_ch.name + io_suffix['BUMP_DISTANCE']
+            dirty = create_input(tree, name, 'NodeSocketFloat', 
+                    valid_inputs, input_index, dirty,
+                    min_value=-1.0, max_value=1.0, default_value=0.05)
+            input_index += 1
+
+            # Set default value
+            inp = layer_node.inputs.get(name)
+            inp.default_value = ch.bump_distance
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):

@@ -393,6 +393,7 @@ io_suffix = {
         'MAX_HEIGHT' : ' Max Height',
         'HEIGHT_ONS' : ' Height ONS',
         'HEIGHT_EW' : ' Height EW',
+        'BUMP_DISTANCE' : ' Bump Distance',
         'UV' : ' UV',
         'TANGENT' : ' Tangent',
         'BITANGENT' : ' Bitangent',
