@@ -3675,13 +3675,19 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
 
     yp = layer.id_data.yp
     if not tree: tree = get_tree(layer)
+    layer_node = layer.id_data.nodes.get(layer.group_node)
 
     height_proc = tree.nodes.get(height_ch.height_proc)
     if height_proc and layer.type != 'GROUP':
 
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+
             inp = height_proc.inputs.get('Value Max Height')
             if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
+
+            inp = layer_node.inputs.get(height_root_ch.name + io_suffix['BUMP_DISTANCE'])
+            if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
+
             inp = height_proc.inputs.get('Transition Max Height')
             if inp: inp.default_value = get_transition_bump_max_distance(height_ch)
             inp = height_proc.inputs.get('Delta')

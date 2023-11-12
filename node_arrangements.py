@@ -1732,9 +1732,12 @@ def rearrange_yp_nodes(group_tree):
 
         loc.y = len(parent_ids) * -250
 
+        tnode = group_tree.nodes.get(t.group_node)
+        check_set_node_width(tnode, 250)
+
         if check_set_node_loc(group_tree, t.group_node, loc):
         #if check_set_node_loc_x(group_tree, t.group_node, loc.x):
-            loc.x += 200
+            loc.x += 300
 
     #stack = []
     #for i, t in enumerate(yp.layers):

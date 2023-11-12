@@ -2150,6 +2150,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             write_height = get_write_height(ch)
 
+            ch_bump_distance = start.outputs.get(root_ch.name + io_suffix['BUMP_DISTANCE'])
+
             height_proc = nodes.get(ch.height_proc)
             normal_proc = nodes.get(ch.normal_proc)
 
@@ -2437,6 +2439,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                         end_chain_s = alpha_s
                         end_chain_e = alpha_e
                         end_chain_w = alpha_w
+
+            if 'Value Max Height' in height_proc.inputs and ch_bump_distance:
+                create_link(tree, ch_bump_distance, height_proc.inputs['Value Max Height'])
 
             if 'Value' in height_proc.inputs:
                 #create_link(tree, rgb_after_mod, height_proc.inputs['Value'])
