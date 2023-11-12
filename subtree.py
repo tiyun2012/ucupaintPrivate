@@ -1681,6 +1681,8 @@ def remove_layer_normal_channel_nodes(root_ch, layer, ch, tree=None):
     #remove_node(tree, ch, 'spread_alpha_e')
     #remove_node(tree, ch, 'spread_alpha_w')
 
+    remove_node(tree, ch, 'bump_distance_ignorer')
+
     remove_node(tree, ch, 'height_proc')
     remove_node(tree, ch, 'height_blend')
     #remove_node(tree, ch, 'height_blend_n')
