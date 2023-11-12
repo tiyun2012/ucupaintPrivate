@@ -396,6 +396,7 @@ io_suffix = {
         'UV' : ' UV',
         'TANGENT' : ' Tangent',
         'BITANGENT' : ' Bitangent',
+        'INTENSITY' : ' Intensity',
         }
 
 io_names = {

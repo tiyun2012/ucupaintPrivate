@@ -211,19 +211,7 @@ def update_transition_bump_fac(self, context):
     if bump_ch: set_transition_ramp_and_intensity_multiplier(tree, bump_ch, ch)
 
 def update_transition_ao_intensity(self, context):
-
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    match = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(match.group(1))]
-    ch = self
-    tree = get_tree(layer)
-
-    mute = not layer.enable or not ch.enable
-
-    tao = tree.nodes.get(ch.tao)
-    if tao:
-        tao.inputs['Intensity'].default_value = 0.0 if mute else get_transition_ao_intensity(ch)
+    set_transition_ao_intensity(self)
 
 def update_transition_ao_edge(self, context):
 

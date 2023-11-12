@@ -311,6 +311,7 @@ def check_layer_tree_ios(layer, tree=None):
 
     yp = layer.id_data.yp
     if not tree: tree = get_tree(layer)
+    root_tree = layer.id_data
 
     dirty = False
 
@@ -321,6 +322,27 @@ def check_layer_tree_ios(layer, tree=None):
 
     has_parent = layer.parent_idx != -1
     need_prev_normal = check_need_prev_normal(layer)
+
+    # Intensity inputs
+    for i, ch in enumerate(layer.channels):
+        if not ch.enable: continue
+
+        root_ch = yp.channels[i]
+
+        # Get default value
+        default_value = ch.intensity_value
+
+        # Create intensity socket
+        name = root_ch.name + io_suffix['INTENSITY']
+        dirty = create_input(tree, name, 'NodeSocketFloatFactor', 
+                valid_inputs, input_index, dirty, 
+                min_value=0.0, max_value=1.0)
+        input_index += 1
+
+        # Set default value
+        layer_node = root_tree.nodes.get(layer.group_node)
+        inp = layer_node.inputs.get(name)
+        inp.default_value = default_value
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
@@ -340,7 +362,6 @@ def check_layer_tree_ios(layer, tree=None):
             output_index += 1
 
         # Alpha IO
-        #if (root_ch.type == 'RGB' and root_ch.enable_alpha) or has_parent:
         if root_ch.enable_alpha or has_parent:
 
             name = root_ch.name + io_suffix['ALPHA']
@@ -410,22 +431,6 @@ def check_layer_tree_ios(layer, tree=None):
                         dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
                         output_index += 1
 
-                #for d in neighbor_directions:
-
-                #    name = root_ch.name + io_suffix['HEIGHT'] + ' ' + d
-                #    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                #    dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                #    input_index += 1
-                #    output_index += 1
-
-                #    if has_parent:
-
-                #        name = root_ch.name + io_suffix['ALPHA'] + ' ' + d
-                #        dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                #        dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                #        input_index += 1
-                #        output_index += 1
-
     # Tree background inputs
     if layer.type in {'BACKGROUND', 'GROUP'}:
 
@@ -481,20 +486,6 @@ def check_layer_tree_ios(layer, tree=None):
                     dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
                     input_index += 1
 
-                    #for d in neighbor_directions:
-                    #    name = root_ch.name + io_suffix['HEIGHT'] + ' ' + d + io_suffix['GROUP']
-
-                    #    dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
-                    #    input_index += 1
-
-                    #    name = (root_ch.name + 
-                    #            #io_suffix['HEIGHT'] + ' ' + 
-                    #            io_suffix['ALPHA'] + ' ' + 
-                    #            d + io_suffix['GROUP'])
-
-                    #    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                    #    input_index += 1
-
     # UV necessary container
     uv_names = []
 
@@ -524,8 +515,6 @@ def check_layer_tree_ios(layer, tree=None):
         name = uv_name + io_suffix['UV']
         dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
         input_index += 1
-
-        #print(uv_name)
 
         #if height_ch and not (yp.disable_quick_toggle and not height_ch.enable):
         if (height_ch and height_ch.enable) or (need_prev_normal and uv_name == height_root_ch.main_uv):

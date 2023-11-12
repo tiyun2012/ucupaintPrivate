@@ -70,8 +70,30 @@ def check_transition_bump_influences_to_other_channels(layer, tree=None, target_
 
         if bump_ch: set_transition_ramp_and_intensity_multiplier(tree, bump_ch, c)
 
-def get_transition_ao_intensity(ch):
-    return ch.transition_ao_intensity * ch.intensity_value if not ch.transition_ao_intensity_unlink else ch.transition_ao_intensity
+#def get_transition_ao_intensity(ch):
+#    return ch.transition_ao_intensity * ch.intensity_value if not ch.transition_ao_intensity_unlink else ch.transition_ao_intensity
+
+def set_transition_ao_intensity(ch, tree=None, layer=None, tao=None):
+
+    if not layer:
+        m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', ch.path_from_id())
+        if not m: return
+        yp = ch.id_data.yp
+        layer = yp.layers[int(m.group(1))]
+
+    if not tree:
+        tree = get_tree(layer)
+
+    if not tao:
+        tao = tree.nodes.get(ch.tao)
+
+    #mute = not layer.enable or not ch.enable
+
+    if tao: 
+        #tao.inputs['Intensity'].default_value = 0.0 if mute else get_transition_ao_intensity(ch)
+        tao.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ao_intensity_unlink else 1.0
+        tao.inputs['Intensity'].default_value = ch.transition_ao_intensity
+        tao.inputs['Intensity Channel'].default_value = ch.intensity_value
 
 def check_transition_ao_nodes(tree, layer, ch, bump_ch=None):
 
@@ -121,8 +143,7 @@ def check_transition_ao_nodes(tree, layer, ch, bump_ch=None):
 
         tao.inputs['Power'].default_value = ch.transition_ao_power
 
-        mute = not layer.enable or not ch.enable
-        tao.inputs['Intensity'].default_value = 0.0 if mute else get_transition_ao_intensity(ch)
+        set_transition_ao_intensity(ch, tree, layer, tao)
 
         tao.inputs['Exclude Inside'].default_value = 1.0 - ch.transition_ao_inside_intensity
 
@@ -158,10 +179,13 @@ def set_ramp_intensity_value(tree, layer, ch):
 
     tr_ramp_blend = tree.nodes.get(ch.tr_ramp_blend)
     if tr_ramp_blend:
-        if ch.transition_ramp_intensity_unlink:
-            intensity_value = ch.transition_ramp_intensity_value
-        else: intensity_value = ch.transition_ramp_intensity_value * ch.intensity_value
-        tr_ramp_blend.inputs['Intensity'].default_value = 0.0 if mute else intensity_value
+        #if ch.transition_ramp_intensity_unlink:
+        #    intensity_value = ch.transition_ramp_intensity_value
+        #else: intensity_value = ch.transition_ramp_intensity_value * ch.intensity_value
+        #tr_ramp_blend.inputs['Intensity'].default_value = 0.0 if mute else intensity_value
+        tr_ramp_blend.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ramp_intensity_unlink else 1.0
+        tr_ramp_blend.inputs['Intensity'].default_value = ch.transition_ramp_intensity_value
+        tr_ramp_blend.inputs['Intensity Channel'].default_value = ch.intensity_value
     
     tr_ramp = tree.nodes.get(ch.tr_ramp)
     if tr_ramp and 'Intensity' in tr_ramp.inputs:

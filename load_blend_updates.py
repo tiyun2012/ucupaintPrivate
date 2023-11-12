@@ -409,6 +409,9 @@ def update_routine(name):
 
         # Version 1.2.0 won't use custom prop for mapping and intensity
         if LooseVersion(ng.yp.version) < LooseVersion('1.2.0') and False:
+
+            # Check for transition ramp ??
+
             # Check for actions
             if ng.animation_data and ng.animation_data.action:
                 fcs = ng.animation_data.action.fcurves

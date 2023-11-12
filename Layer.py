@@ -4327,6 +4327,16 @@ def update_channel_intensity_value(self, context):
 
     mute = not layer.enable or not ch.enable
 
+    # Get layer node
+    root_tree = self.id_data
+    layer_node = root_tree.nodes.get(layer.group_node)
+
+    # Set input intensity
+    inp = layer_node.inputs.get(root_ch.name + io_suffix['INTENSITY'])
+    if inp: inp.default_value = ch.intensity_value
+
+    ##### ALREADY REPLACED BY INPUT INTENSITY
+
     intensity = tree.nodes.get(ch.intensity)
     if intensity:
         intensity.inputs[1].default_value = 0.0 if mute else ch.intensity_value
@@ -4343,8 +4353,9 @@ def update_channel_intensity_value(self, context):
         transition.set_ramp_intensity_value(tree, layer, ch)
 
     if ch.enable_transition_ao:
-        tao = tree.nodes.get(ch.tao)
-        if tao: tao.inputs['Intensity'].default_value = 0.0 if mute else transition.get_transition_ao_intensity(ch)
+        transition.set_transition_ao_intensity(ch, tree, layer)
+
+    #####
 
     if root_ch.type == 'NORMAL':
         update_displacement_height_ratio(root_ch)

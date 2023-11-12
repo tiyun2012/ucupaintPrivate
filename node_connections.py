@@ -1892,6 +1892,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
         root_ch = yp.channels[i]
 
+
         #if yp.disable_quick_toggle and not ch.enable: continue
         if not ch.enable: 
             
@@ -1918,6 +1919,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         alpha = start_alpha
         bg_alpha = None
 
+        ch_intensity = start.outputs.get(root_ch.name + io_suffix['INTENSITY'])
         prev_rgb = start.outputs.get(root_ch.name)
         prev_alpha = start.outputs.get(root_ch.name + io_suffix['ALPHA'])
 
@@ -2141,6 +2143,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         # Pass alpha to intensity
         if intensity:
             alpha = create_link(tree, alpha, intensity.inputs[0])[0]
+            if ch_intensity:
+                create_link(tree, ch_intensity, intensity.inputs[1])
 
         if root_ch.type == 'NORMAL':
 
@@ -2148,6 +2152,12 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             height_proc = nodes.get(ch.height_proc)
             normal_proc = nodes.get(ch.normal_proc)
+
+            # Set intensity
+            if ch_intensity:
+                create_link(tree, ch_intensity, height_proc.inputs['Intensity'])
+                if 'Intensity' in normal_proc.inputs:
+                    create_link(tree, ch_intensity, normal_proc.inputs['Intensity'])
 
             height_blend = nodes.get(ch.height_blend)
             hbcol0, hbcol1, hbout = get_mix_color_indices(height_blend)
@@ -2744,6 +2754,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         if root_ch.type in {'RGB', 'VALUE'} and trans_bump_ch and ch.enable_transition_ao: # and layer.type != 'BACKGROUND':
             tao = nodes.get(ch.tao)
 
+            if ch_intensity:
+                create_link(tree, ch_intensity, tao.inputs['Intensity Channel'])
+
             if trans_bump_flip:
                 create_link(tree, rgb, tao.inputs[0])
                 rgb = tao.outputs[0]
@@ -2802,6 +2815,10 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             create_link(tree, transition_input, tr_ramp.inputs['Transition'])
 
             if trans_bump_flip:
+
+                # Connect intensity
+                if ch_intensity:
+                    create_link(tree, ch_intensity, tr_ramp_blend.inputs['Intensity Channel'])
 
                 create_link(tree, prev_rgb, tr_ramp_blend.inputs['Input RGB'])
                 create_link(tree, intensity_multiplier.outputs[0], tr_ramp_blend.inputs['Multiplied Alpha'])
