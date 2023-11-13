@@ -396,12 +396,6 @@ io_suffix = {
         'UV' : ' UV',
         'TANGENT' : ' Tangent',
         'BITANGENT' : ' Bitangent',
-
-        'INTENSITY' : ' Intensity',
-        'BUMP_DISTANCE' : ' Bump Distance',
-        'NORMAL_BUMP_DISTANCE' : ' Normal Bump Distance',
-        'TRANSITION_BUMP_DISTANCE' : ' Transition Bump Distance',
-        'TRANSITION_BUMP_CREASE_FACTOR' : ' Transition Bump Crease Factor',
         }
 
 io_names = {
@@ -3692,14 +3686,13 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
     height_proc = tree.nodes.get(height_ch.height_proc)
     if height_proc and layer.type != 'GROUP':
 
-        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['BUMP_DISTANCE'])
+        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'bump_distance'))
         if inp: inp.default_value = height_ch.bump_distance
 
-        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE'])
+        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'normal_bump_distance'))
         if inp: inp.default_value = height_ch.normal_bump_distance
 
-        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE'])
-        #if inp: inp.default_value = get_transition_bump_max_distance(height_ch)
+        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'transition_bump_distance'))
         if inp: inp.default_value = height_ch.transition_bump_distance
 
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
@@ -5323,6 +5316,14 @@ def get_closest_bsdf_forward(node, valid_types=[]):
                 if n: return n
 
     return None
+
+def get_ch_input_name(layer, ch, prop_name):
+
+    yp = layer.id_data.yp
+    ch_index = get_layer_channel_index(layer, ch)
+    root_ch = yp.channels[ch_index]
+
+    return root_ch.name + ' ' + prop_name
 
 def split_layout(layout, factor, align=False):
     if not is_greater_than_280():

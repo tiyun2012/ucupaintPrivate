@@ -307,6 +307,23 @@ def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #,
     # Linear nodes
     check_yp_linear_nodes(yp, layer, False)
 
+def create_layer_ch_prop_input(layer_node, layer, ch, prop_name, socket_type, 
+        valid_inputs, input_index, dirty,
+        min_value, max_value, default_value):
+
+    tree = layer_node.node_tree
+    input_name = get_ch_input_name(layer, ch, prop_name)
+
+    dirty = create_input(tree, input_name, socket_type, 
+            valid_inputs, input_index, dirty,
+            min_value=min_value, max_value=max_value, default_value=default_value)
+
+    # Set default value
+    inp = layer_node.inputs.get(input_name)
+    inp.default_value = getattr(ch, prop_name)
+
+    return dirty
+
 def check_layer_tree_ios(layer, tree=None):
 
     yp = layer.id_data.yp
@@ -334,65 +351,47 @@ def check_layer_tree_ios(layer, tree=None):
         default_value = ch.intensity_value
 
         # Create intensity socket
-        name = root_ch.name + io_suffix['INTENSITY']
-        dirty = create_input(tree, name, 'NodeSocketFloatFactor', 
-                valid_inputs, input_index, dirty, 
-                min_value=0.0, max_value=1.0)
+        dirty = create_layer_ch_prop_input(
+                layer_node, layer, ch, 'intensity_value', 'NodeSocketFloatFactor', 
+                valid_inputs, input_index, dirty,
+                min_value=0.0, max_value=1.0, default_value=1.0)
         input_index += 1
-
-        # Set default value
-        inp = layer_node.inputs.get(name)
-        inp.default_value = ch.intensity_value
 
         if root_ch.type == 'NORMAL':
 
             if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+
                 # Height/bump distance input
-                name = root_ch.name + io_suffix['BUMP_DISTANCE']
-                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                dirty = create_layer_ch_prop_input(
+                        layer_node, layer, ch, 'bump_distance', 'NodeSocketFloat', 
                         valid_inputs, input_index, dirty,
                         min_value=-1.0, max_value=1.0, default_value=0.05)
                 input_index += 1
-
-                # Set default value
-                inp = layer_node.inputs.get(name)
-                inp.default_value = ch.bump_distance
 
             if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
+
                 # Normal height/bump distance input
-                name = root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE']
-                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                dirty = create_layer_ch_prop_input(
+                        layer_node, layer, ch, 'normal_bump_distance', 'NodeSocketFloat', 
                         valid_inputs, input_index, dirty,
                         min_value=-1.0, max_value=1.0, default_value=0.05)
                 input_index += 1
-
-                # Set default value
-                inp = layer_node.inputs.get(name)
-                inp.default_value = ch.normal_bump_distance
 
             if ch.enable_transition_bump:
                 # Transition bump distance input
-                name = root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE']
-                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                dirty = create_layer_ch_prop_input(
+                        layer_node, layer, ch, 'transition_bump_distance', 'NodeSocketFloat', 
                         valid_inputs, input_index, dirty,
                         min_value=0.0, max_value=1.0, default_value=0.05)
                 input_index += 1
 
-                # Set default value
-                inp = layer_node.inputs.get(name)
-                inp.default_value = ch.transition_bump_distance
-
                 if ch.transition_bump_crease:
                     # Transition bump crease factor input
-                    name = root_ch.name + io_suffix['TRANSITION_BUMP_CREASE_FACTOR']
-                    dirty = create_input(tree, name, 'NodeSocketFloat', 
+                    dirty = create_layer_ch_prop_input(
+                            layer_node, layer, ch, 'transition_bump_crease_factor', 'NodeSocketFloat', 
                             valid_inputs, input_index, dirty,
                             min_value=0.0, max_value=1.0, default_value=0.33)
                     input_index += 1
-
-                    # Set default value
-                    inp = layer_node.inputs.get(name)
-                    inp.default_value = ch.transition_bump_crease_factor
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):

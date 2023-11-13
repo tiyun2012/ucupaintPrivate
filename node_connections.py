@@ -1919,7 +1919,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         alpha = start_alpha
         bg_alpha = None
 
-        ch_intensity = start.outputs.get(root_ch.name + io_suffix['INTENSITY'])
+        ch_intensity = start.outputs.get(get_ch_input_name(layer, ch, 'intensity_value'))
         prev_rgb = start.outputs.get(root_ch.name)
         prev_alpha = start.outputs.get(root_ch.name + io_suffix['ALPHA'])
 
@@ -2150,8 +2150,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             write_height = get_write_height(ch)
 
-            ch_bump_distance = start.outputs.get(root_ch.name + io_suffix['BUMP_DISTANCE'])
-            ch_normal_bump_distance = start.outputs.get(root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE'])
+            ch_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'bump_distance'))
+            ch_normal_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'normal_bump_distance'))
 
             height_proc = nodes.get(ch.height_proc)
             normal_proc = nodes.get(ch.normal_proc)
@@ -2489,7 +2489,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             # Transition Bump
             if ch.enable_transition_bump and ch.enable:
 
-                ch_tb_distance = start.outputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE'])
+                ch_tb_distance = start.outputs.get(get_ch_input_name(layer, ch, 'transition_bump_distance'))
                 if ch_tb_distance:
 
                     tb_distance_flipper = nodes.get(ch.tb_distance_flipper)
@@ -2509,7 +2509,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                             create_link(tree, ch_bump_distance, tb_delta_calc.inputs[1])
                             create_link(tree, tb_delta_calc.outputs[0], height_proc.inputs['Delta'])
 
-                ch_tb_crease_factor = start.outputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_CREASE_FACTOR'])
+                ch_tb_crease_factor = start.outputs.get(get_ch_input_name(layer, ch, 'transition_bump_crease_factor'))
                 if ch_tb_crease_factor:
                     if 'Crease Factor' in height_proc.inputs:
                         create_link(tree, ch_tb_crease_factor, height_proc.inputs['Crease Factor'])

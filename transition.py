@@ -29,7 +29,7 @@ def update_transition_bump_crease_factor(self, context):
 
     if not ch.enable_transition_bump or not ch.enable or not ch.transition_bump_crease or ch.transition_bump_flip: return
 
-    inp = layer_node.inputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_CREASE_FACTOR'])
+    inp = layer_node.inputs.get(get_ch_input_name(layer, ch, 'transition_bump_crease_factor'))
     if inp: inp.default_value = ch.transition_bump_crease_factor
 
     ##### REPLACED_BY_SHADERS
