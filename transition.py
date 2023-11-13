@@ -5,6 +5,7 @@ from .transition_common import *
 from .node_connections import *
 from .node_arrangements import *
 from .subtree import *
+from .input_outputs import *
 
 def update_transition_ramp_intensity_value(self, context):
     yp = self.id_data.yp
@@ -490,6 +491,8 @@ def update_enable_transition_bump(self, context):
     tree = get_tree(layer)
 
     check_transition_bump_nodes(layer, tree, ch)
+
+    check_layer_tree_ios(layer, tree)
 
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer) #, mod_reconnect=True)

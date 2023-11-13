@@ -4069,6 +4069,8 @@ def update_normal_map_type(self, context):
 
     check_channel_normal_map_nodes(tree, layer, root_ch, self)
 
+    check_layer_tree_ios(layer, tree)
+
     #if not yp.halt_reconnect:
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
@@ -4823,6 +4825,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     tb_bump_flip : StringProperty(default='')
     tb_inverse : StringProperty(default='')
     tb_intensity_multiplier : StringProperty(default='')
+    tb_distance_flipper : StringProperty(default='')
 
     tb_falloff : StringProperty(default='')
     #tb_falloff_n : StringProperty(default='')

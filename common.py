@@ -393,11 +393,13 @@ io_suffix = {
         'MAX_HEIGHT' : ' Max Height',
         'HEIGHT_ONS' : ' Height ONS',
         'HEIGHT_EW' : ' Height EW',
-        'BUMP_DISTANCE' : ' Bump Distance',
         'UV' : ' UV',
         'TANGENT' : ' Tangent',
         'BITANGENT' : ' Bitangent',
         'INTENSITY' : ' Intensity',
+        'BUMP_DISTANCE' : ' Bump Distance',
+        'NORMAL_BUMP_DISTANCE' : ' Normal Bump Distance',
+        'TRANSITION_BUMP_DISTANCE' : ' Transition Bump Distance',
         }
 
 io_names = {
@@ -3508,7 +3510,6 @@ def get_layer_channel_max_height(layer, ch, ch_idx=None):
 
     if ch.enable_transition_bump:
         if ch.normal_map_type == 'NORMAL_MAP' and layer.type != 'GROUP':
-            #max_height = ch.transition_bump_distance
             max_height = abs(get_transition_bump_max_distance_with_crease(ch))
         else:
             if ch.transition_bump_flip:
@@ -3685,18 +3686,27 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
     height_proc = tree.nodes.get(height_ch.height_proc)
     if height_proc and layer.type != 'GROUP':
 
+        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['BUMP_DISTANCE'])
+        if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
+
+        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE'])
+        if inp: inp.default_value = height_ch.normal_bump_distance
+
+        inp = layer_node.inputs.get(height_root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE'])
+        #if inp: inp.default_value = get_transition_bump_max_distance(height_ch)
+        if inp: inp.default_value = height_ch.transition_bump_distance
+
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
 
             inp = height_proc.inputs.get('Value Max Height')
             if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
 
-            inp = layer_node.inputs.get(height_root_ch.name + io_suffix['BUMP_DISTANCE'])
-            if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
-
             inp = height_proc.inputs.get('Transition Max Height')
             if inp: inp.default_value = get_transition_bump_max_distance(height_ch)
+
             inp = height_proc.inputs.get('Delta')
             if inp: inp.default_value = get_transition_disp_delta(layer, height_ch)
+
         elif height_ch.normal_map_type == 'NORMAL_MAP':
             inp = height_proc.inputs.get('Bump Height')
             if inp:

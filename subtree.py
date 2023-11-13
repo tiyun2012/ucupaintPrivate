@@ -1681,6 +1681,7 @@ def remove_layer_normal_channel_nodes(root_ch, layer, ch, tree=None):
     #remove_node(tree, ch, 'spread_alpha_e')
     #remove_node(tree, ch, 'spread_alpha_w')
 
+    remove_node(tree, ch, 'tb_distance_flipper')
     remove_node(tree, ch, 'bump_distance_ignorer')
 
     remove_node(tree, ch, 'height_proc')
@@ -1757,6 +1758,17 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
         bump_distance_ignorer.inputs[1].default_value = 0.0
     else:
         dirty = remove_node(tree, ch, 'bump_distance_ignorer')
+        if dirty: need_reconnect = True
+
+    # Transition bump flipper
+    if ch.enable_transition_bump and ch.transition_bump_flip:
+        tb_distance_flipper, dirty = check_new_node(
+                tree, ch, 'tb_distance_flipper', 'ShaderNodeMath', 'Transition Bump Distance Flipper', True)
+        if dirty: need_reconnect = True
+        tb_distance_flipper.operation = 'MULTIPLY'
+        tb_distance_flipper.inputs[1].default_value = -1.0
+    else:
+        dirty = remove_node(tree, ch, 'tb_distance_flipper')
         if dirty: need_reconnect = True
 
     # Height Process

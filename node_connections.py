@@ -2151,6 +2151,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             write_height = get_write_height(ch)
 
             ch_bump_distance = start.outputs.get(root_ch.name + io_suffix['BUMP_DISTANCE'])
+            ch_normal_bump_distance = start.outputs.get(root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE'])
 
             height_proc = nodes.get(ch.height_proc)
             normal_proc = nodes.get(ch.normal_proc)
@@ -2440,11 +2441,16 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                         end_chain_e = alpha_e
                         end_chain_w = alpha_w
 
-            if 'Value Max Height' in height_proc.inputs and ch_bump_distance:
-                bump_distance_ignorer = nodes.get(ch.bump_distance_ignorer)
-                if bump_distance_ignorer:
-                    ch_bump_distance = create_link(tree, ch_bump_distance, bump_distance_ignorer.inputs[0])[0]
-                create_link(tree, ch_bump_distance, height_proc.inputs['Value Max Height'])
+            if ch_bump_distance:
+                if 'Value Max Height' in height_proc.inputs:
+                    bump_distance_ignorer = nodes.get(ch.bump_distance_ignorer)
+                    if bump_distance_ignorer:
+                        ch_bump_distance = create_link(tree, ch_bump_distance, bump_distance_ignorer.inputs[0])[0]
+                    create_link(tree, ch_bump_distance, height_proc.inputs['Value Max Height'])
+
+            if ch_normal_bump_distance:
+                if 'Bump Height' in height_proc.inputs:
+                    create_link(tree, ch_normal_bump_distance, height_proc.inputs['Bump Height'])
 
             if 'Value' in height_proc.inputs:
                 #create_link(tree, rgb_after_mod, height_proc.inputs['Value'])
@@ -2482,6 +2488,19 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             # Transition Bump
             if ch.enable_transition_bump and ch.enable:
+
+                ch_tb_distance = start.outputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE'])
+                if ch_tb_distance:
+
+                    tb_distance_flipper = nodes.get(ch.tb_distance_flipper)
+                    if tb_distance_flipper:
+                        ch_tb_distance = create_link(tree, ch_tb_distance, tb_distance_flipper.inputs[0])[0]
+                
+                    if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+                        if 'Transition Max Height' in height_proc.inputs:
+                            create_link(tree, ch_tb_distance, height_proc.inputs['Transition Max Height'])
+                    elif ch.normal_map_type == 'NORMAL_MAP':
+                        create_link(tree, ch_tb_distance, height_proc.inputs['Bump Height'])
 
                 if trans_bump_crease:
 

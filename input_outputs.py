@@ -346,16 +346,41 @@ def check_layer_tree_ios(layer, tree=None):
 
         if root_ch.type == 'NORMAL':
 
-            # Height/bump distance input
-            name = root_ch.name + io_suffix['BUMP_DISTANCE']
-            dirty = create_input(tree, name, 'NodeSocketFloat', 
-                    valid_inputs, input_index, dirty,
-                    min_value=-1.0, max_value=1.0, default_value=0.05)
-            input_index += 1
+            if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+                # Height/bump distance input
+                name = root_ch.name + io_suffix['BUMP_DISTANCE']
+                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                        valid_inputs, input_index, dirty,
+                        min_value=-1.0, max_value=1.0, default_value=0.05)
+                input_index += 1
 
-            # Set default value
-            inp = layer_node.inputs.get(name)
-            inp.default_value = ch.bump_distance
+                # Set default value
+                inp = layer_node.inputs.get(name)
+                inp.default_value = ch.bump_distance
+
+            if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
+                # Height/bump distance input
+                name = root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE']
+                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                        valid_inputs, input_index, dirty,
+                        min_value=-1.0, max_value=1.0, default_value=0.05)
+                input_index += 1
+
+                # Set default value
+                inp = layer_node.inputs.get(name)
+                inp.default_value = ch.normal_bump_distance
+
+            if ch.enable_transition_bump:
+                # Height/bump distance input
+                name = root_ch.name + io_suffix['TRANSITION_BUMP_DISTANCE']
+                dirty = create_input(tree, name, 'NodeSocketFloat', 
+                        valid_inputs, input_index, dirty,
+                        min_value=-1.0, max_value=1.0, default_value=0.05)
+                input_index += 1
+
+                # Set default value
+                inp = layer_node.inputs.get(name)
+                inp.default_value = ch.transition_bump_distance
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
