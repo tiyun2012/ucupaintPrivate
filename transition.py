@@ -25,7 +25,14 @@ def update_transition_bump_crease_factor(self, context):
     tree = get_tree(layer)
     ch = self
 
+    layer_node = self.id_data.nodes.get(layer.group_node)
+
     if not ch.enable_transition_bump or not ch.enable or not ch.transition_bump_crease or ch.transition_bump_flip: return
+
+    inp = layer_node.inputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_CREASE_FACTOR'])
+    if inp: inp.default_value = ch.transition_bump_crease_factor
+
+    ##### REPLACED_BY_SHADERS
 
     height_proc = tree.nodes.get(ch.height_proc)
     if height_proc:
@@ -33,6 +40,8 @@ def update_transition_bump_crease_factor(self, context):
         if ch.normal_map_type != 'NORMAL_MAP':
             height_proc.inputs['Transition Max Height'].default_value = get_transition_bump_max_distance(ch)
             height_proc.inputs['Delta'].default_value = get_transition_disp_delta(layer, ch)
+
+    #####
 
     #normal_proc = tree.nodes.get(ch.normal_proc)
     #if normal_proc:

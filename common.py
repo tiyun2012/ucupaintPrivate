@@ -396,10 +396,12 @@ io_suffix = {
         'UV' : ' UV',
         'TANGENT' : ' Tangent',
         'BITANGENT' : ' Bitangent',
+
         'INTENSITY' : ' Intensity',
         'BUMP_DISTANCE' : ' Bump Distance',
         'NORMAL_BUMP_DISTANCE' : ' Normal Bump Distance',
         'TRANSITION_BUMP_DISTANCE' : ' Transition Bump Distance',
+        'TRANSITION_BUMP_CREASE_FACTOR' : ' Transition Bump Crease Factor',
         }
 
 io_names = {

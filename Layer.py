@@ -4337,7 +4337,7 @@ def update_channel_intensity_value(self, context):
     inp = layer_node.inputs.get(root_ch.name + io_suffix['INTENSITY'])
     if inp: inp.default_value = ch.intensity_value
 
-    ##### ALREADY REPLACED BY INPUT INTENSITY
+    ##### REPLACED_BY_SHADERS
 
     intensity = tree.nodes.get(ch.intensity)
     if intensity:

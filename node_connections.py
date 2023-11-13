@@ -2509,6 +2509,11 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                             create_link(tree, ch_bump_distance, tb_delta_calc.inputs[1])
                             create_link(tree, tb_delta_calc.outputs[0], height_proc.inputs['Delta'])
 
+                ch_tb_crease_factor = start.outputs.get(root_ch.name + io_suffix['TRANSITION_BUMP_CREASE_FACTOR'])
+                if ch_tb_crease_factor:
+                    if 'Crease Factor' in height_proc.inputs:
+                        create_link(tree, ch_tb_crease_factor, height_proc.inputs['Crease Factor'])
+
                 if trans_bump_crease:
 
                     create_link(tree, remains, height_proc.inputs['Remaining Alpha'])
