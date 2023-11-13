@@ -3577,8 +3577,12 @@ def get_transition_disp_delta(layer, ch):
         delta = get_transition_bump_max_distance(ch) - max_child_heights
 
     else:
+        ##### REPLACED_BY_SHADERS
+
         bump_distance = ch.normal_bump_distance if ch.normal_map_type == 'NORMAL_MAP' else get_layer_channel_bump_distance(layer, ch)
         delta = get_transition_bump_max_distance(ch) - abs(bump_distance)
+
+        #####
 
     return delta
 
@@ -3687,7 +3691,7 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
     if height_proc and layer.type != 'GROUP':
 
         inp = layer_node.inputs.get(height_root_ch.name + io_suffix['BUMP_DISTANCE'])
-        if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
+        if inp: inp.default_value = height_ch.bump_distance
 
         inp = layer_node.inputs.get(height_root_ch.name + io_suffix['NORMAL_BUMP_DISTANCE'])
         if inp: inp.default_value = height_ch.normal_bump_distance
@@ -3698,21 +3702,34 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
 
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
 
+            ##### REPLACED_BY_SHADERS
+
             inp = height_proc.inputs.get('Value Max Height')
             if inp: inp.default_value = get_layer_channel_bump_distance(layer, height_ch)
 
             inp = height_proc.inputs.get('Transition Max Height')
             if inp: inp.default_value = get_transition_bump_max_distance(height_ch)
 
+            #####
+
+            ##### REPLACED_BY_SHADERS (PARTLY)
+
             inp = height_proc.inputs.get('Delta')
             if inp: inp.default_value = get_transition_disp_delta(layer, height_ch)
 
+            #####
+
         elif height_ch.normal_map_type == 'NORMAL_MAP':
+
+            ##### REPLACED_BY_SHADERS
+
             inp = height_proc.inputs.get('Bump Height')
             if inp:
                 if height_ch.enable_transition_bump:
                     inp.default_value = get_transition_bump_max_distance(height_ch)
                 else: inp.default_value = height_ch.normal_bump_distance
+
+            #####
 
     normal_proc = tree.nodes.get(height_ch.normal_proc)
     if normal_proc:

@@ -220,6 +220,8 @@ ENGINE_FILTER_LEGACY = '~yPL Engine Filter Legacy'
 #DISP_OVERLAY = '~yPL Displacement Overlay'
 #HEIGHT_PACK = '~yPL Height Pack'
 
+TB_DELTA_CALC = '~yPL Transition Bump Delta Calculation'
+
 EMULATED_CURVE = '~yPL Emulated Curve'
 EMULATED_CURVE_SMOOTH = '~yPL Emulated Curve Smooth'
 FALLOFF_CURVE = '~yPL Falloff Curve'

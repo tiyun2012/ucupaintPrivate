@@ -2502,6 +2502,13 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     elif ch.normal_map_type == 'NORMAL_MAP':
                         create_link(tree, ch_tb_distance, height_proc.inputs['Bump Height'])
 
+                    if 'Delta' in height_proc.inputs and ch_bump_distance:
+                        tb_delta_calc = nodes.get(ch.tb_delta_calc)
+                        if tb_delta_calc:
+                            create_link(tree, ch_tb_distance, tb_delta_calc.inputs[0])
+                            create_link(tree, ch_bump_distance, tb_delta_calc.inputs[1])
+                            create_link(tree, tb_delta_calc.outputs[0], height_proc.inputs['Delta'])
+
                 if trans_bump_crease:
 
                     create_link(tree, remains, height_proc.inputs['Remaining Alpha'])

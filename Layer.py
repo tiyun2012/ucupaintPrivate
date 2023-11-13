@@ -4826,6 +4826,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     tb_inverse : StringProperty(default='')
     tb_intensity_multiplier : StringProperty(default='')
     tb_distance_flipper : StringProperty(default='')
+    tb_delta_calc : StringProperty(default='')
 
     tb_falloff : StringProperty(default='')
     #tb_falloff_n : StringProperty(default='')

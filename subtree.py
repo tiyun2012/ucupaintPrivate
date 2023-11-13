@@ -1682,6 +1682,7 @@ def remove_layer_normal_channel_nodes(root_ch, layer, ch, tree=None):
     #remove_node(tree, ch, 'spread_alpha_w')
 
     remove_node(tree, ch, 'tb_distance_flipper')
+    remove_node(tree, ch, 'tb_delta_calc')
     remove_node(tree, ch, 'bump_distance_ignorer')
 
     remove_node(tree, ch, 'height_proc')
@@ -1750,7 +1751,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     update_displacement_height_ratio(root_ch)
 
     # Bump distance ignorer
-    if not is_bump_distance_relevant(layer, ch):
+    if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} and not is_bump_distance_relevant(layer, ch):
         bump_distance_ignorer, dirty = check_new_node(
                 tree, ch, 'bump_distance_ignorer', 'ShaderNodeMath', 'Bump Distance Ignorer', True)
         if dirty: need_reconnect = True
@@ -1769,6 +1770,16 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
         tb_distance_flipper.inputs[1].default_value = -1.0
     else:
         dirty = remove_node(tree, ch, 'tb_distance_flipper')
+        if dirty: need_reconnect = True
+
+    # Delta calculation node
+    if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} and ch.enable_transition_bump:
+        tb_delta_calc, dirty = check_new_node(
+                tree, ch, 'tb_delta_calc', 'ShaderNodeGroup', 'Transition Bump Delta Calculation', True)
+        if dirty: need_reconnect = True
+        tb_delta_calc.node_tree = get_node_tree_lib(lib.TB_DELTA_CALC)
+    else:
+        dirty = remove_node(tree, ch, 'tb_delta_calc')
         if dirty: need_reconnect = True
 
     # Height Process
