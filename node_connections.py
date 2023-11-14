@@ -1042,6 +1042,7 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
 
         io_height_ons_name = ch.name + io_suffix['HEIGHT_ONS']
         io_height_ew_name = ch.name + io_suffix['HEIGHT_EW']
+        io_max_height_name = ch.name + io_suffix['MAX_HEIGHT']
 
         rgb = start.outputs[io_name]
         #if ch.enable_alpha and ch.type == 'RGB':
@@ -1058,10 +1059,12 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                 height = start.outputs[io_height_name]
                 height_ons = None
                 height_ew = None
+            max_height = start.outputs[io_height_name]
         else: 
             height = None
             height_ons = None
             height_ew = None
+            max_height = None
 
         #if ch.type == 'NORMAL' and ch.enable_smooth_bump:
         #    height_ons = start.outputs[io_height_name]
@@ -1220,13 +1223,18 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                     create_link(tree, height, node.inputs[io_height_name])
                 else: height = create_link(tree, height, node.inputs[io_height_name])[io_height_name]
 
+            if max_height:
+                max_height = create_link(tree, max_height, node.inputs[io_max_height_name])[io_max_height_name]
+
         rgb, alpha = reconnect_all_modifier_nodes(tree, ch, rgb, alpha)
 
         if end_linear:
             if ch.type == 'NORMAL':
                 rgb = create_link(tree, rgb, end_linear.inputs['Normal Overlay'])[0]
-                if end_max_height:
-                    create_link(tree, end_max_height.outputs[0], end_linear.inputs['Max Height'])
+                #if end_max_height:
+                #    create_link(tree, end_max_height.outputs[0], end_linear.inputs['Max Height'])
+                if max_height:
+                    create_link(tree, max_height, end_linear.inputs['Max Height'])
 
                 if height_ons:
                     height = create_link(tree, height_ons, end_linear.inputs['Height ONS'])[1]
@@ -1296,12 +1304,16 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
             create_link(tree, alpha, end.inputs[io_alpha_name])
         if ch.type == 'NORMAL':
             create_link(tree, height, end.inputs[io_height_name])
-            if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs and end_max_height:
+            #if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs and end_max_height:
+            #    if end_max_height_tweak:
+            #        create_link(tree, end_max_height.outputs[0], end_max_height_tweak.inputs[0])
+            #        create_link(tree, end_max_height_tweak.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
+            #    else:
+            #        create_link(tree, end_max_height.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
+            if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs and max_height:
                 if end_max_height_tweak:
-                    create_link(tree, end_max_height.outputs[0], end_max_height_tweak.inputs[0])
-                    create_link(tree, end_max_height_tweak.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
-                else:
-                    create_link(tree, end_max_height.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
+                    max_height = create_link(tree, max_height, end_max_height_tweak.inputs[0])[0]
+                create_link(tree, max_height, end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
 
     # Merge process doesn't care with parents
     if merged_layer_ids: return
@@ -2152,6 +2164,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             ch_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'bump_distance'))
             ch_normal_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'normal_bump_distance'))
+            max_height_calc = nodes.get(ch.max_height_calc)
 
             height_proc = nodes.get(ch.height_proc)
             normal_proc = nodes.get(ch.normal_proc)
@@ -2452,6 +2465,25 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 if 'Bump Height' in height_proc.inputs:
                     create_link(tree, ch_normal_bump_distance, height_proc.inputs['Bump Height'])
 
+            if max_height_calc:
+                prev_max_height = start.outputs.get(root_ch.name + io_suffix['MAX_HEIGHT'])
+                next_max_height = end.inputs.get(root_ch.name + io_suffix['MAX_HEIGHT'])
+                create_link(tree, prev_max_height, max_height_calc.inputs['Prev Bump Distance'])
+                create_link(tree, max_height_calc.outputs[0], next_max_height)
+
+                bdistance = None
+                if ch.normal_map_type != 'NORMAL_MAP':
+                    bdistance = ch_bump_distance
+                elif not ch.enable_transition_bump:
+                    bdistance = ch_normal_bump_distance
+
+                if bdistance:
+                    create_link(tree, bdistance, max_height_calc.inputs['Bump Distance'])
+                else: break_input_link(tree, max_height_calc.inputs['Bump Distance'])
+
+                if ch_intensity:
+                    create_link(tree, ch_intensity, max_height_calc.inputs['Intensity'])
+
             if 'Value' in height_proc.inputs:
                 #create_link(tree, rgb_after_mod, height_proc.inputs['Value'])
                 if layer.type == 'BACKGROUND':
@@ -2509,10 +2541,16 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                             create_link(tree, ch_bump_distance, tb_delta_calc.inputs[1])
                             create_link(tree, tb_delta_calc.outputs[0], height_proc.inputs['Delta'])
 
+                    if max_height_calc and 'Transition Bump Distance' in max_height_calc.inputs:
+                        create_link(tree, ch_tb_distance, max_height_calc.inputs['Transition Bump Distance'])
+
                 ch_tb_crease_factor = start.outputs.get(get_ch_input_name(layer, ch, 'transition_bump_crease_factor'))
                 if ch_tb_crease_factor:
                     if 'Crease Factor' in height_proc.inputs:
                         create_link(tree, ch_tb_crease_factor, height_proc.inputs['Crease Factor'])
+
+                    if max_height_calc and 'Crease Factor' in max_height_calc.inputs:
+                        create_link(tree, ch_tb_crease_factor, max_height_calc.inputs['Crease Factor'])
 
                 if trans_bump_crease:
 

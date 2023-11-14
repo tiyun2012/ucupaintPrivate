@@ -385,7 +385,7 @@ def check_layer_tree_ios(layer, tree=None):
                         min_value=0.0, max_value=1.0, default_value=0.05)
                 input_index += 1
 
-                if ch.transition_bump_crease:
+                if ch.transition_bump_crease and not ch.transition_bump_flip:
                     # Transition bump crease factor input
                     dirty = create_layer_ch_prop_input(
                             layer_node, layer, ch, 'transition_bump_crease_factor', 'NodeSocketFloat', 
@@ -479,6 +479,14 @@ def check_layer_tree_ios(layer, tree=None):
                     if not need_prev_normal or ch.enable:
                         dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
                         output_index += 1
+
+            if ch.enable:
+
+                name = root_ch.name + io_suffix['MAX_HEIGHT']
+                dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
+                input_index += 1
+                dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
+                output_index += 1
 
     # Tree background inputs
     if layer.type in {'BACKGROUND', 'GROUP'}:

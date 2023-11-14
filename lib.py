@@ -221,6 +221,9 @@ ENGINE_FILTER_LEGACY = '~yPL Engine Filter Legacy'
 #HEIGHT_PACK = '~yPL Height Pack'
 
 TB_DELTA_CALC = '~yPL Transition Bump Delta Calculation'
+CH_MAX_HEIGHT_CALC = '~yPL Layer Channel Max Height'
+CH_MAX_HEIGHT_TB_CALC = '~yPL Layer Channel Max Height with Transition Bump'
+CH_MAX_HEIGHT_TBC_CALC = '~yPL Layer Channel Max Height with Transition Bump Crease'
 
 EMULATED_CURVE = '~yPL Emulated Curve'
 EMULATED_CURVE_SMOOTH = '~yPL Emulated Curve Smooth'

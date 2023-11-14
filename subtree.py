@@ -1695,6 +1695,8 @@ def remove_layer_normal_channel_nodes(root_ch, layer, ch, tree=None):
     remove_node(tree, ch, 'normal_proc')
     remove_node(tree, ch, 'normal_flip')
 
+    remove_node(tree, ch, 'max_height_calc')
+
 def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=False):
 
     #print("Checking channel normal map nodes. Layer: " + layer.name + ' Channel: ' + root_ch.name)
@@ -1781,6 +1783,22 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     else:
         dirty = remove_node(tree, ch, 'tb_delta_calc')
         if dirty: need_reconnect = True
+
+    # Max Height calculation node
+    if ch.enable_transition_bump:
+        if ch.transition_bump_crease and not ch.transition_bump_flip:
+            lib_name = lib.CH_MAX_HEIGHT_TBC_CALC
+        else:
+            lib_name = lib.CH_MAX_HEIGHT_TB_CALC
+    else:
+        lib_name = lib.CH_MAX_HEIGHT_CALC
+
+    max_height_calc, need_reconnect = replace_new_node(
+            tree, ch, 'max_height_calc', 'ShaderNodeGroup', 'Max Height Calculation', 
+            lib_name, return_status = True, hard_replace=True, dirty=need_reconnect)
+
+    inp = max_height_calc.inputs.get('Is Flipped')
+    if inp: inp.default_value = 1.0 if ch.enable_transition_bump and ch.transition_bump_flip else 0.0
 
     # Height Process
     if ch.normal_map_type == 'NORMAL_MAP':
