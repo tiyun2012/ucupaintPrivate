@@ -2484,6 +2484,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 if ch_intensity:
                     create_link(tree, ch_intensity, max_height_calc.inputs['Intensity'])
 
+                if normal_proc and 'Max Height' in normal_proc.inputs:
+                    create_link(tree, max_height_calc.outputs[0], normal_proc.inputs['Max Height'])
+
             if 'Value' in height_proc.inputs:
                 #create_link(tree, rgb_after_mod, height_proc.inputs['Value'])
                 if layer.type == 'BACKGROUND':

@@ -3731,9 +3731,9 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
 
         max_height = get_displacement_max_height(height_root_ch, layer)
 
-        if height_root_ch.enable_smooth_bump: 
-            inp = normal_proc.inputs.get('Bump Height Scale')
-            if inp: inp.default_value = get_fine_bump_distance(max_height)
+        #if height_root_ch.enable_smooth_bump: 
+        #    inp = normal_proc.inputs.get('Bump Height Scale')
+        #    if inp: inp.default_value = get_fine_bump_distance(max_height)
 
         if 'Max Height' in normal_proc.inputs:
             normal_proc.inputs['Max Height'].default_value = max_height
@@ -3756,9 +3756,9 @@ def update_layer_bump_process_max_height(height_root_ch, layer, tree=None):
 
     bump_process.inputs['Max Height'].default_value = max_height
 
-    if height_root_ch.enable_smooth_bump:
-        if 'Bump Height Scale' in bump_process.inputs:
-            bump_process.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
+    #if height_root_ch.enable_smooth_bump:
+    #    if 'Bump Height Scale' in bump_process.inputs:
+    #        bump_process.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
     #else:
     #    bump_process.inputs['Tweak'].default_value = 5.0
 
@@ -3797,8 +3797,8 @@ def update_displacement_height_ratio(root_ch, max_height=None):
             end_linear.inputs['Max Height'].default_value = max_height
         else: end_linear.inputs['Max Height'].default_value = 1.0
 
-        if root_ch.enable_smooth_bump:
-            end_linear.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
+        #if root_ch.enable_smooth_bump:
+        #    end_linear.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
 
     end_max_height = group_tree.nodes.get(root_ch.end_max_height)
     if end_max_height:

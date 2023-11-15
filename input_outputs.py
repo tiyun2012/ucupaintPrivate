@@ -200,8 +200,8 @@ def check_all_channel_ios(yp, reconnect=True):
                 end_linear.inputs['Max Height'].default_value = max_height
             else: end_linear.inputs['Max Height'].default_value = 1.0
 
-            if ch.enable_smooth_bump:
-                end_linear.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
+            #if ch.enable_smooth_bump:
+            #    end_linear.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
 
             # Create a node to store max height
             end_max_height = check_new_node(group_tree, ch, 'end_max_height', 'ShaderNodeValue', 'Max Height')
