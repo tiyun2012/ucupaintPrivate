@@ -1214,6 +1214,7 @@ class YBakeChannels(bpy.types.Operator):
                 #if ch.type != 'NORMAL': continue
                 use_hdr = not ch.use_clamp
                 bake_channel(self.uv_map, mat, node, ch, width, height, use_hdr=use_hdr)
+                #return {'FINISHED'}
 
         # AA process
         if self.aa_level > 1:

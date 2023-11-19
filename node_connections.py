@@ -1296,6 +1296,9 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                     height = baked_disp.outputs[0]
                     create_link(tree, baked_uv_map, baked_disp.inputs[0])
 
+                if end_max_height:
+                    max_height = end_max_height.outputs[0]
+
         if end_backface:
             alpha = create_link(tree, alpha, end_backface.inputs[0])[0]
             create_link(tree, geometry.outputs['Backfacing'], end_backface.inputs[1])
@@ -1307,12 +1310,6 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
             create_link(tree, alpha, end.inputs[io_alpha_name])
         if ch.type == 'NORMAL':
             create_link(tree, height, end.inputs[io_height_name])
-            #if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs and end_max_height:
-            #    if end_max_height_tweak:
-            #        create_link(tree, end_max_height.outputs[0], end_max_height_tweak.inputs[0])
-            #        create_link(tree, end_max_height_tweak.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
-            #    else:
-            #        create_link(tree, end_max_height.outputs[0], end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
             if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs and max_height:
                 if end_max_height_tweak:
                     max_height = create_link(tree, max_height, end_max_height_tweak.inputs[0])[0]
