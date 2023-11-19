@@ -242,6 +242,9 @@ def remove_all_prev_inputs(tree, layer, node): #, height_only=False):
                 if io_name in node.inputs:
                     break_input_link(tree, node.inputs[io_name])
 
+            io_name = root_ch.name + io_suffix['MAX_HEIGHT']
+            break_input_link(tree, node.inputs[io_name])
+
         #if height_only: continue
 
         io_name = root_ch.name
@@ -2472,7 +2475,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 create_link(tree, max_height_calc.outputs[0], next_max_height)
 
                 bdistance = None
-                if ch.normal_map_type != 'NORMAL_MAP':
+                if layer.type == 'GROUP':
+                    bdistance = start.outputs.get(root_ch.name + io_suffix['MAX_HEIGHT'] + io_suffix['GROUP'])
+                elif ch.normal_map_type != 'NORMAL_MAP':
                     bdistance = ch_bump_distance
                 elif not ch.enable_transition_bump:
                     bdistance = ch_normal_bump_distance

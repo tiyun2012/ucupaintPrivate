@@ -543,6 +543,10 @@ def check_layer_tree_ios(layer, tree=None):
                     dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
                     input_index += 1
 
+                name = root_ch.name + io_suffix['MAX_HEIGHT'] + io_suffix['GROUP']
+                dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
+                input_index += 1
+
     # UV necessary container
     uv_names = []
 
