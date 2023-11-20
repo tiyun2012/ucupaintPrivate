@@ -1214,7 +1214,6 @@ class YBakeChannels(bpy.types.Operator):
                 #if ch.type != 'NORMAL': continue
                 use_hdr = not ch.use_clamp
                 bake_channel(self.uv_map, mat, node, ch, width, height, use_hdr=use_hdr)
-                #return {'FINISHED'}
 
         # AA process
         if self.aa_level > 1:
@@ -1626,20 +1625,7 @@ class YMergeLayer(bpy.types.Operator):
         ch = layer.channels[int(self.channel_idx)]
         neighbor_ch = neighbor_layer.channels[int(self.channel_idx)]
 
-        # Get parent dict
-        parent_dict = get_parent_dict(yp)
-
         merge_success = False
-
-        # Get max height
-        if height_root_ch and main_ch.type == 'NORMAL':
-            end_max_height = tree.nodes.get(height_root_ch.end_max_height)
-            ori_max_height = 0.0
-            max_height = 0.0
-            if end_max_height:
-                ori_max_height = end_max_height.outputs[0].default_value
-                max_height = get_max_height_from_list_of_layers([layer, neighbor_layer], int(self.channel_idx))
-                end_max_height.outputs[0].default_value = max_height
 
         # Check layer
         if (layer.type == 'IMAGE' and layer.texcoord_type == 'UV'): # and neighbor_layer.type == 'IMAGE'):
@@ -1649,19 +1635,16 @@ class YMergeLayer(bpy.types.Operator):
                     uv_map=layer.uv_name, bake_type='EMIT' 
                     )
 
-            #yp.halt_update = True
-
-            # Ge list of parent ids
-            #pids = get_list_of_parent_ids(layer)
+            # Get list of parent ids
+            pids = get_list_of_parent_ids(layer)
 
             # Disable other layers
-            #layer_oris = []
-            #for i, l in enumerate(yp.layers):
-            #    layer_oris.append(l.enable)
-            #    #if i in pids:
-            #    #    l.enable = True
-            #    if l not in {layer, neighbor_layer}:
-            #        l.enable = False
+            layer_oris = []
+            for i, l in enumerate(yp.layers):
+                layer_oris.append(l.enable)
+                if i in pids or l in {layer, neighbor_layer}:
+                    l.enable = True
+                else: l.enable = False
 
             # Disable modfiers and transformations if apply modifiers is not enabled
             if not self.apply_modifiers:
@@ -1678,8 +1661,6 @@ class YMergeLayer(bpy.types.Operator):
                 ori_blend_type = ch.normal_blend_type
                 ch.normal_blend_type = 'MIX'
 
-            #yp.halt_update = False
-
             # Enable alpha on main channel (will also update all the nodes)
             ori_enable_alpha = main_ch.enable_alpha
             yp.alpha_auto_setup = False
@@ -1690,7 +1671,6 @@ class YMergeLayer(bpy.types.Operator):
 
             # Bake main channel
             merge_success = bake_channel(layer.uv_name, mat, node, main_ch, target_layer=layer)
-            #return {'FINISHED'}
 
             # Recover bake settings
             recover_bake_settings(book, yp)
@@ -1700,9 +1680,9 @@ class YMergeLayer(bpy.types.Operator):
             else: remove_layer_modifiers_and_transforms(layer)
 
             # Recover layer enable
-            #for i, le in enumerate(layer_oris):
-            #    if yp.layers[i].enable != le:
-            #        yp.layers[i].enable = le
+            for i, le in enumerate(layer_oris):
+                if yp.layers[i].enable != le:
+                    yp.layers[i].enable = le
 
             # Recover original props
             main_ch.enable_alpha = ori_enable_alpha
@@ -1711,9 +1691,6 @@ class YMergeLayer(bpy.types.Operator):
                 ch.blend_type = ori_blend_type
             else: ch.normal_blend_type = ori_blend_type
 
-        #elif (layer.type == 'COLOR' and neighbor_layer.type == 'COLOR' 
-        #        and len(layer.masks) != 0 and len(neighbor_layer.masks) == len(layer.masks)):
-        #    pass
         elif layer.type == 'VCOL' and neighbor_layer.type == 'VCOL':
 
             modifier_found = False
@@ -1792,10 +1769,6 @@ class YMergeLayer(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "This kind of merge is not supported yet!")
             return {'CANCELLED'}
-
-        # Recover max height
-        if height_root_ch and main_ch.type == 'NORMAL':
-            if end_max_height: end_max_height.outputs[0].default_value = ori_max_height
 
         if merge_success:
             # Remove neighbor layer
@@ -2549,9 +2522,9 @@ def check_subdiv_setup(height_ch):
 
     # Max height tweak node
     if yp.use_baked and height_ch.enable_subdiv_setup:
-        end_max_height = check_new_node(tree, height_ch, 'end_max_height_tweak', 'ShaderNodeMath', 'Max Height Tweak')
-        end_max_height.operation = 'MULTIPLY'
-        end_max_height.inputs[1].default_value = height_ch.subdiv_tweak
+        end_max_height_tweak = check_new_node(tree, height_ch, 'end_max_height_tweak', 'ShaderNodeMath', 'Max Height Tweak')
+        end_max_height_tweak.operation = 'MULTIPLY'
+        end_max_height_tweak.inputs[1].default_value = height_ch.subdiv_tweak
     else:
         remove_node(tree, height_ch, 'end_max_height_tweak')
 
