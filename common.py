@@ -5326,34 +5326,18 @@ def get_entity_input_name(entity, prop_name):
     rna = entity_rna.properties[prop_name]
 
     # Regex
-    m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
-    m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
-    m3 = re.match(r'^yp\.layers\[(\d+)\]\.channels\[(\d+)\]$', entity.path_from_id())
+    m1 = re.match(r'^yp\.layers\[(\d+)\].*', entity.path_from_id())
 
     if m1:
-        layer = entity
-        ch = None
-        mask = None
-        root_ch = None
-    elif m2:
-        layer = yp.layers[int(m2.group(1))]
-        ch = None
-        mask = entity
-        root_ch = None
-    elif m3:
-        layer = yp.layers[int(m3.group(1))]
-        ch = entity
-        mask = None
-        root_ch = yp.channels[int(m3.group(2))]
+        layer_index = int(m1.group(1))
+    else:
+        return ''
 
-    input_name = ''
+    # Get path without layer
+    path = entity.path_from_id()
+    path = path.replace('yp.layers[' + str(layer_index) + '].', '')
 
-    if root_ch:
-        input_name += root_ch.name + ' '
-
-    input_name += rna.name
-
-    return input_name
+    return path + '.' + prop_name
 
 def split_layout(layout, factor, align=False):
     if not is_greater_than_280():
