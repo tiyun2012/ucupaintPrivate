@@ -4334,7 +4334,7 @@ def update_channel_intensity_value(self, context):
     layer_node = root_tree.nodes.get(layer.group_node)
 
     # Set input intensity
-    inp = layer_node.inputs.get(get_ch_input_name(layer, ch, 'intensity_value'))
+    inp = layer_node.inputs.get(get_entity_input_name(ch, 'intensity_value'))
     if inp: inp.default_value = ch.intensity_value
 
     ##### REPLACED_BY_SHADERS

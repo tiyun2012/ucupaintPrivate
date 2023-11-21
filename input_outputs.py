@@ -317,7 +317,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
     m3 = re.match(r'^yp\.layers\[(\d+)\]\.channels\[(\d+)\]$', entity.path_from_id())
 
     if m1:
-        layer = yp.layers[int(m1.group(1))]
+        layer = entity
         ch = None
         mask = None
         return False # Not implemented yet
@@ -330,13 +330,18 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
         layer = yp.layers[int(m3.group(1))]
         ch = entity
         mask = None
+    else:
+        return False
 
     # Get property rna
     entity_rna = type(entity).bl_rna
     rna = entity_rna.properties[prop_name]
 
+    # Get prop value
+    prop_value = getattr(entity, prop_name)
+
     # Get socket type
-    if type(getattr(entity, prop_name)) == float:
+    if type(prop_value) == float:
         socket_type = 'NodeSocketFloat'
         if rna.soft_min == 0.0 and rna.soft_max == 1.0:
             socket_type = 'NodeSocketFloatFactor'
@@ -345,7 +350,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
 
     layer_node = root_tree.nodes.get(layer.group_node)
     tree = layer_node.node_tree
-    input_name = get_ch_input_name(layer, ch, prop_name)
+    input_name = get_entity_input_name(entity, prop_name)
 
     dirty = create_input(tree, input_name, socket_type, 
             valid_inputs, input_index, dirty,
@@ -354,7 +359,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
 
     # Set default value
     inp = layer_node.inputs.get(input_name)
-    inp.default_value = getattr(ch, prop_name)
+    inp.default_value = prop_value
 
     return dirty
 

@@ -1931,7 +1931,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         alpha = start_alpha
         bg_alpha = None
 
-        ch_intensity = start.outputs.get(get_ch_input_name(layer, ch, 'intensity_value'))
+        ch_intensity = start.outputs.get(get_entity_input_name(ch, 'intensity_value'))
         prev_rgb = start.outputs.get(root_ch.name)
         prev_alpha = start.outputs.get(root_ch.name + io_suffix['ALPHA'])
 
@@ -2162,8 +2162,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             write_height = get_write_height(ch)
 
-            ch_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'bump_distance'))
-            ch_normal_bump_distance = start.outputs.get(get_ch_input_name(layer, ch, 'normal_bump_distance'))
+            ch_bump_distance = start.outputs.get(get_entity_input_name(ch, 'bump_distance'))
+            ch_normal_bump_distance = start.outputs.get(get_entity_input_name(ch, 'normal_bump_distance'))
             max_height_calc = nodes.get(ch.max_height_calc)
 
             height_proc = nodes.get(ch.height_proc)
@@ -2526,7 +2526,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             # Transition Bump
             if ch.enable_transition_bump and ch.enable:
 
-                ch_tb_distance = start.outputs.get(get_ch_input_name(layer, ch, 'transition_bump_distance'))
+                ch_tb_distance = start.outputs.get(get_entity_input_name(ch, 'transition_bump_distance'))
                 if ch_tb_distance:
 
                     tb_distance_flipper = nodes.get(ch.tb_distance_flipper)
@@ -2549,7 +2549,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     if max_height_calc and 'Transition Bump Distance' in max_height_calc.inputs:
                         create_link(tree, ch_tb_distance, max_height_calc.inputs['Transition Bump Distance'])
 
-                ch_tb_crease_factor = start.outputs.get(get_ch_input_name(layer, ch, 'transition_bump_crease_factor'))
+                ch_tb_crease_factor = start.outputs.get(get_entity_input_name(ch, 'transition_bump_crease_factor'))
                 if ch_tb_crease_factor:
                     if 'Crease Factor' in height_proc.inputs:
                         create_link(tree, ch_tb_crease_factor, height_proc.inputs['Crease Factor'])

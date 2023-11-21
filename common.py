@@ -3686,13 +3686,13 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
     height_proc = tree.nodes.get(height_ch.height_proc)
     if height_proc and layer.type != 'GROUP':
 
-        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'bump_distance'))
+        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'bump_distance'))
         if inp: inp.default_value = height_ch.bump_distance
 
-        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'normal_bump_distance'))
+        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'normal_bump_distance'))
         if inp: inp.default_value = height_ch.normal_bump_distance
 
-        inp = layer_node.inputs.get(get_ch_input_name(layer, height_ch, 'transition_bump_distance'))
+        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'transition_bump_distance'))
         if inp: inp.default_value = height_ch.transition_bump_distance
 
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
@@ -5317,13 +5317,43 @@ def get_closest_bsdf_forward(node, valid_types=[]):
 
     return None
 
-def get_ch_input_name(layer, ch, prop_name):
+def get_entity_input_name(entity, prop_name):
 
-    yp = layer.id_data.yp
-    ch_index = get_layer_channel_index(layer, ch)
-    root_ch = yp.channels[ch_index]
+    yp = entity.id_data.yp
 
-    return root_ch.name + ' ' + prop_name
+    # Get property rna
+    entity_rna = type(entity).bl_rna
+    rna = entity_rna.properties[prop_name]
+
+    # Regex
+    m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
+    m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
+    m3 = re.match(r'^yp\.layers\[(\d+)\]\.channels\[(\d+)\]$', entity.path_from_id())
+
+    if m1:
+        layer = entity
+        ch = None
+        mask = None
+        root_ch = None
+    elif m2:
+        layer = yp.layers[int(m2.group(1))]
+        ch = None
+        mask = entity
+        root_ch = None
+    elif m3:
+        layer = yp.layers[int(m3.group(1))]
+        ch = entity
+        mask = None
+        root_ch = yp.channels[int(m3.group(2))]
+
+    input_name = ''
+
+    if root_ch:
+        input_name += root_ch.name + ' '
+
+    input_name += rna.name
+
+    return input_name
 
 def split_layout(layout, factor, align=False):
     if not is_greater_than_280():
