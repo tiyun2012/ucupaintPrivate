@@ -78,11 +78,11 @@ def fix_tree_output_index(tree, item, correct_index):
     fix_tree_output_index_400(tree.interface, item, correct_index)
 
 def create_input(tree, name, socket_type, valid_inputs, index, 
-        dirty = False, min_value=None, max_value=None, default_value=None, hide_value=False):
+        dirty = False, min_value=None, max_value=None, default_value=None, hide_value=False, description=''):
 
     inp = get_tree_input_by_name(tree, name)
     if not inp:
-        inp = new_tree_input(tree, name, socket_type, use_both=True)
+        inp = new_tree_input(tree, name, socket_type, description=description, use_both=True)
         dirty = True
         if min_value != None: inp.min_value = min_value
         if max_value != None: inp.max_value = max_value
@@ -307,16 +307,50 @@ def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #,
     # Linear nodes
     check_yp_linear_nodes(yp, layer, False)
 
-def create_layer_ch_prop_input(layer_node, layer, ch, prop_name, socket_type, 
-        valid_inputs, input_index, dirty,
-        min_value, max_value, default_value):
+def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
 
+    root_tree = entity.id_data
+    yp = root_tree.yp
+
+    m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
+    m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
+    m3 = re.match(r'^yp\.layers\[(\d+)\]\.channels\[(\d+)\]$', entity.path_from_id())
+
+    if m1:
+        layer = yp.layers[int(m1.group(1))]
+        ch = None
+        mask = None
+        return False # Not implemented yet
+    elif m2:
+        layer = yp.layers[int(m2.group(1))]
+        ch = None
+        mask = entity
+        return False # Not implemented yet
+    elif m3:
+        layer = yp.layers[int(m3.group(1))]
+        ch = entity
+        mask = None
+
+    # Get property rna
+    entity_rna = type(entity).bl_rna
+    rna = entity_rna.properties[prop_name]
+
+    # Get socket type
+    if type(getattr(entity, prop_name)) == float:
+        socket_type = 'NodeSocketFloat'
+        if rna.soft_min == 0.0 and rna.soft_max == 1.0:
+            socket_type = 'NodeSocketFloatFactor'
+    else:
+        return False # Not implemented yet
+
+    layer_node = root_tree.nodes.get(layer.group_node)
     tree = layer_node.node_tree
     input_name = get_ch_input_name(layer, ch, prop_name)
 
     dirty = create_input(tree, input_name, socket_type, 
             valid_inputs, input_index, dirty,
-            min_value=min_value, max_value=max_value, default_value=default_value)
+            min_value=rna.soft_min, max_value=rna.soft_max, default_value=rna.default, 
+            description=rna.description)
 
     # Set default value
     inp = layer_node.inputs.get(input_name)
@@ -351,46 +385,29 @@ def check_layer_tree_ios(layer, tree=None):
         default_value = ch.intensity_value
 
         # Create intensity socket
-        dirty = create_layer_ch_prop_input(
-                layer_node, layer, ch, 'intensity_value', 'NodeSocketFloatFactor', 
-                valid_inputs, input_index, dirty,
-                min_value=0.0, max_value=1.0, default_value=1.0)
+        dirty = create_prop_input(ch, 'intensity_value', valid_inputs, input_index, dirty)
         input_index += 1
 
         if root_ch.type == 'NORMAL':
 
+            # Height/bump distance input
             if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
-
-                # Height/bump distance input
-                dirty = create_layer_ch_prop_input(
-                        layer_node, layer, ch, 'bump_distance', 'NodeSocketFloat', 
-                        valid_inputs, input_index, dirty,
-                        min_value=-1.0, max_value=1.0, default_value=0.05)
+                dirty = create_prop_input(ch, 'bump_distance', valid_inputs, input_index, dirty)
                 input_index += 1
 
+            # Normal height/bump distance input
             if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
-
-                # Normal height/bump distance input
-                dirty = create_layer_ch_prop_input(
-                        layer_node, layer, ch, 'normal_bump_distance', 'NodeSocketFloat', 
-                        valid_inputs, input_index, dirty,
-                        min_value=-1.0, max_value=1.0, default_value=0.05)
+                dirty = create_prop_input( ch, 'normal_bump_distance', valid_inputs, input_index, dirty)
                 input_index += 1
 
+            # Transition bump distance input
             if ch.enable_transition_bump:
-                # Transition bump distance input
-                dirty = create_layer_ch_prop_input(
-                        layer_node, layer, ch, 'transition_bump_distance', 'NodeSocketFloat', 
-                        valid_inputs, input_index, dirty,
-                        min_value=0.0, max_value=1.0, default_value=0.05)
+                dirty = create_prop_input(ch, 'transition_bump_distance', valid_inputs, input_index, dirty)
                 input_index += 1
 
+                # Transition bump crease factor input
                 if ch.transition_bump_crease and not ch.transition_bump_flip:
-                    # Transition bump crease factor input
-                    dirty = create_layer_ch_prop_input(
-                            layer_node, layer, ch, 'transition_bump_crease_factor', 'NodeSocketFloat', 
-                            valid_inputs, input_index, dirty,
-                            min_value=0.0, max_value=1.0, default_value=0.33)
+                    dirty = create_prop_input(ch, 'transition_bump_crease_factor', valid_inputs, input_index, dirty)
                     input_index += 1
     
     # Tree input and outputs
