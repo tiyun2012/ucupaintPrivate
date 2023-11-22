@@ -2097,6 +2097,16 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         blend = nodes.get(ch.blend)
         bcol0, bcol1, bout = get_mix_color_indices(blend)
 
+        ch_tb_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_fac'))
+        ch_tb_second_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_second_fac'))
+
+        if intensity_multiplier and ch != trans_bump_ch:
+            if trans_bump_flip:
+                create_link(tree, tb_second_value, intensity_multiplier.inputs['Multiplier'])
+            else: create_link(tree, tb_value, intensity_multiplier.inputs['Multiplier'])
+
+            if ch_tb_fac: create_link(tree, ch_tb_fac, intensity_multiplier.inputs['Factor'])
+
         if ch.source_group == '' and (root_ch.type != 'NORMAL' or ch.normal_map_type != 'NORMAL_MAP'):
             ch_linear = nodes.get(ch.linear)
             if ch_linear:
@@ -2908,11 +2918,17 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             create_link(tree, transition_input, tr_ramp.inputs['Transition'])
 
+            if ch_tb_second_fac:
+                create_link(tree, ch_tb_second_fac, tr_ramp.inputs['Factor'])
+
             if trans_bump_flip:
 
                 # Connect intensity
                 if ch_intensity:
                     create_link(tree, ch_intensity, tr_ramp_blend.inputs['Intensity Channel'])
+
+                if tb_value:
+                    create_link(tree, tb_value, tr_ramp.inputs['Multiplier'])
 
                 create_link(tree, prev_rgb, tr_ramp_blend.inputs['Input RGB'])
                 create_link(tree, intensity_multiplier.outputs[0], tr_ramp_blend.inputs['Multiplied Alpha'])
@@ -2940,6 +2956,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             else:
                 create_link(tree, rgb, tr_ramp.inputs['RGB'])
                 rgb = tr_ramp.outputs[0]
+
+                if tb_second_value:
+                    create_link(tree, tb_second_value, tr_ramp.inputs['Multiplier'])
 
                 if 'Bg Alpha' in tr_ramp.inputs and bg_alpha:
                     create_link(tree, bg_alpha, tr_ramp.inputs['Bg Alpha'])

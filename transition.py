@@ -114,28 +114,28 @@ def update_transition_bump_value(self, context):
 
     if not ch.enable_transition_bump: return
 
-    ch_tb_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_value'))
-    ch_tb_second_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_second_edge_value'))
+    #ch_tb_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_value'))
+    #ch_tb_second_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_second_edge_value'))
 
-    ch_tb_value.default_value = ch.transition_bump_value
-    ch_tb_second_value.default_value = ch.transition_bump_second_edge_value
+    #ch_tb_value.default_value = ch.transition_bump_value
+    #ch_tb_second_value.default_value = ch.transition_bump_second_edge_value
 
-    intensity_multiplier = tree.nodes.get(ch.intensity_multiplier)
-    tb_intensity_multiplier = tree.nodes.get(ch.tb_intensity_multiplier)
+    #intensity_multiplier = tree.nodes.get(ch.intensity_multiplier)
+    #tb_intensity_multiplier = tree.nodes.get(ch.tb_intensity_multiplier)
 
-    ##### REPLACED_BY_SHADERS
+    ###### REPLACED_BY_SHADERS
 
-    if ch.transition_bump_flip or layer.type=='BACKGROUND':
-    #if ch.transition_bump_flip:
-        #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-        #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-        pass
-    else:
-        #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-        #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-        pass
-    if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-    if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
+    #if ch.transition_bump_flip or layer.type=='BACKGROUND':
+    ##if ch.transition_bump_flip:
+    #    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
+    #    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
+    #    pass
+    #else:
+    #    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
+    #    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
+    #    pass
+    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
+    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
 
     #####
 

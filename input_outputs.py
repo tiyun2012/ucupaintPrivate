@@ -659,10 +659,8 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
 
                 # For fully implemented prop only
                 if not any(prop for prop in [
-                    'transition_bump_value', 
-                    'transition_bump_second_edge_value',
-                    'transition_bump_fac', 
-                    'transition_bump_second_fac'
+                    #'transition_bump_value', 
+                    #'transition_bump_second_edge_value',
                     ] if prop in inp.name): 
 
                     val = layer_node.inputs.get(inp.name).default_value

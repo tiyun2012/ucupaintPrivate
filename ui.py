@@ -1402,11 +1402,11 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     crow = cccol.row(align=True)
                     crow.label(text='Edge 1:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_value', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_value')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Edge 2:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_second_edge_value', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_second_edge_value')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Affected Masks:') #, icon_value=lib.get_icon('input'))
@@ -1601,7 +1601,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     brow = bcol.row(align=True)
                     brow.active = bump_ch_found
                     brow.label(text='Transition Factor:')
-                    brow.prop(ch, 'transition_bump_second_fac', text='')
+                    draw_input_prop(brow, ch, 'transition_bump_second_fac')
 
                     if tr_ramp.type == 'GROUP':
                         ramp = tr_ramp.node_tree.nodes.get('_RAMP')
@@ -1665,7 +1665,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 row.active = bump_ch_found
                 row.label(text='', icon_value=lib.get_icon('input'))
                 row.label(text='Transition Factor')
-                row.prop(ch, 'transition_bump_fac', text='')
+                draw_input_prop(row, ch, 'transition_bump_fac')
 
             extra_separator = True
 
