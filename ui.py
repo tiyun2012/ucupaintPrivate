@@ -1524,7 +1524,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         brow.active = layer.type != 'COLOR' or not ch.enable_transition_bump
                         brow.label(text='Max Height:') #, icon_value=lib.get_icon('input'))
                         brow.active == is_bump_distance_relevant(layer, ch)
-                        brow.prop(ch, 'bump_distance', text='')
+                        draw_input_prop(brow, ch, 'bump_distance')
                         if root_ch.enable_smooth_bump:
                             brow = cccol.row(align=True)
                             brow.label(text='Smooth Multiplier:') 

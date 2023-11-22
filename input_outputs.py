@@ -113,7 +113,7 @@ def create_output(tree, name, socket_type, valid_outputs, index, dirty=False, de
 
     return dirty
 
-def check_all_channel_ios(yp, reconnect=True):
+def check_all_channel_ios(yp, reconnect=True, remove_props=False):
     group_tree = yp.id_data
 
     input_index = 0
@@ -232,7 +232,7 @@ def check_all_channel_ios(yp, reconnect=True):
 
     # Move layer IO
     for layer in yp.layers:
-        check_all_layer_channel_io_and_nodes(layer)
+        check_all_layer_channel_io_and_nodes(layer, remove_props=remove_props)
 
     if reconnect:
         # Rearrange layers
@@ -244,7 +244,7 @@ def check_all_channel_ios(yp, reconnect=True):
         rearrange_yp_nodes(group_tree)
         reconnect_yp_nodes(group_tree)
 
-def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #, check_uvs=False): #, has_parent=False):
+def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None, remove_props=False): #, check_uvs=False): #, has_parent=False):
 
     yp = layer.id_data.yp
     if not tree: tree = get_tree(layer)
@@ -254,7 +254,7 @@ def check_all_layer_channel_io_and_nodes(layer, tree=None, specific_ch=None): #,
     #    check_uv_nodes(yp)
 
     # Check layer tree io
-    check_layer_tree_ios(layer, tree)
+    check_layer_tree_ios(layer, tree, remove_props)
 
     # Get source_tree
     source_tree = get_source_tree(layer, tree)
@@ -364,7 +364,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
 
     return dirty
 
-def check_layer_tree_ios(layer, tree=None):
+def check_layer_tree_ios(layer, tree=None, remove_props=False):
 
     yp = layer.id_data.yp
     if not tree: tree = get_tree(layer)
@@ -381,40 +381,41 @@ def check_layer_tree_ios(layer, tree=None):
     has_parent = layer.parent_idx != -1
     need_prev_normal = check_need_prev_normal(layer)
 
-    # Intensity inputs
-    for i, ch in enumerate(layer.channels):
-        if not ch.enable: continue
+    # Prop inputs
+    if not remove_props:
+        for i, ch in enumerate(layer.channels):
+            if not ch.enable: continue
 
-        root_ch = yp.channels[i]
+            root_ch = yp.channels[i]
 
-        # Get default value
-        default_value = ch.intensity_value
+            # Get default value
+            default_value = ch.intensity_value
 
-        # Create intensity socket
-        dirty = create_prop_input(ch, 'intensity_value', valid_inputs, input_index, dirty)
-        input_index += 1
+            # Create intensity socket
+            dirty = create_prop_input(ch, 'intensity_value', valid_inputs, input_index, dirty)
+            input_index += 1
 
-        if root_ch.type == 'NORMAL':
+            if root_ch.type == 'NORMAL':
 
-            # Height/bump distance input
-            if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
-                dirty = create_prop_input(ch, 'bump_distance', valid_inputs, input_index, dirty)
-                input_index += 1
-
-            # Normal height/bump distance input
-            if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
-                dirty = create_prop_input( ch, 'normal_bump_distance', valid_inputs, input_index, dirty)
-                input_index += 1
-
-            # Transition bump distance input
-            if ch.enable_transition_bump:
-                dirty = create_prop_input(ch, 'transition_bump_distance', valid_inputs, input_index, dirty)
-                input_index += 1
-
-                # Transition bump crease factor input
-                if ch.transition_bump_crease and not ch.transition_bump_flip:
-                    dirty = create_prop_input(ch, 'transition_bump_crease_factor', valid_inputs, input_index, dirty)
+                # Height/bump distance input
+                if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+                    dirty = create_prop_input(ch, 'bump_distance', valid_inputs, input_index, dirty)
                     input_index += 1
+
+                # Normal height/bump distance input
+                if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
+                    dirty = create_prop_input( ch, 'normal_bump_distance', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                # Transition bump distance input
+                if ch.enable_transition_bump:
+                    dirty = create_prop_input(ch, 'transition_bump_distance', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                    # Transition bump crease factor input
+                    if ch.transition_bump_crease and not ch.transition_bump_flip:
+                        dirty = create_prop_input(ch, 'transition_bump_crease_factor', valid_inputs, input_index, dirty)
+                        input_index += 1
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
