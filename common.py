@@ -3686,14 +3686,14 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
     height_proc = tree.nodes.get(height_ch.height_proc)
     if height_proc and layer.type != 'GROUP':
 
-        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'bump_distance'))
-        if inp: inp.default_value = height_ch.bump_distance
+        #inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'bump_distance'))
+        #if inp: inp.default_value = height_ch.bump_distance
 
-        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'normal_bump_distance'))
-        if inp: inp.default_value = height_ch.normal_bump_distance
+        #inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'normal_bump_distance'))
+        #if inp: inp.default_value = height_ch.normal_bump_distance
 
-        inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'transition_bump_distance'))
-        if inp: inp.default_value = height_ch.transition_bump_distance
+        #inp = layer_node.inputs.get(get_entity_input_name(height_ch, 'transition_bump_distance'))
+        #if inp: inp.default_value = height_ch.transition_bump_distance
 
         if height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
 
@@ -3718,11 +3718,12 @@ def update_layer_bump_distance(height_ch, height_root_ch, layer, tree=None):
 
             ##### REPLACED_BY_SHADERS
 
-            inp = height_proc.inputs.get('Bump Height')
-            if inp:
-                if height_ch.enable_transition_bump:
-                    inp.default_value = get_transition_bump_max_distance(height_ch)
-                else: inp.default_value = height_ch.normal_bump_distance
+            #inp = height_proc.inputs.get('Bump Height')
+            #if inp:
+            #    if height_ch.enable_transition_bump:
+            #        inp.default_value = get_transition_bump_max_distance(height_ch)
+            #    else: inp.default_value = height_ch.normal_bump_distance
+            pass
 
             #####
 

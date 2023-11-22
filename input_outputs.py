@@ -358,8 +358,9 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
             description=rna.description)
 
     # Set default value
-    inp = layer_node.inputs.get(input_name)
-    inp.default_value = prop_value
+    if dirty:
+        inp = layer_node.inputs.get(input_name)
+        inp.default_value = prop_value
 
     return dirty
 
@@ -636,6 +637,14 @@ def check_layer_tree_ios(layer, tree=None):
     # Check for invalid io
     for inp in get_tree_inputs(tree):
         if inp not in valid_inputs:
+            # Set input prop before deleting input socket
+            #if ' ' not in inp.name or inp.name not in [c.name for c in yp.channels]:
+            if '.' in inp.name:
+                val = layer_node.inputs.get(inp.name).default_value
+                try: exec('layer.' + inp.name + ' = val')
+                except Exception as e: print(e)
+
+            # Remove input socket
             remove_tree_input(tree, inp)
 
     for outp in get_tree_outputs(tree):

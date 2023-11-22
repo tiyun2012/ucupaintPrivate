@@ -498,6 +498,31 @@ def draw_solid_color_props(layer, source, layout):
     row.label(text='Shortcut on list:')
     row.prop(layer, 'color_shortcut', text='')
 
+def draw_input_prop(layout, entity, prop_name):
+    root_tree = entity.id_data
+    yp = root_tree.yp
+
+    # Get layer
+    m = re.match(r'^yp\.layers\[(\d+)\].*', entity.path_from_id())
+    if m: 
+        layer_index = int(m.group(1))
+        layer = yp.layers[layer_index]
+    else: return
+
+    # Get layer node
+    layer_node = root_tree.nodes.get(layer.group_node)
+
+    # Get path without layer
+    path = entity.path_from_id()
+    path = path.replace('yp.layers[' + str(layer_index) + '].', '')
+    path += '.' + prop_name
+
+    # Try to get input from layer node
+    inp = layer_node.inputs.get(path)
+
+    if inp: layout.prop(inp, 'default_value', text='')
+    else: layout.prop(entity, prop_name, text='')
+
 def draw_mask_modifier_stack(layer, mask, layout, ui):
     ypui = bpy.context.window_manager.ypui
     tree = get_mask_tree(mask)
@@ -1296,7 +1321,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
         elif layer.type != 'BACKGROUND':
             row.prop(ch, 'blend_type', text='')
 
-        row.prop(ch, 'intensity_value', text='')
+        draw_input_prop(row, ch, 'intensity_value')
 
         row.context_pointer_set('parent', ch)
         row.context_pointer_set('layer', layer)
@@ -1346,8 +1371,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 brow.label(text='Transition Bump:')
 
                 if ch.enable_transition_bump and not chui.expand_transition_bump_settings:
-                    #brow.prop(ch, 'transition_bump_value', text='')
-                    brow.prop(ch, 'transition_bump_distance', text='')
+                    draw_input_prop(brow, ch, 'transition_bump_distance')
 
                 brow.context_pointer_set('parent', ch)
                 if is_greater_than_280():
@@ -1374,7 +1398,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     crow = cccol.row(align=True)
                     crow.label(text='Max Height:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_distance', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_distance')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Edge 1:') #, icon_value=lib.get_icon('input'))
@@ -1402,15 +1426,13 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     #crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                     crow.active = not ch.transition_bump_flip
                     crow.label(text='Crease:') #, icon_value=lib.get_icon('input'))
-                    #if ch.transition_bump_crease:
-                    #    crow.prop(ch, 'transition_bump_crease_factor', text='')
                     crow.prop(ch, 'transition_bump_crease', text='')
 
                     if ch.transition_bump_crease:
                         crow = cccol.row(align=True)
                         crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                         crow.label(text='Crease Factor:') #, icon_value=lib.get_icon('input'))
-                        crow.prop(ch, 'transition_bump_crease_factor', text='')
+                        draw_input_prop(crow, ch, 'transition_bump_crease_factor')
 
                         crow = cccol.row(align=True)
                         crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
@@ -1469,7 +1491,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         # Solid color with transition bump always have bump distance value of 0
                         ssrow = srow.row(align=True)
                         ssrow.active = is_bump_distance_relevant(layer, ch)
-                        ssrow.prop(ch, 'bump_distance', text='')
+                        draw_input_prop(ssrow, ch, 'bump_distance')
                     else:
                         srow.prop(ch, 'normal_strength', text='')
 
@@ -1516,7 +1538,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     if ch.normal_map_type == 'NORMAL_MAP':
                         brow = cccol.row(align=True)
                         brow.label(text='Bump Height:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'normal_bump_distance', text='')
+                        draw_input_prop(brow, ch, 'normal_bump_distance')
 
                     #if any(layer.masks):
                     if not ch.write_height and any(layer.masks):
