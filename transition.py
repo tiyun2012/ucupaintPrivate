@@ -103,17 +103,27 @@ def update_transition_bump_falloff_emulated_curve_fac(self, context):
 def update_transition_bump_value(self, context):
     if not self.enable: return
 
-    yp = self.id_data.yp
+    root_tree = self.id_data
+    yp = root_tree.yp
     if yp.halt_update: return
     m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
     layer = yp.layers[int(m.group(1))]
     tree = get_tree(layer)
     ch = self
+    layer_node = root_tree.nodes.get(layer.group_node)
 
     if not ch.enable_transition_bump: return
 
+    ch_tb_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_value'))
+    ch_tb_second_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_second_edge_value'))
+
+    ch_tb_value.default_value = ch.transition_bump_value
+    ch_tb_second_value.default_value = ch.transition_bump_second_edge_value
+
     intensity_multiplier = tree.nodes.get(ch.intensity_multiplier)
     tb_intensity_multiplier = tree.nodes.get(ch.tb_intensity_multiplier)
+
+    ##### REPLACED_BY_SHADERS
 
     if ch.transition_bump_flip or layer.type=='BACKGROUND':
     #if ch.transition_bump_flip:
@@ -126,6 +136,8 @@ def update_transition_bump_value(self, context):
         pass
     if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
     if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
+
+    #####
 
     for c in layer.channels:
         set_transition_ramp_and_intensity_multiplier(tree, ch, c)

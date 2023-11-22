@@ -4035,7 +4035,8 @@ def update_channel_enable(self, context):
     # Check uv maps
     check_uv_nodes(yp)
 
-    #if yp.disable_quick_toggle:
+    # Refresh layer IO
+    check_layer_tree_ios(layer, tree, remove_props=False)
     check_all_layer_channel_io_and_nodes(layer, tree, ch)
 
     if yp.halt_reconnect: return

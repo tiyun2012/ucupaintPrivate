@@ -380,6 +380,7 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
 
     has_parent = layer.parent_idx != -1
     need_prev_normal = check_need_prev_normal(layer)
+    trans_bump_ch = get_transition_bump_channel(layer)
 
     # Prop inputs
     if not remove_props:
@@ -407,15 +408,29 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     dirty = create_prop_input( ch, 'normal_bump_distance', valid_inputs, input_index, dirty)
                     input_index += 1
 
-                # Transition bump distance input
+                # Transition bump inputs
                 if ch.enable_transition_bump:
                     dirty = create_prop_input(ch, 'transition_bump_distance', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                    dirty = create_prop_input(ch, 'transition_bump_value', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                    dirty = create_prop_input(ch, 'transition_bump_second_edge_value', valid_inputs, input_index, dirty)
                     input_index += 1
 
                     # Transition bump crease factor input
                     if ch.transition_bump_crease and not ch.transition_bump_flip:
                         dirty = create_prop_input(ch, 'transition_bump_crease_factor', valid_inputs, input_index, dirty)
                         input_index += 1
+
+            elif trans_bump_ch:
+
+                dirty = create_prop_input(ch, 'transition_bump_fac', valid_inputs, input_index, dirty)
+                input_index += 1
+
+                dirty = create_prop_input(ch, 'transition_bump_second_fac', valid_inputs, input_index, dirty)
+                input_index += 1
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
@@ -641,9 +656,18 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
             # Set input prop before deleting input socket
             #if ' ' not in inp.name or inp.name not in [c.name for c in yp.channels]:
             if '.' in inp.name:
-                val = layer_node.inputs.get(inp.name).default_value
-                try: exec('layer.' + inp.name + ' = val')
-                except Exception as e: print(e)
+
+                # For fully implemented prop only
+                if not any(prop for prop in [
+                    'transition_bump_value', 
+                    'transition_bump_second_edge_value',
+                    'transition_bump_fac', 
+                    'transition_bump_second_fac'
+                    ] if prop in inp.name): 
+
+                    val = layer_node.inputs.get(inp.name).default_value
+                    try: exec('layer.' + inp.name + ' = val')
+                    except Exception as e: print(e)
 
             # Remove input socket
             remove_tree_input(tree, inp)

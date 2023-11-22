@@ -1711,11 +1711,16 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
     else: compare_alpha = None
 
     chain = -1
+    tb_value = None
+    tb_second_value = None
     if trans_bump_ch:
         #if trans_bump_ch.write_height:
         #    chain = 10000
         #else: 
         chain = min(len(layer.masks), trans_bump_ch.transition_bump_chain)
+
+        tb_value = texcoord.outputs.get(get_entity_input_name(trans_bump_ch, 'transition_bump_value'))
+        tb_second_value = texcoord.outputs.get(get_entity_input_name(trans_bump_ch, 'transition_bump_second_edge_value'))
 
     # Root mask value for merging mask
     root_mask_val = one_value
@@ -2629,15 +2634,22 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 tb_inverse = nodes.get(ch.tb_inverse)
                 tb_intensity_multiplier = nodes.get(ch.tb_intensity_multiplier)
 
-                if 'Edge 2 Alpha' in normal_proc.inputs:
-                    create_link(tree, tb_intensity_multiplier.outputs[0], normal_proc.inputs['Edge 2 Alpha'])
+                if tb_intensity_multiplier:
+                    if 'Edge 2 Alpha' in normal_proc.inputs:
+                        create_link(tree, tb_intensity_multiplier.outputs[0], normal_proc.inputs['Edge 2 Alpha'])
 
-                if 'Edge 2 Alpha' in height_proc.inputs:
+                    if 'Edge 2 Alpha' in height_proc.inputs:
                         create_link(tree, tb_intensity_multiplier.outputs[0], height_proc.inputs['Edge 2 Alpha'])
 
-                create_link(tree, transition_input, tb_inverse.inputs[1])
-                if tb_intensity_multiplier:
-                    create_link(tree, tb_inverse.outputs[0], tb_intensity_multiplier.inputs[0])
+                    if tb_inverse:
+                        create_link(tree, transition_input, tb_inverse.inputs[1])
+                        create_link(tree, tb_inverse.outputs[0], tb_intensity_multiplier.inputs[0])
+
+                    if tb_second_value:
+                        create_link(tree, tb_second_value, tb_intensity_multiplier.inputs[1])
+
+                if tb_value:
+                    create_link(tree, tb_value, intensity_multiplier.inputs[1])
 
             else:
 
