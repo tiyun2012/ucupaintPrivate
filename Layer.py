@@ -4140,19 +4140,6 @@ def update_normal_strength(self, context):
     if 'Strength' in normal_proc.inputs:
         normal_proc.inputs['Strength'].default_value = ch.normal_strength
 
-def update_bump_distance(self, context):
-    group_tree = self.id_data
-    yp = group_tree.yp
-    if yp.halt_update: return
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(m.group(1))]
-    root_ch = yp.channels[int(m.group(2))]
-    tree = get_tree(layer)
-
-    if self.normal_map_type == 'NORMAL_MAP' and self.enable_transition_bump: return
-
-    update_displacement_height_ratio(root_ch)
-
 def update_bump_smooth_multiplier(self, context):
     group_tree = self.id_data
     yp = group_tree.yp
@@ -4675,8 +4662,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     bump_distance : FloatProperty(
             name='Bump Height Range', 
             description= 'Bump height range.\n(White equals this value, black equals negative of this value)', 
-            default=0.05, min=-1.0, max=1.0, precision=3, # step=1,
-            update=update_bump_distance)
+            default=0.05, min=-1.0, max=1.0, precision=3) #, # step=1,
 
     bump_smooth_multiplier : FloatProperty(
         name = 'Smooth Bump Step Multiplier',
@@ -4687,8 +4673,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     normal_bump_distance : FloatProperty(
             name='Bump Height Range for normal', 
             description= 'Bump height range for normal channel.\n(White equals this value, black equals negative of this value)', 
-            default=0.00, min=-1.0, max=1.0, precision=3, # step=1,
-            update=update_bump_distance)
+            default=0.00, min=-1.0, max=1.0, precision=3) #, # step=1,
 
     write_height : BoolProperty(
             name = 'Write Height',
@@ -4751,7 +4736,6 @@ class YLayerChannel(bpy.types.PropertyGroup):
             name='Transition Bump Height Range', 
             description= 'Transition bump height range.\n(White equals this value, black equals negative of this value)', 
             default=0.05, min=0.0, max=1.0, precision=3) # step=1,
-            #update=transition.update_transition_bump_distance)
 
     transition_bump_chain : IntProperty(
             name = 'Transition bump chain',
@@ -4781,13 +4765,11 @@ class YLayerChannel(bpy.types.PropertyGroup):
             name = 'Transition Bump Crease Factor',
             description = 'Transition bump crease factor',
             default=0.33, min=0.0, max=1.0, subtype='FACTOR')
-            #update=transition.update_transition_bump_crease_factor)
 
     transition_bump_crease_power : FloatProperty(
             name = 'Transition Bump Crease Power',
             description = 'Transition Bump Crease Power',
             default=5.0, min=1.0, max=100.0)
-            #update=transition.update_transition_bump_crease_power)
 
     transition_bump_fac : FloatProperty(
             name='Transition Bump Factor',
@@ -4816,7 +4798,6 @@ class YLayerChannel(bpy.types.PropertyGroup):
             name='Transition Bump Falloff Emulated Curve Factor',
             description = 'Transition bump curve emulated curve factor',
             default=1.0, min=-1.0, max=1.0, subtype='FACTOR')
-            #update=transition.update_transition_bump_falloff_emulated_curve_fac)
 
     tb_bump : StringProperty(default='')
     tb_bump_flip : StringProperty(default='')
@@ -4843,8 +4824,8 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_ramp_intensity_value : FloatProperty(
             name = 'Channel Intensity Factor', 
             description = 'Channel Intensity Factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR',
-            update=transition.update_transition_ramp_intensity_value)
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
+            #update=transition.update_transition_ramp_intensity_value)
 
     transition_ramp_blend_type : EnumProperty(
         name = 'Transition Ramp Blend Type',

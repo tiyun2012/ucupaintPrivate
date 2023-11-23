@@ -3858,12 +3858,6 @@ def get_bump_chain(layer, ch=None):
 
     return min(chain, len(layer.masks))
 
-def get_transition_bump_falloff_emulated_curve_value(ch):
-    if ch.transition_bump_flip:
-        return -ch.transition_bump_falloff_emulated_curve_fac * 0.5 + 0.5
-    else:
-        return ch.transition_bump_falloff_emulated_curve_fac * 0.5 + 0.5
-
 def check_if_node_is_duplicated_from_lib(node, lib_name):
     if not node or node.type != 'GROUP': return False
     m = re.match(r'^' + lib_name + '_Copy\.*\d{0,3}$', node.node_tree.name)

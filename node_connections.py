@@ -2933,14 +2933,19 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             if tb_second_fac:
                 create_link(tree, tb_second_fac, tr_ramp.inputs['Factor'])
 
-            if tr_intensity_value and 'Intensity' in tr_ramp.inputs:
-                create_link(tree, tr_intensity_value, tr_ramp.inputs['Intensity'])
+            if tr_intensity_value:
+                if 'Intensity' in tr_ramp.inputs:
+                    create_link(tree, tr_intensity_value, tr_ramp.inputs['Intensity'])
 
             if trans_bump_flip:
 
                 # Connect intensity
                 if ch_intensity:
                     create_link(tree, ch_intensity, tr_ramp_blend.inputs['Intensity Channel'])
+
+                if tr_intensity_value:
+                    if 'Intensity' in tr_ramp_blend.inputs:
+                        create_link(tree, tr_intensity_value, tr_ramp_blend.inputs['Intensity'])
 
                 if tb_value:
                     create_link(tree, tb_value, tr_ramp.inputs['Multiplier'])
@@ -2966,7 +2971,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     create_link(tree, prev_alpha, tr_ramp_blend.inputs['Input Alpha'])
                     prev_alpha = tr_ramp_blend.outputs['Input Alpha']
 
-                break_input_link(tree, tr_ramp_blend.inputs['Intensity'])
+                #break_input_link(tree, tr_ramp_blend.inputs['Intensity'])
 
             else:
                 create_link(tree, rgb, tr_ramp.inputs['RGB'])

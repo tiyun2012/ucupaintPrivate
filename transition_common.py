@@ -75,7 +75,7 @@ def set_transition_ao_intensity(ch, tree=None, layer=None, tao=None):
         #tao.inputs['Intensity'].default_value = 0.0 if mute else get_transition_ao_intensity(ch)
         tao.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ao_intensity_unlink else 1.0
         tao.inputs['Intensity'].default_value = ch.transition_ao_intensity
-        tao.inputs['Intensity Channel'].default_value = ch.intensity_value
+        #tao.inputs['Intensity Channel'].default_value = ch.intensity_value
 
 def check_transition_ao_nodes(tree, layer, ch, bump_ch=None):
 
@@ -161,17 +161,7 @@ def set_ramp_intensity_value(tree, layer, ch):
 
     tr_ramp_blend = tree.nodes.get(ch.tr_ramp_blend)
     if tr_ramp_blend:
-        #if ch.transition_ramp_intensity_unlink:
-        #    intensity_value = ch.transition_ramp_intensity_value
-        #else: intensity_value = ch.transition_ramp_intensity_value * ch.intensity_value
-        #tr_ramp_blend.inputs['Intensity'].default_value = 0.0 if mute else intensity_value
         tr_ramp_blend.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ramp_intensity_unlink else 1.0
-        tr_ramp_blend.inputs['Intensity'].default_value = ch.transition_ramp_intensity_value
-        tr_ramp_blend.inputs['Intensity Channel'].default_value = ch.intensity_value
-    
-    tr_ramp = tree.nodes.get(ch.tr_ramp)
-    if tr_ramp and 'Intensity' in tr_ramp.inputs:
-        tr_ramp.inputs['Intensity'].default_value = 0.0 if mute else ch.transition_ramp_intensity_value
 
 def set_transition_ramp_nodes(tree, layer, ch):
 
@@ -312,8 +302,6 @@ def check_transition_bump_falloff(layer, tree):
                     tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
                             lib.EMULATED_CURVE, hard_replace=True)
 
-            #tb_falloff.inputs['Fac'].default_value = get_transition_bump_falloff_emulated_curve_value(ch)
-
         elif ch.transition_bump_falloff_type == 'CURVE':
             tb_falloff = ori = tree.nodes.get(ch.tb_falloff)
             if root_ch.enable_smooth_bump:
@@ -366,21 +354,6 @@ def check_transition_bump_falloff(layer, tree):
 
     else:
         remove_node(tree, ch, 'tb_falloff')
-
-    #if ch.transition_bump_falloff and root_ch.enable_smooth_bump:
-    #    for d in neighbor_directions:
-
-    #        if ch.transition_bump_falloff_type == 'EMULATED_CURVE':
-    #            tbf = replace_new_node(tree, ch, 'tb_falloff_' + d, 'ShaderNodeGroup', 'Falloff ' + d, 
-    #                    lib.EMULATED_CURVE, hard_replace=True)
-    #            tbf.inputs[1].default_value = get_transition_bump_falloff_emulated_curve_value(ch)
-
-    #        elif ch.transition_bump_falloff_type == 'CURVE':
-    #            tbf = replace_new_node(tree, ch, 'tb_falloff_' + d, 'ShaderNodeGroup', 'Falloff ' + d, 
-    #                    tb_falloff.node_tree.name, hard_replace=True)
-    #else:
-    #    for d in neighbor_directions:
-    #        remove_node(tree, ch, 'tb_falloff_' + d)
 
 def check_transition_bump_nodes(layer, tree, ch):
 
