@@ -4847,7 +4847,6 @@ class YLayerChannel(bpy.types.PropertyGroup):
 
     transition_ao_color : FloatVectorProperty(name='Transition AO Color', description='Transition AO Color', 
             subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.0, 0.0, 0.0))
-            #update=transition.update_transition_ao_color)
 
     transition_ao_inside_intensity : FloatProperty(name='Transition AO Inside Intensity', 
             description='Transition AO Inside Intensity', subtype='FACTOR', min=0.0, max=1.0, default=0.0, precision=3)

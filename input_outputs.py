@@ -685,9 +685,11 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     val = layer_node.inputs.get(inp.name).default_value
                     socket_type = inp.socket_type if is_greater_than_400() else inp.type
                     if socket_type in {'NodeSocketColor', 'RGBA'}:
-                        exec('layer.' + inp.name + ' = (val[0], val[1], val[2])')
+                        try: exec('layer.' + inp.name + ' = (val[0], val[1], val[2])')
+                        except Exception as e: print(e)
                     else:
-                        exec('layer.' + inp.name + ' = val')
+                        try: exec('layer.' + inp.name + ' = val')
+                        except Exception as e: print(e)
 
             # Remove input socket
             remove_tree_input(tree, inp)

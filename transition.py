@@ -48,20 +48,6 @@ def update_transition_bump_curved_offset(self, context):
 def update_transition_ao_intensity_link(self, context):
     set_transition_ao_intensity_link(self)
 
-def update_transition_ao_color(self, context):
-
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    match = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(match.group(1))]
-    ch = self
-    tree = get_tree(layer)
-
-    tao = tree.nodes.get(ch.tao)
-    if tao:
-        col = (ch.transition_ao_color.r, ch.transition_ao_color.g, ch.transition_ao_color.b, 1.0)
-        tao.inputs['AO Color'].default_value = col
-
 def show_transition(self, context, ttype):
     if not hasattr(context, 'parent'): 
         self.report({'ERROR'}, "Context is incorrect!")
