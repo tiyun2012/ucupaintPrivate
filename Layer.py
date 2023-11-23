@@ -4315,38 +4315,6 @@ def update_channel_intensity_value(self, context):
     ch = self
     root_ch = yp.channels[ch_index]
 
-    mute = not layer.enable or not ch.enable
-
-    # Get layer node
-    root_tree = self.id_data
-    layer_node = root_tree.nodes.get(layer.group_node)
-
-    # Set input intensity
-    inp = layer_node.inputs.get(get_entity_input_name(ch, 'intensity_value'))
-    if inp: inp.default_value = ch.intensity_value
-
-    ##### REPLACED_BY_SHADERS
-
-    intensity = tree.nodes.get(ch.intensity)
-    if intensity:
-        intensity.inputs[1].default_value = 0.0 if mute else ch.intensity_value
-
-    height_proc = tree.nodes.get(ch.height_proc)
-    if height_proc:
-        height_proc.inputs['Intensity'].default_value = 0.0 if mute else ch.intensity_value
-
-    normal_proc = tree.nodes.get(ch.normal_proc)
-    if normal_proc and 'Intensity' in normal_proc.inputs:
-        normal_proc.inputs['Intensity'].default_value = 0.0 if mute else ch.intensity_value
-
-    if ch.enable_transition_ramp:
-        transition.set_ramp_intensity_value(tree, layer, ch)
-
-    if ch.enable_transition_ao:
-        transition.set_transition_ao_intensity(ch, tree, layer)
-
-    #####
-
     if root_ch.type == 'NORMAL':
         update_displacement_height_ratio(root_ch)
 
@@ -4579,7 +4547,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     intensity_value : FloatProperty(
             name = 'Channel Intensity Factor', 
             description = 'Channel Intensity Factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR',
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3,
             update = update_channel_intensity_value)
 
     # Modifiers
@@ -4690,7 +4658,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     normal_strength : FloatProperty(
         name = 'Normal Strength',
         description = 'Normal strength',
-        default=1.0, min=0.0, max=10.0, 
+        default=1.0, min=0.0, max=10.0, precision=3,
         update=update_normal_strength)
 
     image_flip_y : BoolProperty(
@@ -4723,12 +4691,12 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_value : FloatProperty(
         name = 'Transition Bump Value',
         description = 'Transition bump value',
-        default=3.0, min=1.0, max=100.0)
+        default=3.0, min=1.0, max=100.0, precision=3)
 
     transition_bump_second_edge_value : FloatProperty(
             name = 'Second Edge Intensity', 
             description = 'Second Edge intensity value',
-            default=1.2, min=1.0, max=100.0)
+            default=1.2, min=1.0, max=100.0, precision=3)
 
     transition_bump_distance : FloatProperty(
             #name='Transition Bump Distance', 
@@ -4764,22 +4732,22 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_crease_factor : FloatProperty(
             name = 'Transition Bump Crease Factor',
             description = 'Transition bump crease factor',
-            default=0.33, min=0.0, max=1.0, subtype='FACTOR')
+            default=0.33, min=0.0, max=1.0, subtype='FACTOR', precision=3)
 
     transition_bump_crease_power : FloatProperty(
             name = 'Transition Bump Crease Power',
             description = 'Transition Bump Crease Power',
-            default=5.0, min=1.0, max=100.0)
+            default=5.0, min=1.0, max=100.0, precision=3)
 
     transition_bump_fac : FloatProperty(
             name='Transition Bump Factor',
             description = 'Transition bump factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3)
 
     transition_bump_second_fac : FloatProperty(
             name='Transition Bump Second Factor',
             description = 'Transition bump second factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3)
 
     transition_bump_falloff : BoolProperty(
             name = 'Transition Bump Falloff',
@@ -4797,7 +4765,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_falloff_emulated_curve_fac : FloatProperty(
             name='Transition Bump Falloff Emulated Curve Factor',
             description = 'Transition bump curve emulated curve factor',
-            default=1.0, min=-1.0, max=1.0, subtype='FACTOR')
+            default=1.0, min=-1.0, max=1.0, subtype='FACTOR', precision=3)
 
     tb_bump : StringProperty(default='')
     tb_bump_flip : StringProperty(default='')
@@ -4824,8 +4792,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_ramp_intensity_value : FloatProperty(
             name = 'Channel Intensity Factor', 
             description = 'Channel Intensity Factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
-            #update=transition.update_transition_ramp_intensity_value)
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3)
 
     transition_ramp_blend_type : EnumProperty(
         name = 'Transition Ramp Blend Type',
@@ -4873,20 +4840,17 @@ class YLayerChannel(bpy.types.PropertyGroup):
 
     transition_ao_power : FloatProperty(name='Transition AO Power',
             #description='Transition AO edge power (higher value means less AO)', min=1.0, max=100.0, default=4.0,
-            description='Transition AO power', min=1.0, max=100.0, default=4.0,
-            update=transition.update_transition_ao_edge)
+            description='Transition AO power', min=1.0, max=100.0, default=4.0, precision=3)
 
     transition_ao_intensity : FloatProperty(name='Transition AO Intensity',
-            description='Transition AO intensity', subtype='FACTOR', min=0.0, max=1.0, default=0.5,
-            update=transition.update_transition_ao_intensity)
+            description='Transition AO intensity', subtype='FACTOR', min=0.0, max=1.0, default=0.5, precision=3)
 
     transition_ao_color : FloatVectorProperty(name='Transition AO Color', description='Transition AO Color', 
-            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.0, 0.0, 0.0),
-            update=transition.update_transition_ao_color)
+            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.0, 0.0, 0.0))
+            #update=transition.update_transition_ao_color)
 
     transition_ao_inside_intensity : FloatProperty(name='Transition AO Inside Intensity', 
-            description='Transition AO Inside Intensity', subtype='FACTOR', min=0.0, max=1.0, default=0.0,
-            update=transition.update_transition_ao_exclude_inside)
+            description='Transition AO Inside Intensity', subtype='FACTOR', min=0.0, max=1.0, default=0.0, precision=3)
 
     transition_ao_blend_type : EnumProperty(
         name = 'Transition AO Blend Type',
@@ -4898,7 +4862,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
             name='Unlink Transition AO with Channel Intensity', 
             description='Unlink Transition AO with Channel Intensity', 
             default=False,
-            update=transition.update_transition_ao_intensity)
+            update=transition.update_transition_ao_intensity_link)
 
     tao : StringProperty(default='')
 

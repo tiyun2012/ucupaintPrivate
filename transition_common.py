@@ -52,10 +52,7 @@ def check_transition_bump_influences_to_other_channels(layer, tree=None, target_
             # Remove node if channel is disabled
             remove_node(tree, c, 'intensity_multiplier')
 
-#def get_transition_ao_intensity(ch):
-#    return ch.transition_ao_intensity * ch.intensity_value if not ch.transition_ao_intensity_unlink else ch.transition_ao_intensity
-
-def set_transition_ao_intensity(ch, tree=None, layer=None, tao=None):
+def set_transition_ao_intensity_link(ch, tree=None, layer=None, tao=None):
 
     if not layer:
         m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', ch.path_from_id())
@@ -69,13 +66,8 @@ def set_transition_ao_intensity(ch, tree=None, layer=None, tao=None):
     if not tao:
         tao = tree.nodes.get(ch.tao)
 
-    #mute = not layer.enable or not ch.enable
-
     if tao: 
-        #tao.inputs['Intensity'].default_value = 0.0 if mute else get_transition_ao_intensity(ch)
         tao.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ao_intensity_unlink else 1.0
-        tao.inputs['Intensity'].default_value = ch.transition_ao_intensity
-        #tao.inputs['Intensity Channel'].default_value = ch.intensity_value
 
 def check_transition_ao_nodes(tree, layer, ch, bump_ch=None):
 
@@ -120,14 +112,7 @@ def check_transition_ao_nodes(tree, layer, ch, bump_ch=None):
         if ao_blend and ao_blend.blend_type != ch.transition_ao_blend_type:
             ao_blend.blend_type = ch.transition_ao_blend_type
 
-        col = (ch.transition_ao_color.r, ch.transition_ao_color.g, ch.transition_ao_color.b, 1.0)
-        tao.inputs['AO Color'].default_value = col
-
-        tao.inputs['Power'].default_value = ch.transition_ao_power
-
-        set_transition_ao_intensity(ch, tree, layer, tao)
-
-        tao.inputs['Exclude Inside'].default_value = 1.0 - ch.transition_ao_inside_intensity
+        set_transition_ao_intensity_link(ch, tree, layer, tao)
 
         if root_ch.colorspace == 'SRGB':
             tao.inputs['Gamma'].default_value = 1.0/GAMMA
@@ -154,14 +139,6 @@ def load_ramp(tree, ch):
     cache_ramp = tree.nodes.get(ch.cache_ramp)
     if cache_ramp:
         copy_node_props(cache_ramp, ramp)
-
-def set_ramp_intensity_value(tree, layer, ch):
-
-    mute = not ch.enable or not layer.enable
-
-    tr_ramp_blend = tree.nodes.get(ch.tr_ramp_blend)
-    if tr_ramp_blend:
-        tr_ramp_blend.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ramp_intensity_unlink else 1.0
 
 def set_transition_ramp_nodes(tree, layer, ch):
 
@@ -220,8 +197,10 @@ def set_transition_ramp_nodes(tree, layer, ch):
 
         remove_node(tree, ch, 'tr_ramp_blend')
 
-    # Set intensity
-    set_ramp_intensity_value(tree, layer, ch)
+    # Set ramp blend intensity link
+    tr_ramp_blend = tree.nodes.get(ch.tr_ramp_blend)
+    if tr_ramp_blend:
+        tr_ramp_blend.inputs['Intensity Link'].default_value = 0.0 if ch.transition_ramp_intensity_unlink else 1.0
 
     # Load ramp from cache
     load_ramp(tree, ch)

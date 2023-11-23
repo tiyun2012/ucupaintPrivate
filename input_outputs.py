@@ -84,8 +84,8 @@ def create_input(tree, name, socket_type, valid_inputs, index,
     if not inp:
         inp = new_tree_input(tree, name, socket_type, description=description, use_both=True)
         dirty = True
-        if min_value != None: inp.min_value = min_value
-        if max_value != None: inp.max_value = max_value
+        if min_value != None and hasattr(inp, 'min_value'): inp.min_value = min_value
+        if max_value != None and hasattr(inp, 'max_value'): inp.max_value = max_value
         if default_value != None: inp.default_value = default_value
         if hasattr(inp, 'hide_value'): inp.hide_value = hide_value
 
@@ -332,6 +332,10 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
         socket_type = 'NodeSocketFloat'
         if rna.subtype == 'FACTOR':
             socket_type = 'NodeSocketFloatFactor'
+        default_value = rna.default
+    elif type(prop_value) == Color:
+        socket_type = 'NodeSocketColor'
+        default_value = (rna.default, rna.default, rna.default, 1.0)
     else:
         return False # Not implemented yet
 
@@ -341,13 +345,15 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
 
     dirty = create_input(tree, input_name, socket_type, 
             valid_inputs, input_index, dirty,
-            min_value=rna.soft_min, max_value=rna.soft_max, default_value=rna.default, 
+            min_value=rna.soft_min, max_value=rna.soft_max, default_value=default_value, 
             description=rna.description)
 
     # Set default value
     if dirty:
         inp = layer_node.inputs.get(input_name)
-        inp.default_value = prop_value
+        if type(prop_value) == Color:
+            inp.default_value = (prop_value.r, prop_value.g, prop_value.g, 1.0)
+        else: inp.default_value = prop_value
 
     return dirty
 
@@ -431,7 +437,20 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
             if ch.enable_transition_ramp:
                 dirty = create_prop_input(ch, 'transition_ramp_intensity_value', valid_inputs, input_index, dirty)
                 input_index += 1
+
+            if ch.enable_transition_ao:
+                dirty = create_prop_input(ch, 'transition_ao_intensity', valid_inputs, input_index, dirty)
+                input_index += 1
     
+                dirty = create_prop_input(ch, 'transition_ao_power', valid_inputs, input_index, dirty)
+                input_index += 1
+
+                dirty = create_prop_input(ch, 'transition_ao_color', valid_inputs, input_index, dirty)
+                input_index += 1
+
+                dirty = create_prop_input(ch, 'transition_ao_inside_intensity', valid_inputs, input_index, dirty)
+                input_index += 1
+
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
         #if yp.disable_quick_toggle and not ch.enable: continue
@@ -664,8 +683,11 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     ] if prop in inp.name): 
 
                     val = layer_node.inputs.get(inp.name).default_value
-                    try: exec('layer.' + inp.name + ' = val')
-                    except Exception as e: print(e)
+                    socket_type = inp.socket_type if is_greater_than_400() else inp.type
+                    if socket_type in {'NodeSocketColor', 'RGBA'}:
+                        exec('layer.' + inp.name + ' = (val[0], val[1], val[2])')
+                    else:
+                        exec('layer.' + inp.name + ' = val')
 
             # Remove input socket
             remove_tree_input(tree, inp)

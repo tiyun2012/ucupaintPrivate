@@ -1621,7 +1621,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 row.prop(chui, 'expand_transition_ao_settings', text='', emboss=False, icon_value=icon_value)
                 row.label(text='Transition AO:')
                 if ch.enable_transition_ao and not chui.expand_transition_ao_settings:
-                    row.prop(ch, 'transition_ao_intensity', text='')
+                    draw_input_prop(row, ch, 'transition_ao_intensity')
 
                 row.context_pointer_set('layer', layer)
                 row.context_pointer_set('parent', ch)
@@ -1640,7 +1640,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Intensity:')
-                    brow.prop(ch, 'transition_ao_intensity', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_intensity')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Blend:')
@@ -1648,16 +1648,15 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Power:')
-                    brow.prop(ch, 'transition_ao_power', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_power')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Color:')
-                    brow.prop(ch, 'transition_ao_color', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_color')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Inside:')
-                    brow.prop(ch, 'transition_ao_inside_intensity', text='')
-                    #row.label(text='', icon='BLANK1')
+                    draw_input_prop(brow, ch, 'transition_ao_inside_intensity')
 
             # Transition Bump Intensity
             if showed_bump_ch_found:

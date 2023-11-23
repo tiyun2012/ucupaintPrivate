@@ -2871,6 +2871,22 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             if ch_intensity:
                 create_link(tree, ch_intensity, tao.inputs['Intensity Channel'])
 
+            tao_intensity = texcoord.outputs.get(get_entity_input_name(ch, 'transition_ao_intensity'))
+            if tao_intensity:
+                create_link(tree, tao_intensity, tao.inputs['Intensity'])
+
+            tao_power = texcoord.outputs.get(get_entity_input_name(ch, 'transition_ao_power'))
+            if tao_power:
+                create_link(tree, tao_power, tao.inputs['Power'])
+
+            tao_color = texcoord.outputs.get(get_entity_input_name(ch, 'transition_ao_color'))
+            if tao_color:
+                create_link(tree, tao_color, tao.inputs['AO Color'])
+
+            tao_inside_intensity = texcoord.outputs.get(get_entity_input_name(ch, 'transition_ao_inside_intensity'))
+            if tao_inside_intensity:
+                create_link(tree, tao_inside_intensity, tao.inputs['Inside Intensity'])
+
             if trans_bump_flip:
                 create_link(tree, rgb, tao.inputs[0])
                 rgb = tao.outputs[0]

@@ -7,15 +7,6 @@ from .node_arrangements import *
 from .subtree import *
 from .input_outputs import *
 
-def update_transition_ramp_intensity_value(self, context):
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    match = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(match.group(1))]
-    tree = get_tree(layer)
-
-    set_ramp_intensity_value(tree, layer, self)
-
 def update_transition_bump_chain(self, context):
     T = time.time()
 
@@ -54,23 +45,8 @@ def update_transition_bump_curved_offset(self, context):
     #if tb_bump:
     #    tb_bump.inputs['Offset'].default_value = ch.transition_bump_curved_offset
 
-def update_transition_ao_intensity(self, context):
-    set_transition_ao_intensity(self)
-
-def update_transition_ao_edge(self, context):
-
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    match = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(match.group(1))]
-    ch = self
-    tree = get_tree(layer)
-
-    bump_ch = get_transition_bump_channel(layer)
-
-    tao = tree.nodes.get(ch.tao)
-    if tao and bump_ch:
-        tao.inputs['Power'].default_value = ch.transition_ao_power
+def update_transition_ao_intensity_link(self, context):
+    set_transition_ao_intensity_link(self)
 
 def update_transition_ao_color(self, context):
 
@@ -85,19 +61,6 @@ def update_transition_ao_color(self, context):
     if tao:
         col = (ch.transition_ao_color.r, ch.transition_ao_color.g, ch.transition_ao_color.b, 1.0)
         tao.inputs['AO Color'].default_value = col
-
-def update_transition_ao_exclude_inside(self, context):
-
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    match = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(match.group(1))]
-    ch = self
-    tree = get_tree(layer)
-
-    tao = tree.nodes.get(ch.tao)
-    if tao:
-        tao.inputs['Exclude Inside'].default_value = 1.0 - ch.transition_ao_inside_intensity
 
 def show_transition(self, context, ttype):
     if not hasattr(context, 'parent'): 
@@ -280,6 +243,8 @@ def update_enable_transition_ao(self, context):
 
     tree = get_tree(layer)
 
+    check_layer_tree_ios(layer, tree, remove_props=True)
+
     # Get transition bump
     bump_ch = get_transition_bump_channel(layer)
 
@@ -287,6 +252,8 @@ def update_enable_transition_ao(self, context):
 
     # Update mask multiply
     check_mask_mix_nodes(layer, tree)
+
+    check_layer_tree_ios(layer, tree)
 
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
