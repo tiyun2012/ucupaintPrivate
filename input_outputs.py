@@ -352,7 +352,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
     if dirty:
         inp = layer_node.inputs.get(input_name)
         if type(prop_value) == Color:
-            inp.default_value = (prop_value.r, prop_value.g, prop_value.g, 1.0)
+            inp.default_value = (prop_value.r, prop_value.g, prop_value.b, 1.0)
         else: inp.default_value = prop_value
 
     return dirty
