@@ -4780,14 +4780,14 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_crease_factor : FloatProperty(
             name = 'Transition Bump Crease Factor',
             description = 'Transition bump crease factor',
-            default=0.33, min=0.0, max=1.0, subtype='FACTOR',
-            update=transition.update_transition_bump_crease_factor)
+            default=0.33, min=0.0, max=1.0, subtype='FACTOR')
+            #update=transition.update_transition_bump_crease_factor)
 
     transition_bump_crease_power : FloatProperty(
             name = 'Transition Bump Crease Power',
             description = 'Transition Bump Crease Power',
-            default=5.0, min=1.0, max=100.0,
-            update=transition.update_transition_bump_crease_power)
+            default=5.0, min=1.0, max=100.0)
+            #update=transition.update_transition_bump_crease_power)
 
     transition_bump_fac : FloatProperty(
             name='Transition Bump Factor',

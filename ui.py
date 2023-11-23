@@ -1437,7 +1437,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         crow = cccol.row(align=True)
                         crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                         crow.label(text='Crease Power:') #, icon_value=lib.get_icon('input'))
-                        crow.prop(ch, 'transition_bump_crease_power', text='')
+                        draw_input_prop(crow, ch, 'transition_bump_crease_power')
 
                         cccol.separator()
 
