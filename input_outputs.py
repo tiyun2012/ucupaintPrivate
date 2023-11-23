@@ -312,24 +312,11 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
     root_tree = entity.id_data
     yp = root_tree.yp
 
-    m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
-    m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
-    m3 = re.match(r'^yp\.layers\[(\d+)\]\.channels\[(\d+)\]$', entity.path_from_id())
+    m1 = re.match(r'^yp\.layers\[(\d+)\].*', entity.path_from_id())
 
     if m1:
-        layer = entity
-        ch = None
-        mask = None
-        return False # Not implemented yet
-    elif m2:
-        layer = yp.layers[int(m2.group(1))]
-        ch = None
-        mask = entity
-        return False # Not implemented yet
-    elif m3:
-        layer = yp.layers[int(m3.group(1))]
-        ch = entity
-        mask = None
+        layer_index = int(m1.group(1))
+        layer = yp.layers[int(layer_index)]
     else:
         return False
 
@@ -343,7 +330,7 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
     # Get socket type
     if type(prop_value) == float:
         socket_type = 'NodeSocketFloat'
-        if rna.soft_min == 0.0 and rna.soft_max == 1.0:
+        if rna.subtype == 'FACTOR':
             socket_type = 'NodeSocketFloatFactor'
     else:
         return False # Not implemented yet
@@ -425,6 +412,10 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                         input_index += 1
 
                         dirty = create_prop_input(ch, 'transition_bump_crease_power', valid_inputs, input_index, dirty)
+                        input_index += 1
+
+                    if ch.transition_bump_falloff and ch.transition_bump_falloff_type == 'EMULATED_CURVE':
+                        dirty = create_prop_input(ch, 'transition_bump_falloff_emulated_curve_fac', valid_inputs, input_index, dirty)
                         input_index += 1
 
             elif trans_bump_ch:

@@ -229,7 +229,9 @@ CH_MAX_HEIGHT_TB_CALC = '~yPL Layer Channel Max Height with Transition Bump'
 CH_MAX_HEIGHT_TBC_CALC = '~yPL Layer Channel Max Height with Transition Bump Crease'
 
 EMULATED_CURVE = '~yPL Emulated Curve'
+EMULATED_CURVE_FLIP = '~yPL Emulated Curve Flip'
 EMULATED_CURVE_SMOOTH = '~yPL Emulated Curve Smooth'
+EMULATED_CURVE_SMOOTH_FLIP = '~yPL Emulated Curve Smooth Flip'
 FALLOFF_CURVE = '~yPL Falloff Curve'
 FALLOFF_CURVE_SMOOTH = '~yPL Falloff Curve Smooth'
 

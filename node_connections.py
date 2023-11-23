@@ -2378,6 +2378,12 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             tb_falloff = nodes.get(ch.tb_falloff)
 
+            if tb_falloff:
+                tb_emulated_curve_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_falloff_emulated_curve_fac'))
+                if tb_emulated_curve_fac:
+                    if 'Fac' in tb_falloff.inputs:
+                        create_link(tree, tb_emulated_curve_fac, tb_falloff.inputs['Fac'])
+
             if chain == 0 or len(layer.masks) == 0:
                 if tb_falloff:
                     end_chain = pure = create_link(tree, end_chain, tb_falloff.inputs[0])[0]
@@ -2927,7 +2933,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             if tb_second_fac:
                 create_link(tree, tb_second_fac, tr_ramp.inputs['Factor'])
 
-            if tr_intensity_value:
+            if tr_intensity_value and 'Intensity' in tr_ramp.inputs:
                 create_link(tree, tr_intensity_value, tr_ramp.inputs['Intensity'])
 
             if trans_bump_flip:

@@ -1456,7 +1456,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                             crow = cccol.row(align=True)
                             crow.label(text='Falloff Factor:') #, icon_value=lib.get_icon('input'))
-                            crow.prop(ch, 'transition_bump_falloff_emulated_curve_fac', text='')
+                            draw_input_prop(crow, ch, 'transition_bump_falloff_emulated_curve_fac')
                         
                         elif ch.transition_bump_falloff_type == 'CURVE' and ch.enable_transition_bump and ch.enable:
                             cccol.separator()

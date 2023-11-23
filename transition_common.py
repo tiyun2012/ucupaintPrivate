@@ -298,13 +298,21 @@ def check_transition_bump_falloff(layer, tree):
         if ch.transition_bump_falloff_type == 'EMULATED_CURVE':
 
             if root_ch.enable_smooth_bump:
-                tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
-                        lib.EMULATED_CURVE_SMOOTH, hard_replace=True)
+                if ch.transition_bump_flip:
+                    tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
+                            lib.EMULATED_CURVE_SMOOTH_FLIP, hard_replace=True)
+                else:
+                    tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
+                            lib.EMULATED_CURVE_SMOOTH, hard_replace=True)
             else:
-                tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
-                        lib.EMULATED_CURVE, hard_replace=True)
+                if ch.transition_bump_flip:
+                    tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
+                            lib.EMULATED_CURVE_FLIP, hard_replace=True)
+                else:
+                    tb_falloff = replace_new_node(tree, ch, 'tb_falloff', 'ShaderNodeGroup', 'Falloff', 
+                            lib.EMULATED_CURVE, hard_replace=True)
 
-            tb_falloff.inputs['Fac'].default_value = get_transition_bump_falloff_emulated_curve_value(ch)
+            #tb_falloff.inputs['Fac'].default_value = get_transition_bump_falloff_emulated_curve_value(ch)
 
         elif ch.transition_bump_falloff_type == 'CURVE':
             tb_falloff = ori = tree.nodes.get(ch.tb_falloff)

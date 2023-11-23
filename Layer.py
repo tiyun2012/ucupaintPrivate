@@ -4750,8 +4750,8 @@ class YLayerChannel(bpy.types.PropertyGroup):
             #description= 'Distance of mask bump', 
             name='Transition Bump Height Range', 
             description= 'Transition bump height range.\n(White equals this value, black equals negative of this value)', 
-            default=0.05, min=0.0, max=1.0, precision=3, # step=1,
-            update=transition.update_transition_bump_distance)
+            default=0.05, min=0.0, max=1.0, precision=3) # step=1,
+            #update=transition.update_transition_bump_distance)
 
     transition_bump_chain : IntProperty(
             name = 'Transition bump chain',
@@ -4815,8 +4815,8 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_falloff_emulated_curve_fac : FloatProperty(
             name='Transition Bump Falloff Emulated Curve Factor',
             description = 'Transition bump curve emulated curve factor',
-            default=1.0, min=-1.0, max=1.0, subtype='FACTOR',
-            update=transition.update_transition_bump_falloff_emulated_curve_fac)
+            default=1.0, min=-1.0, max=1.0, subtype='FACTOR')
+            #update=transition.update_transition_bump_falloff_emulated_curve_fac)
 
     tb_bump : StringProperty(default='')
     tb_bump_flip : StringProperty(default='')
