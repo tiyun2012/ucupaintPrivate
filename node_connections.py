@@ -2098,7 +2098,6 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         bcol0, bcol1, bout = get_mix_color_indices(blend)
 
         ch_tb_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_fac'))
-        ch_tb_second_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_second_fac'))
 
         if intensity_multiplier and ch != trans_bump_ch:
             if trans_bump_flip:
@@ -2915,11 +2914,16 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             tr_ramp = nodes.get(ch.tr_ramp)
             tr_ramp_blend = nodes.get(ch.tr_ramp_blend)
+            tr_intensity_value = texcoord.outputs.get(get_entity_input_name(ch, 'transition_ramp_intensity_value'))
+            tb_second_fac = texcoord.outputs.get(get_entity_input_name(ch, 'transition_bump_second_fac'))
 
             create_link(tree, transition_input, tr_ramp.inputs['Transition'])
 
-            if ch_tb_second_fac:
-                create_link(tree, ch_tb_second_fac, tr_ramp.inputs['Factor'])
+            if tb_second_fac:
+                create_link(tree, tb_second_fac, tr_ramp.inputs['Factor'])
+
+            if tr_intensity_value:
+                create_link(tree, tr_intensity_value, tr_ramp.inputs['Intensity'])
 
             if trans_bump_flip:
 

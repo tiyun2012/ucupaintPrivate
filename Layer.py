@@ -4738,14 +4738,12 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_value : FloatProperty(
         name = 'Transition Bump Value',
         description = 'Transition bump value',
-        default=3.0, min=1.0, max=100.0, 
-        update=transition.update_transition_bump_value)
+        default=3.0, min=1.0, max=100.0)
 
     transition_bump_second_edge_value : FloatProperty(
             name = 'Second Edge Intensity', 
             description = 'Second Edge intensity value',
-            default=1.2, min=1.0, max=100.0, 
-            update=transition.update_transition_bump_value)
+            default=1.2, min=1.0, max=100.0)
 
     transition_bump_distance : FloatProperty(
             #name='Transition Bump Distance', 
@@ -4794,14 +4792,12 @@ class YLayerChannel(bpy.types.PropertyGroup):
     transition_bump_fac : FloatProperty(
             name='Transition Bump Factor',
             description = 'Transition bump factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR',
-            update=transition.update_transition_bump_fac)
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
 
     transition_bump_second_fac : FloatProperty(
             name='Transition Bump Second Factor',
             description = 'Transition bump second factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR',
-            update=transition.update_transition_bump_fac)
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR')
 
     transition_bump_falloff : BoolProperty(
             name = 'Transition Bump Falloff',

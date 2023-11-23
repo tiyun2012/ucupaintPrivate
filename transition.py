@@ -100,48 +100,6 @@ def update_transition_bump_falloff_emulated_curve_fac(self, context):
     #    tbf = tree.nodes.get(getattr(ch, 'tb_falloff_' + d))
     #    if tbf: tbf.inputs[1].default_value = val
 
-def update_transition_bump_value(self, context):
-    if not self.enable: return
-
-    root_tree = self.id_data
-    yp = root_tree.yp
-    if yp.halt_update: return
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(m.group(1))]
-    tree = get_tree(layer)
-    ch = self
-    layer_node = root_tree.nodes.get(layer.group_node)
-
-    if not ch.enable_transition_bump: return
-
-    #ch_tb_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_value'))
-    #ch_tb_second_value = layer_node.inputs.get(get_entity_input_name(ch, 'transition_bump_second_edge_value'))
-
-    #ch_tb_value.default_value = ch.transition_bump_value
-    #ch_tb_second_value.default_value = ch.transition_bump_second_edge_value
-
-    #intensity_multiplier = tree.nodes.get(ch.intensity_multiplier)
-    #tb_intensity_multiplier = tree.nodes.get(ch.tb_intensity_multiplier)
-
-    ###### REPLACED_BY_SHADERS
-
-    #if ch.transition_bump_flip or layer.type=='BACKGROUND':
-    ##if ch.transition_bump_flip:
-    #    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-    #    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-    #    pass
-    #else:
-    #    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-    #    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-    #    pass
-    #if intensity_multiplier: intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-    #if tb_intensity_multiplier: tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-
-    #####
-
-    for c in layer.channels:
-        set_transition_ramp_and_intensity_multiplier(tree, ch, c)
-
 def update_transition_bump_distance(self, context):
     if not self.enable: return
 
@@ -219,18 +177,6 @@ def update_transition_bump_curved_offset(self, context):
     #tb_bump = tree.nodes.get(ch.tb_bump)
     #if tb_bump:
     #    tb_bump.inputs['Offset'].default_value = ch.transition_bump_curved_offset
-
-def update_transition_bump_fac(self, context):
-
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(m.group(1))]
-    tree = get_tree(layer)
-    ch = self
-
-    bump_ch = get_transition_bump_channel(layer)
-    if bump_ch: set_transition_ramp_and_intensity_multiplier(tree, bump_ch, ch)
 
 def update_transition_ao_intensity(self, context):
     set_transition_ao_intensity(self)
@@ -485,12 +431,15 @@ def update_enable_transition_ramp(self, context):
 
     tree = get_tree(layer)
 
+    check_layer_tree_ios(layer, tree, remove_props=True)
+
     check_transition_ramp_nodes(tree, layer, ch)
 
     # Update mask multiply
     check_mask_mix_nodes(layer, tree)
-
     check_blend_type_nodes(root_ch, layer, ch)
+
+    check_layer_tree_ios(layer, tree)
 
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
@@ -510,6 +459,8 @@ def update_enable_transition_bump(self, context):
     root_ch = yp.channels[ch_index]
     ch = self
     tree = get_tree(layer)
+
+    check_layer_tree_ios(layer, tree, remove_props=True)
 
     check_transition_bump_nodes(layer, tree, ch)
 

@@ -16,32 +16,6 @@ def get_transition_fine_bump_distance(distance, is_curved=False):
     #return -1.0 * distance * scale
     return distance * scale
 
-def set_transition_ramp_and_intensity_multiplier(tree, bump_ch, ch):
-    if ch == bump_ch or not ch.enable: return
-
-    im = tree.nodes.get(ch.intensity_multiplier)
-    if not im: im = lib.new_intensity_multiplier_node(tree, ch, 'intensity_multiplier')
-
-    ##### REPLACED_BY_SHADERS
-
-    #if bump_ch.transition_bump_flip: #or layer.type=='BACKGROUND':
-    #    tr_ramp_mul = bump_ch.transition_bump_value
-    #    tr_im_mul = bump_ch.transition_bump_second_edge_value
-    #else: 
-    #    tr_ramp_mul = bump_ch.transition_bump_second_edge_value
-    #    tr_im_mul = bump_ch.transition_bump_value
-
-    #tr_ramp = tree.nodes.get(ch.tr_ramp)
-    #if tr_ramp:
-    #    tr_ramp.inputs['Multiplier'].default_value = 1.0 + (tr_ramp_mul - 1.0) * ch.transition_bump_second_fac
-
-    #im.inputs[1].default_value = 1.0 + (tr_im_mul - 1.0) * ch.transition_bump_fac
-
-    #####
-
-    # Invert other intensity multipler if mask bump flip active
-    im.inputs['Invert'].default_value = 1.0 if bump_ch.transition_bump_flip else 0.0
-
 def check_transition_bump_influences_to_other_channels(layer, tree=None, target_ch = None):
 
     yp = layer.id_data.yp
@@ -66,13 +40,17 @@ def check_transition_bump_influences_to_other_channels(layer, tree=None, target_
         # Transition Ramp update
         check_transition_ramp_nodes(tree, layer, c)
 
-        # Remove node if channel is disabled
-        #if yp.disable_quick_toggle and not c.enable: 
-        if not c.enable: 
-            remove_node(tree, c, 'intensity_multiplier')
-            continue
+        if bump_ch and c.enable:
+            if bump_ch.transition_bump_flip:
+                im = replace_new_node(tree, c, 'intensity_multiplier', 'ShaderNodeGroup', 
+                        'Intensity Multiplier', lib.INTENSITY_MULTIPLIER_INVERT)
+            else:
+                im = replace_new_node(tree, c, 'intensity_multiplier', 'ShaderNodeGroup', 
+                        'Intensity Multiplier', lib.INTENSITY_MULTIPLIER)
 
-        if bump_ch: set_transition_ramp_and_intensity_multiplier(tree, bump_ch, c)
+        else:
+            # Remove node if channel is disabled
+            remove_node(tree, c, 'intensity_multiplier')
 
 #def get_transition_ao_intensity(ch):
 #    return ch.transition_ao_intensity * ch.intensity_value if not ch.transition_ao_intensity_unlink else ch.transition_ao_intensity
@@ -257,15 +235,6 @@ def set_transition_ramp_nodes(tree, layer, ch):
 
     # Load ramp from cache
     load_ramp(tree, ch)
-
-    #if bump_ch:
-    #    #multiplier_val = 1.0 + (bump_ch.transition_bump_second_edge_value - 1.0) * ch.transition_bump_second_fac
-    #    if bump_ch.transition_bump_flip:
-    #        multiplier_val = 1.0 + (bump_ch.transition_bump_value - 1.0) * ch.transition_bump_second_fac
-    #    else: multiplier_val = 1.0 + (bump_ch.transition_bump_second_edge_value - 1.0) * ch.transition_bump_second_fac
-    #else: multiplier_val = 1.0
-
-    #tr_ramp.inputs['Multiplier'].default_value = multiplier_val
 
     if root_ch.colorspace == 'SRGB':
         tr_ramp.inputs['Gamma'].default_value = 1.0/GAMMA
@@ -460,14 +429,6 @@ def set_transition_bump_nodes(layer, tree, ch, ch_index):
                 c.enable_transition_bump = False
                 yp.halt_update = False
 
-    #if root_ch.enable_smooth_bump:
-    #    remove_node(tree, ch, 'tb_bump_flip')
-    #else:
-    #    tb_bump_flip = replace_new_node(tree, ch, 'tb_bump_flip', 'ShaderNodeGroup', 
-    #            'Transition Bump Backface Flip', lib.FLIP_BACKFACE_BUMP)
-
-    #    set_bump_backface_flip(tb_bump_flip, yp.enable_backface_always_up)
-
     # Add inverse
     tb_inverse = tree.nodes.get(ch.tb_inverse)
     if not tb_inverse:
@@ -475,29 +436,20 @@ def set_transition_bump_nodes(layer, tree, ch, ch_index):
         tb_inverse.operation = 'SUBTRACT'
         tb_inverse.inputs[0].default_value = 1.0
 
-    tb_intensity_multiplier = tree.nodes.get(ch.tb_intensity_multiplier)
-    if not tb_intensity_multiplier:
-        tb_intensity_multiplier = lib.new_intensity_multiplier_node(tree, ch, 
-                'tb_intensity_multiplier', ch.transition_bump_value)
-
-    intensity_multiplier = tree.nodes.get(ch.intensity_multiplier)
-    if not intensity_multiplier:
-        intensity_multiplier = lib.new_intensity_multiplier_node(tree, ch, 
-                'intensity_multiplier', ch.transition_bump_value)
-
     if ch.transition_bump_flip or layer.type == 'BACKGROUND':
-        #intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-        #tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-        set_default_value(intensity_multiplier, 'Sharpen', 0.0)
-        set_default_value(tb_intensity_multiplier, 'Sharpen', 1.0)
+        im = replace_new_node(tree, ch, 'intensity_multiplier', 'ShaderNodeMath', 
+                'Intensity Multiplier')
+        im.operation = 'MULTIPLY'
+        im.use_clamp = True
+        tbim = replace_new_node(tree, ch, 'tb_intensity_multiplier', 'ShaderNodeGroup', 
+                'Intensity Multiplier', lib.INTENSITY_MULTIPLIER_SHARPEN_NO_FACTOR)
     else:
-        #intensity_multiplier.inputs[1].default_value = ch.transition_bump_value
-        #tb_intensity_multiplier.inputs[1].default_value = ch.transition_bump_second_edge_value
-        set_default_value(intensity_multiplier, 'Sharpen', 1.0)
-        set_default_value(tb_intensity_multiplier, 'Sharpen', 0.0)
-
-    #set_default_value(intensity_multiplier, 1, ch.transition_bump_value)
-    #set_default_value(tb_intensity_multiplier, 1, ch.transition_bump_second_edge_value)
+        im = replace_new_node(tree, ch, 'intensity_multiplier', 'ShaderNodeGroup', 
+                'Intensity Multiplier', lib.INTENSITY_MULTIPLIER_SHARPEN_NO_FACTOR)
+        tbim = replace_new_node(tree, ch, 'tb_intensity_multiplier', 'ShaderNodeMath', 
+                'Intensity Multiplier')
+        tbim.operation = 'MULTIPLY'
+        tbim.use_clamp = True
 
 def remove_transition_bump_influence_nodes_to_other_channels(layer, tree):
     # Delete intensity multiplier from ramp

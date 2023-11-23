@@ -1574,7 +1574,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     row.prop(chui, 'expand_transition_ramp_settings', text='', emboss=False, icon_value=icon_value)
                 row.label(text='Transition Ramp:')
                 if ch.enable_transition_ramp and not chui.expand_transition_ramp_settings:
-                    row.prop(ch, 'transition_ramp_intensity_value', text='')
+                    draw_input_prop(row, ch, 'transition_ramp_intensity_value')
 
                 row.context_pointer_set('parent', ch)
                 if is_greater_than_280():
@@ -1592,7 +1592,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Intensity:')
-                    brow.prop(ch, 'transition_ramp_intensity_value', text='')
+                    draw_input_prop(brow, ch, 'transition_ramp_intensity_value')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Blend:')

@@ -429,8 +429,13 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                 dirty = create_prop_input(ch, 'transition_bump_fac', valid_inputs, input_index, dirty)
                 input_index += 1
 
-                dirty = create_prop_input(ch, 'transition_bump_second_fac', valid_inputs, input_index, dirty)
-                input_index += 1
+                if ch.enable_transition_ramp:
+
+                    dirty = create_prop_input(ch, 'transition_ramp_intensity_value', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                    dirty = create_prop_input(ch, 'transition_bump_second_fac', valid_inputs, input_index, dirty)
+                    input_index += 1
     
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
