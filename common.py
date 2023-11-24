@@ -5330,7 +5330,7 @@ def get_entity_input_name(entity, prop_name):
 
     # Get path without layer
     path = entity.path_from_id()
-    path = path.replace('yp.layers[' + str(layer_index) + '].', '')
+    path = path.replace('yp.layers[' + str(layer_index) + ']', '')
 
     return path + '.' + prop_name
 

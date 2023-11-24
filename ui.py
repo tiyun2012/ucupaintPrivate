@@ -514,7 +514,7 @@ def draw_input_prop(layout, entity, prop_name):
 
     # Get path without layer
     path = entity.path_from_id()
-    path = path.replace('yp.layers[' + str(layer_index) + '].', '')
+    path = path.replace('yp.layers[' + str(layer_index) + ']', '')
     path += '.' + prop_name
 
     # Try to get input from layer node
