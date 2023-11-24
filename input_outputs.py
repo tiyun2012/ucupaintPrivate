@@ -356,12 +356,15 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
         else: inp.default_value = prop_value
         dirty = True
 
-    # Set animation data back
+    # Set animation data path back
     if root_tree.animation_data and root_tree.animation_data.action:
+        # Example: yp.layers[0].channels[0].intensity_value'
         for fc in root_tree.animation_data.action.fcurves:
-            # Example: yp.layers[0].channels[0].intensity_value'
             if fc.data_path == 'yp.layers[' + str(layer_index) + ']' + input_name:
                 fc.data_path = 'nodes["' + layer_node.name + '"].inputs[' + str(input_index) + '].default_value'
+        for driver in root_tree.animation_data.drivers:
+            if driver.data_path == 'yp.layers[' + str(layer_index) + ']' + input_name:
+                driver.data_path = 'nodes["' + layer_node.name + '"].inputs[' + str(input_index) + '].default_value'
 
     return dirty
 
@@ -383,14 +386,19 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
     need_prev_normal = check_need_prev_normal(layer)
     trans_bump_ch = get_transition_bump_channel(layer)
 
-    # Rename fcurve data path before rearranging the inputs
+    # Rename fcurve and driver data path before rearranging the inputs
     if root_tree.animation_data and root_tree.animation_data.action:
+        # Example: nodes["Group.003"].inputs[9].default_value'
         for fc in root_tree.animation_data.action.fcurves:
-            # Example: nodes["Group.003"].inputs[9].default_value'
             m = re.match(r'^nodes\["' + layer_node.name + '"\]\.inputs\[(\d+)\]\.default_value$', fc.data_path)
             if m:
                 inp = layer_node.inputs[int(m.group(1))]
                 fc.data_path = 'yp.layers[' + str(get_layer_index(layer)) + ']' + inp.name
+        for driver in root_tree.animation_data.drivers:
+            m = re.match(r'^nodes\["' + layer_node.name + '"\]\.inputs\[(\d+)\]\.default_value$', driver.data_path)
+            if m:
+                inp = layer_node.inputs[int(m.group(1))]
+                driver.data_path = 'yp.layers[' + str(get_layer_index(layer)) + ']' + inp.name
 
     # Prop inputs
     if not remove_props:
