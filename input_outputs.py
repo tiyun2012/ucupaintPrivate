@@ -343,17 +343,18 @@ def create_prop_input(entity, prop_name, valid_inputs, input_index, dirty):
     tree = layer_node.node_tree
     input_name = get_entity_input_name(entity, prop_name)
 
-    dirty = create_input(tree, input_name, socket_type, 
-            valid_inputs, input_index, dirty,
+    inp_dirty = create_input(tree, input_name, socket_type, 
+            valid_inputs, input_index, False,
             min_value=rna.soft_min, max_value=rna.soft_max, default_value=default_value, 
             description=rna.description)
 
     # Set default value
-    if dirty:
+    if inp_dirty:
         inp = layer_node.inputs.get(input_name)
         if type(prop_value) == Color:
             inp.default_value = (prop_value.r, prop_value.g, prop_value.b, 1.0)
         else: inp.default_value = prop_value
+        dirty = True
 
     # Set animation data back
     if root_tree.animation_data and root_tree.animation_data.action:
@@ -382,17 +383,17 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
     need_prev_normal = check_need_prev_normal(layer)
     trans_bump_ch = get_transition_bump_channel(layer)
 
-    if remove_props:
-        # Rename fcurve data path before rearranging the inputs
-        if root_tree.animation_data and root_tree.animation_data.action:
-            for fc in root_tree.animation_data.action.fcurves:
-                # Example: nodes["Group.003"].inputs[9].default_value'
-                m = re.match(r'^nodes\["' + layer_node.name + '"\]\.inputs\[(\d+)\]\.default_value$', fc.data_path)
-                if m:
-                    inp = layer_node.inputs[int(m.group(1))]
-                    fc.data_path = 'yp.layers[' + str(get_layer_index(layer)) + ']' + inp.name
-    else:
-        # Prop inputs
+    # Rename fcurve data path before rearranging the inputs
+    if root_tree.animation_data and root_tree.animation_data.action:
+        for fc in root_tree.animation_data.action.fcurves:
+            # Example: nodes["Group.003"].inputs[9].default_value'
+            m = re.match(r'^nodes\["' + layer_node.name + '"\]\.inputs\[(\d+)\]\.default_value$', fc.data_path)
+            if m:
+                inp = layer_node.inputs[int(m.group(1))]
+                fc.data_path = 'yp.layers[' + str(get_layer_index(layer)) + ']' + inp.name
+
+    # Prop inputs
+    if not remove_props:
         for i, ch in enumerate(layer.channels):
             if not ch.enable: continue
 
@@ -457,7 +458,7 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
             if ch.enable_transition_ao:
                 dirty = create_prop_input(ch, 'transition_ao_intensity', valid_inputs, input_index, dirty)
                 input_index += 1
-    
+        
                 dirty = create_prop_input(ch, 'transition_ao_power', valid_inputs, input_index, dirty)
                 input_index += 1
 

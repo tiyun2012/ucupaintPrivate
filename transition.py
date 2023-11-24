@@ -229,8 +229,6 @@ def update_enable_transition_ao(self, context):
 
     tree = get_tree(layer)
 
-    check_layer_tree_ios(layer, tree, remove_props=True)
-
     # Get transition bump
     bump_ch = get_transition_bump_channel(layer)
 
@@ -260,8 +258,6 @@ def update_enable_transition_ramp(self, context):
 
     tree = get_tree(layer)
 
-    check_layer_tree_ios(layer, tree, remove_props=True)
-
     check_transition_ramp_nodes(tree, layer, ch)
 
     # Update mask multiply
@@ -288,8 +284,6 @@ def update_enable_transition_bump(self, context):
     root_ch = yp.channels[ch_index]
     ch = self
     tree = get_tree(layer)
-
-    check_layer_tree_ios(layer, tree, remove_props=True)
 
     check_transition_bump_nodes(layer, tree, ch)
 

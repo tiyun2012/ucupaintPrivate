@@ -1191,7 +1191,7 @@ class YMoveYPaintChannel(bpy.types.Operator):
         #setattr(ypui, 'show_channel_modifiers_' + str(new_index), temp_0)
 
         # Remove props first
-        check_all_channel_ios(yp, remove_props=True)
+        check_all_channel_ios(yp, reconnect=False, remove_props=True)
 
         # Get IO index
         swap_ch = yp.channels[new_index]
@@ -1268,7 +1268,7 @@ class YRemoveYPaintChannel(bpy.types.Operator):
         shift_channel_fcurves_up(yp, channel_idx)
 
         # Remove props first
-        check_all_channel_ios(yp, remove_props=True)
+        check_all_channel_ios(yp, reconnect=False, remove_props=True)
 
         # Collapse the UI
         #setattr(ypui, 'show_channel_modifiers_' + str(channel_idx), False)
