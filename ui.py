@@ -1178,22 +1178,22 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                     #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
-                    #rrow = boxcol.row()
-                    #mapping = get_layer_mapping(layer)
-                    #rrow.label(text='Offset:')
-                    #rrow.prop(mapping, 'vector_type', text='')
-                    #if is_greater_than_281():
-                    #    boxcol.prop(mapping.inputs[1], 'default_value', text='')
-                    #    boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
-                    #    boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
-                    #else:
-                    #    boxcol.prop(mapping, 'translation', text='')
-                    #    boxcol.prop(mapping, 'rotation')
-                    #    boxcol.prop(mapping, 'scale')
+                    rrow = boxcol.row()
+                    mapping = get_layer_mapping(layer)
+                    rrow.label(text='Offset:')
+                    rrow.prop(mapping, 'vector_type', text='')
+                    if is_greater_than_281():
+                        boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                        boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                        boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    else:
+                        boxcol.prop(mapping, 'translation', text='')
+                        boxcol.prop(mapping, 'rotation')
+                        boxcol.prop(mapping, 'scale')
 
-                    boxcol.prop(layer, 'translation', text='')
-                    boxcol.prop(layer, 'rotation')
-                    boxcol.prop(layer, 'scale')
+                    #boxcol.prop(layer, 'translation', text='')
+                    #boxcol.prop(layer, 'rotation')
+                    #boxcol.prop(layer, 'scale')
 
                     if yp.need_temp_uv_refresh: # or is_active_uv_map_match_entity(obj, layer):
                     #if yp.need_temp_uv_refresh or is_active_uv_map_match_active_entity(obj, layer):
@@ -2043,22 +2043,22 @@ def draw_layer_masks(context, layout, layer):
                     #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
-                    #rrow = boxcol.row()
-                    #mapping = get_mask_mapping(mask)
-                    #rrow.label(text='Offset:')
-                    #rrow.prop(mapping, 'vector_type', text='')
-                    #if is_greater_than_281():
-                    #    boxcol.prop(mapping.inputs[1], 'default_value', text='')
-                    #    boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
-                    #    boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
-                    #else:
-                    #    boxcol.prop(mapping, 'translation', text='')
-                    #    boxcol.prop(mapping, 'rotation')
-                    #    boxcol.prop(mapping, 'scale')
+                    rrow = boxcol.row()
+                    mapping = get_mask_mapping(mask)
+                    rrow.label(text='Offset:')
+                    rrow.prop(mapping, 'vector_type', text='')
+                    if is_greater_than_281():
+                        boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                        boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                        boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    else:
+                        boxcol.prop(mapping, 'translation', text='')
+                        boxcol.prop(mapping, 'rotation')
+                        boxcol.prop(mapping, 'scale')
 
-                    boxcol.prop(mask, 'translation', text='Offset')
-                    boxcol.prop(mask, 'rotation')
-                    boxcol.prop(mask, 'scale')
+                    #boxcol.prop(mask, 'translation', text='Offset')
+                    #boxcol.prop(mask, 'rotation')
+                    #boxcol.prop(mask, 'scale')
 
                     if mask.type == 'IMAGE' and mask.active_edit and (
                             yp.need_temp_uv_refresh  #or is_active_uv_map_match_entity(obj, mask)

@@ -408,11 +408,12 @@ def update_routine(name):
                 need_to_update_tangent_process_300 = True
 
         # Version 1.2.0 won't use custom prop for mapping and intensity
-        if LooseVersion(ng.yp.version) < LooseVersion('1.2.0') and False:
+        if LooseVersion(ng.yp.version) < LooseVersion('1.2.0'):
 
-            # Check for transition ramp ??
+            # Update input outputs
+            check_all_channel_ios(ng.yp)
 
-            # Check for actions
+            # Check for mapping actions
             if ng.animation_data and ng.animation_data.action:
                 fcs = ng.animation_data.action.fcurves
                 new_fcs = []

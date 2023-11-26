@@ -179,6 +179,7 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     # Add mapping node
     if is_mapping_possible(layer.type):
         mapping = new_node(tree, layer, 'mapping', 'ShaderNodeMapping', 'Mapping')
+        mapping.vector_type = 'TEXTURE'
 
     # Set layer coordinate type
     layer.texcoord_type = texcoord_type
