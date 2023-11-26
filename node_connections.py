@@ -2017,10 +2017,21 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         if ch.override and (root_ch.type != 'NORMAL' or ch.normal_map_type != 'NORMAL_MAP'):
 
             ch_source_group = nodes.get(ch.source_group)
+            ch_source = None
             if ch_source_group:
                 ch_source = ch_source_group
                 reconnect_channel_source_internal_nodes(ch, ch_source_group.node_tree)
-            else: ch_source = nodes.get(ch.source)
+            else: 
+                if ch.override_type == 'DEFAULT':
+                    if root_ch.type == 'VALUE':
+                        ch_override_value = texcoord.outputs.get(get_entity_input_name(ch, 'override_value'))
+                        if ch_override_value: rgb = ch_override_value
+                    else: 
+                        ch_override_color = texcoord.outputs.get(get_entity_input_name(ch, 'override_color'))
+                        if ch_override_color: rgb = ch_override_color
+                else:
+                    ch_source = nodes.get(ch.source)
+
 
             if ch_source:
                 rgb = ch_source.outputs[0]
@@ -2068,7 +2079,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     if ch_source_e: create_link(tree, ch_uv_neighbor.outputs['e'], ch_source_e.inputs[0])
                     if ch_source_w: create_link(tree, ch_uv_neighbor.outputs['w'], ch_source_w.inputs[0])
 
-            if 'Vector' in ch_source.inputs:
+            if ch.override_type != 'DEFAULT' and 'Vector' in ch_source.inputs:
                 create_link(tree, vector, ch_source.inputs['Vector'])
 
             if yp.layer_preview_mode and yp.layer_preview_mode_type == 'SPECIFIC_MASK' and ch.active_edit == True:
@@ -2077,17 +2088,23 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
         # Override Normal
         normal = rgb_before_override
-        ch_source_1 = nodes.get(ch.source_1)
-        ch_linear_1 = nodes.get(ch.linear_1)
-        ch_flip_y = nodes.get(ch.flip_y) # Flip Y will only applied to normal override
+        if root_ch.type == 'NORMAL' and ch.override_1: 
+            if ch.override_1_type == 'DEFAULT':
+                ch_override_1_color = texcoord.outputs.get(get_entity_input_name(ch, 'override_1_color'))
+                if ch_override_1_color: 
+                    normal = ch_override_1_color
+            else:
+                ch_source_1 = nodes.get(ch.source_1)
+                if ch_source_1: 
+                    normal = ch_source_1.outputs[0]
 
-        if ch_source_1: #and root_ch.type == 'NORMAL' and ch.override_1: #and ch.normal_map_type == 'BUMP_NORMAL_MAP':
-            normal = ch_source_1.outputs[0]
+                    if 'Vector' in ch_source_1.inputs:
+                        create_link(tree, vector, ch_source_1.inputs['Vector'])
+
+            ch_linear_1 = nodes.get(ch.linear_1)
+            ch_flip_y = nodes.get(ch.flip_y) # Flip Y will only applied to normal override
             if ch_linear_1: normal = create_link(tree, normal, ch_linear_1.inputs[0])[0]
             if ch_flip_y: normal = create_link(tree, normal, ch_flip_y.inputs[0])[0]
-
-            if 'Vector' in ch_source_1.inputs:
-                create_link(tree, vector, ch_source_1.inputs['Vector'])
 
         if ch_idx != -1 and i != ch_idx: continue
 
@@ -2177,7 +2194,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             write_height = get_write_height(ch)
 
             ch_bump_distance = start.outputs.get(get_entity_input_name(ch, 'bump_distance'))
-            ch_normal_bump_distance = start.outputs.get(get_entity_input_name(ch, 'normal_bump_distance'))
+            ch_normal_strength = start.outputs.get(get_entity_input_name(ch, 'normal_bump_distance'))
+            ch_normal_bump_distance = start.outputs.get(get_entity_input_name(ch, 'normal_strength'))
             max_height_calc = nodes.get(ch.max_height_calc)
 
             height_proc = nodes.get(ch.height_proc)
@@ -2188,6 +2206,10 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 create_link(tree, ch_intensity, height_proc.inputs['Intensity'])
                 if 'Intensity' in normal_proc.inputs:
                     create_link(tree, ch_intensity, normal_proc.inputs['Intensity'])
+
+            # Set normal strength
+            if ch_normal_strength and 'Strength' in normal_proc.inputs:
+                create_link(tree, ch_normal_strength, normal_proc.inputs['Strength'])
 
             height_blend = nodes.get(ch.height_blend)
             hbcol0, hbcol1, hbout = get_mix_color_indices(height_blend)

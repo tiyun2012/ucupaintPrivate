@@ -1493,7 +1493,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         ssrow.active = is_bump_distance_relevant(layer, ch)
                         draw_input_prop(ssrow, ch, 'bump_distance')
                     else:
-                        srow.prop(ch, 'normal_strength', text='')
+                        draw_input_prop(srow, ch, 'normal_strength')
 
             #row.label(text='', icon='BLANK1')
 
@@ -1533,7 +1533,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}: 
                         brow = cccol.row(align=True)
                         brow.label(text='Normal Strength:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'normal_strength', text='')
+                        draw_input_prop(brow, ch, 'normal_strength')
 
                     if ch.normal_map_type == 'NORMAL_MAP':
                         brow = cccol.row(align=True)
@@ -1713,8 +1713,8 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
             row.context_pointer_set('parent', ch)
             if ch.override and ch.override_type == 'DEFAULT':
                 if root_ch.type == 'VALUE':
-                    row.prop(ch, 'override_value', text='')
-                else: row.prop(ch, 'override_color', text='') #, icon='COLOR')
+                    draw_input_prop(row, ch, 'override_value')
+                else: draw_input_prop(row, ch, 'override_color')
             row.prop(ch, 'override', text='')
 
             if is_greater_than_280():
@@ -1771,7 +1771,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 #if root_ch.type == 'VALUE':
                 #    row.prop(ch, 'override_value', text='')
                 #else: 
-                row.prop(ch, 'override_1_color', text='') #, icon='COLOR')
+                draw_input_prop(row, ch, 'override_1_color')
 
             if ch.enable and ch.override_1_type == 'IMAGE':
                 row.prop(ch, 'active_edit_1', text='', toggle=True, icon_value=lib.get_icon('image'))

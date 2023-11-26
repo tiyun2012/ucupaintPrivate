@@ -414,11 +414,30 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
             dirty = create_prop_input(ch, 'intensity_value', valid_inputs, input_index, dirty)
             input_index += 1
 
+            # Override values
+            if ch.override and ch.override_type == 'DEFAULT':
+                if root_ch.type == 'VALUE':
+                    dirty = create_prop_input(ch, 'override_value', valid_inputs, input_index, dirty)
+                    input_index += 1
+                else:
+                    dirty = create_prop_input(ch, 'override_color', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+            # Override 1 values
+            if ch.override_1 and ch.override_1_type == 'DEFAULT':
+                dirty = create_prop_input(ch, 'override_1_color', valid_inputs, input_index, dirty)
+                input_index += 1
+
             if root_ch.type == 'NORMAL':
 
                 # Height/bump distance input
                 if ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
                     dirty = create_prop_input(ch, 'bump_distance', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                # Normal map strength input
+                if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
+                    dirty = create_prop_input(ch, 'normal_strength', valid_inputs, input_index, dirty)
                     input_index += 1
 
                 # Normal height/bump distance input

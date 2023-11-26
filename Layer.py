@@ -3947,30 +3947,6 @@ class YPasteLayer(bpy.types.Operator):
 
         return {'FINISHED'}
 
-def update_layer_channel_override_value(self, context):
-    yp = self.id_data.yp
-    if yp.halt_update: return
-
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    ch_index = int(m.group(2))
-    layer = yp.layers[int(m.group(1))]
-    root_ch = yp.channels[ch_index]
-    ch = self
-
-    update_override_value(root_ch, layer, ch)
-
-def update_layer_channel_override_1_value(self, context):
-    yp = self.id_data.yp
-    if yp.halt_update: return
-
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    ch_index = int(m.group(2))
-    layer = yp.layers[int(m.group(1))]
-    root_ch = yp.channels[ch_index]
-    ch = self
-
-    update_override_1_value(root_ch, layer, ch)
-
 def update_layer_channel_override_1(self, context):
     yp = self.id_data.yp
     if yp.halt_update: return
@@ -4124,20 +4100,6 @@ def update_write_height(self, context):
 
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer) #, ch_index)
-
-def update_normal_strength(self, context):
-    yp = self.id_data.yp
-    if yp.halt_update: return
-    m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
-    layer = yp.layers[int(m.group(1))]
-    ch_index = int(m.group(2))
-    root_ch = yp.channels[ch_index]
-    ch = self
-    tree = get_tree(layer)
-
-    normal_proc = tree.nodes.get(ch.normal_proc)
-    if 'Strength' in normal_proc.inputs:
-        normal_proc.inputs['Strength'].default_value = ch.normal_strength
 
 def update_bump_smooth_multiplier(self, context):
     group_tree = self.id_data
@@ -4546,8 +4508,8 @@ class YLayerChannel(bpy.types.PropertyGroup):
     intensity_value : FloatProperty(
             name = 'Channel Intensity Factor', 
             description = 'Channel Intensity Factor',
-            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3,
-            update = update_channel_intensity_value)
+            default=1.0, min=0.0, max=1.0, subtype='FACTOR', precision=3)
+            #update = update_channel_intensity_value)
 
     # Modifiers
     modifiers : CollectionProperty(type=Modifier.YPaintModifier)
@@ -4562,11 +4524,11 @@ class YLayerChannel(bpy.types.PropertyGroup):
     override_color : FloatVectorProperty(
             name = 'Override Color',
             description = 'Override color value for this channel',
-            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.5, 0.5, 0.5), update=update_layer_channel_override_value)
+            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.5, 0.5, 0.5))
     override_value : FloatProperty(
             name = 'Override Value',
             description = 'Override value for this channel',
-            min=0.0, max=1.0, default=1.0, update=update_layer_channel_override_value)
+            min=0.0, max=1.0, default=1.0)
     override_vcol_name : StringProperty(name='Vertex Color Name', description='Channel override vertex color name', default='', update=update_layer_channel_override_vcol_name)
 
     # Extra override needed when bump and normal are used at the same time
@@ -4578,7 +4540,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     override_1_color : FloatVectorProperty(
             name = 'Override Color',
             description = 'Override color value for normal map of this channel',
-            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.5, 0.5, 1.0), update=update_layer_channel_override_1_value)
+            subtype='COLOR', size=3, min=0.0, max=1.0, default=(0.5, 0.5, 1.0))
 
     # Sources
     source : StringProperty(default='')
@@ -4657,8 +4619,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     normal_strength : FloatProperty(
         name = 'Normal Strength',
         description = 'Normal strength',
-        default=1.0, min=0.0, max=10.0, precision=3,
-        update=update_normal_strength)
+        default=1.0, min=0.0, max=10.0, precision=3)
 
     image_flip_y : BoolProperty(
             name = 'Image Flip Y',
