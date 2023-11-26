@@ -3057,7 +3057,7 @@ def refresh_temp_uv(obj, entity):
     else: return False
 
     # Only point mapping are supported for now
-    if mapping.vector_type not in {'POINT'}:
+    if mapping.vector_type not in {'POINT', 'TEXTURE'}:
         return False
 
     if not hasattr(source, 'image'): return False
@@ -3082,8 +3082,6 @@ def refresh_temp_uv(obj, entity):
     if not is_greater_than_280():
         temp_uv_layer = obj.data.uv_layers.get(TEMP_UV)
 
-    #if mapping.vector_type == 'POINT':
-
     translation_x = mapping.inputs[1].default_value[0] if is_greater_than_281() else mapping.translation[0]
     translation_y = mapping.inputs[1].default_value[1] if is_greater_than_281() else mapping.translation[1]
     translation_z = mapping.inputs[1].default_value[2] if is_greater_than_281() else mapping.translation[2]
@@ -3097,6 +3095,7 @@ def refresh_temp_uv(obj, entity):
     scale_z = mapping.inputs[3].default_value[2] if is_greater_than_281() else mapping.scale[2]
 
     # Create transformation matrix
+    m1 = None
     if mapping.vector_type == 'POINT':
 
         # Scale
@@ -3117,21 +3116,28 @@ def refresh_temp_uv(obj, entity):
 
     # NOTE: STILL BROKEN
     elif mapping.vector_type == 'TEXTURE': 
-        # Translate
+        # Translate matrix
         m = Matrix((
-            (1, 0, 0, -translation_x),
-            (0, 1, 0, -translation_y),
-            (0, 0, 1, -translation_z),
+            (1, 0, 0, translation_x),
+            (0, 1, 0, translation_y),
+            (0, 0, 1, translation_z),
             (0, 0, 0, 1),
             ))
 
+        # Rotate and scale matrix
+        m1 = Matrix((
+            (1, 0, 0),
+            (0, 1, 0),
+            (0, 0, 1)
+            ))
+
         # Rotate
-        m.rotate(Euler((rotation_x, rotation_y, rotation_z)))
+        m1.rotate(Euler((-rotation_x, -rotation_y, -rotation_z)))
 
         # Scale
-        m[0][0] = scale_x
-        m[1][1] = scale_y
-        m[2][2] = scale_z
+        m[0][0] = m[0][0] * 1/scale_x
+        m[1][1] = m[1][1] * 1/scale_y
+        m[2][2] = m[2][2] * 1/scale_z
 
     # Create numpy array to store uv coordinates
     arr = numpy.zeros(len(obj.data.loops)*2, dtype=numpy.float32)
@@ -3141,11 +3147,19 @@ def refresh_temp_uv(obj, entity):
 
     # Matrix transformation for each uv coordinates
     if is_greater_than_280():
-        for uv in arr:
-            vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
-            vec = m @ vec
-            uv[0] = vec[0]
-            uv[1] = vec[1]
+        if m1 != None:
+            for uv in arr:
+                vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
+                vec = m @ vec
+                vec = m1 @ vec
+                uv[0] = vec[0]
+                uv[1] = vec[1]
+        else:
+            for uv in arr:
+                vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
+                vec = m @ vec
+                uv[0] = vec[0]
+                uv[1] = vec[1]
     else:
         for uv in arr:
             vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
