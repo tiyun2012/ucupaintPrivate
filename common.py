@@ -3095,7 +3095,7 @@ def refresh_temp_uv(obj, entity):
     scale_z = mapping.inputs[3].default_value[2] if is_greater_than_281() else mapping.scale[2]
 
     # Create transformation matrix
-    m1 = None
+    m1 = m2 = m3 = m4 = None
     if mapping.vector_type == 'POINT':
 
         # Scale
@@ -3118,26 +3118,30 @@ def refresh_temp_uv(obj, entity):
     elif mapping.vector_type == 'TEXTURE': 
         # Translate matrix
         m = Matrix((
-            (1, 0, 0, translation_x),
-            (0, 1, 0, translation_y),
-            (0, 0, 1, translation_z),
+            (1, 0, 0, -translation_x),
+            (0, 1, 0, -translation_y),
+            (0, 0, 1, -translation_z),
             (0, 0, 0, 1),
             ))
 
-        # Rotate and scale matrix
-        m1 = Matrix((
-            (1, 0, 0),
-            (0, 1, 0),
-            (0, 0, 1)
+        # Rotate x matrix
+        m3 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+        m3.rotate(Euler((-rotation_x, 0, 0)))
+
+        # Rotate y matrix
+        m2 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+        m2.rotate(Euler((0, -rotation_y, 0)))
+
+        # Rotate z matrix
+        m1 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+        m1.rotate(Euler((0, 0, -rotation_z)))
+
+        # Scale matrix
+        m4 = Matrix((
+            (1/scale_x, 0, 0),
+            (0, 1/scale_y, 0),
+            (0, 0, 1/scale_z)
             ))
-
-        # Rotate
-        m1.rotate(Euler((-rotation_x, -rotation_y, -rotation_z)))
-
-        # Scale
-        m[0][0] = m[0][0] * 1/scale_x
-        m[1][1] = m[1][1] * 1/scale_y
-        m[2][2] = m[2][2] * 1/scale_z
 
     # Create numpy array to store uv coordinates
     arr = numpy.zeros(len(obj.data.loops)*2, dtype=numpy.float32)
@@ -3147,11 +3151,14 @@ def refresh_temp_uv(obj, entity):
 
     # Matrix transformation for each uv coordinates
     if is_greater_than_280():
-        if m1 != None:
+        if mapping.vector_type == 'TEXTURE':
             for uv in arr:
                 vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
                 vec = m @ vec
                 vec = m1 @ vec
+                vec = m2 @ vec
+                vec = m3 @ vec
+                vec = m4 @ vec
                 uv[0] = vec[0]
                 uv[1] = vec[1]
         else:
@@ -3161,11 +3168,22 @@ def refresh_temp_uv(obj, entity):
                 uv[0] = vec[0]
                 uv[1] = vec[1]
     else:
-        for uv in arr:
-            vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
-            vec = m * vec
-            uv[0] = vec[0]
-            uv[1] = vec[1]
+        if mapping.vector_type == 'TEXTURE':
+            for uv in arr:
+                vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
+                vec = m * vec
+                vec = m1 * vec
+                vec = m2 * vec
+                vec = m3 * vec
+                vec = m4 * vec
+                uv[0] = vec[0]
+                uv[1] = vec[1]
+        else:
+            for uv in arr:
+                vec = Vector((uv[0], uv[1], 0.0)) #, 1.0))
+                vec = m * vec
+                uv[0] = vec[0]
+                uv[1] = vec[1]
 
     # Set back uv coordinates
     #obj.data.uv_layers.active.data.foreach_set('uv', arr.ravel())
