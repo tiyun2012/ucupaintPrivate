@@ -2807,6 +2807,10 @@ def update_mapping(entity):
     scale_z = entity.scale[2]
 
     if entity.type == 'IMAGE' and entity.segment_name != '':
+
+        # Atlas will only use point vector type for now
+        mapping.vector_type = 'POINT'
+
         image = source.image
         if image.source == 'TILED':
             segment = image.yua.segments.get(entity.segment_name)
@@ -3052,6 +3056,10 @@ def refresh_temp_uv(obj, entity):
         #print('Channel!')
     else: return False
 
+    # Only point mapping are supported for now
+    if mapping.vector_type not in {'POINT'}:
+        return False
+
     if not hasattr(source, 'image'): return False
 
     img = source.image
@@ -3074,38 +3082,56 @@ def refresh_temp_uv(obj, entity):
     if not is_greater_than_280():
         temp_uv_layer = obj.data.uv_layers.get(TEMP_UV)
 
+    #if mapping.vector_type == 'POINT':
+
+    translation_x = mapping.inputs[1].default_value[0] if is_greater_than_281() else mapping.translation[0]
+    translation_y = mapping.inputs[1].default_value[1] if is_greater_than_281() else mapping.translation[1]
+    translation_z = mapping.inputs[1].default_value[2] if is_greater_than_281() else mapping.translation[2]
+
+    rotation_x = mapping.inputs[2].default_value[0] if is_greater_than_281() else mapping.rotation[0]
+    rotation_y = mapping.inputs[2].default_value[1] if is_greater_than_281() else mapping.rotation[1]
+    rotation_z = mapping.inputs[2].default_value[2] if is_greater_than_281() else mapping.rotation[2]
+
+    scale_x = mapping.inputs[3].default_value[0] if is_greater_than_281() else mapping.scale[0]
+    scale_y = mapping.inputs[3].default_value[1] if is_greater_than_281() else mapping.scale[1]
+    scale_z = mapping.inputs[3].default_value[2] if is_greater_than_281() else mapping.scale[2]
+
     # Create transformation matrix
-    # Scale
-    if not is_greater_than_281():
+    if mapping.vector_type == 'POINT':
+
+        # Scale
         m = Matrix((
-            (mapping.scale[0], 0, 0),
-            (0, mapping.scale[1], 0),
-            (0, 0, mapping.scale[2])
+            (scale_x, 0, 0),
+            (0, scale_y, 0),
+            (0, 0, scale_z)
             ))
 
         # Rotate
-        m.rotate(Euler((mapping.rotation[0], mapping.rotation[1], mapping.rotation[2])))
+        m.rotate(Euler((rotation_x, rotation_y, rotation_z)))
 
         # Translate
         m = m.to_4x4()
-        m[0][3] = mapping.translation[0]
-        m[1][3] = mapping.translation[1]
-        m[2][3] = mapping.translation[2]
-    else:
+        m[0][3] = translation_x
+        m[1][3] = translation_y
+        m[2][3] = translation_z
+
+    # NOTE: STILL BROKEN
+    elif mapping.vector_type == 'TEXTURE': 
+        # Translate
         m = Matrix((
-            (mapping.inputs[3].default_value[0], 0, 0),
-            (0, mapping.inputs[3].default_value[1], 0),
-            (0, 0, mapping.inputs[3].default_value[2])
+            (1, 0, 0, -translation_x),
+            (0, 1, 0, -translation_y),
+            (0, 0, 1, -translation_z),
+            (0, 0, 0, 1),
             ))
 
         # Rotate
-        m.rotate(Euler((mapping.inputs[2].default_value[0], mapping.inputs[2].default_value[1], mapping.inputs[2].default_value[2])))
+        m.rotate(Euler((rotation_x, rotation_y, rotation_z)))
 
-        # Translate
-        m = m.to_4x4()
-        m[0][3] = mapping.inputs[1].default_value[0]
-        m[1][3] = mapping.inputs[1].default_value[1]
-        m[2][3] = mapping.inputs[1].default_value[2]
+        # Scale
+        m[0][0] = scale_x
+        m[1][1] = scale_y
+        m[2][2] = scale_z
 
     # Create numpy array to store uv coordinates
     arr = numpy.zeros(len(obj.data.loops)*2, dtype=numpy.float32)

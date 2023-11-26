@@ -60,6 +60,7 @@ def add_new_mask(layer, name, mask_type, texcoord_type, uv_name, image = None, v
         mask.uv_name = uv_name
 
         mapping = new_node(tree, mask, 'mapping', 'ShaderNodeMapping', 'Mask Mapping')
+        mapping.vector_type = 'POINT' if segment else 'TEXTURE'
 
         if segment:
             ImageAtlas.set_segment_mapping(mask, segment, image)
