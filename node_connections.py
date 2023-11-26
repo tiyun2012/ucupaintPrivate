@@ -2209,8 +2209,8 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             write_height = get_write_height(ch)
 
             ch_bump_distance = start.outputs.get(get_entity_input_name(ch, 'bump_distance'))
-            ch_normal_strength = start.outputs.get(get_entity_input_name(ch, 'normal_bump_distance'))
-            ch_normal_bump_distance = start.outputs.get(get_entity_input_name(ch, 'normal_strength'))
+            ch_normal_strength = start.outputs.get(get_entity_input_name(ch, 'normal_strength'))
+            ch_normal_bump_distance = start.outputs.get(get_entity_input_name(ch, 'normal_bump_distance'))
             max_height_calc = nodes.get(ch.max_height_calc)
 
             height_proc = nodes.get(ch.height_proc)
