@@ -1596,8 +1596,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             vector = create_link(tree, vector, blur_vector.inputs[1])[0]
 
             layer_blur_factor = texcoord.outputs.get(get_entity_input_name(layer, 'blur_vector_factor'))
-            if layer_blur_factor:
-                create_link(tree, layer_blur_factor, blur_vector.inputs[0])
+            if layer_blur_factor: create_link(tree, layer_blur_factor, blur_vector.inputs[0])
 
         if vector and mapping:
             vector = create_link(tree, vector, mapping.inputs[0])[0]
@@ -1796,6 +1795,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             if mask_blur_vector:
                 mask_vector = create_link(tree, mask_vector, mask_blur_vector.inputs[1])[0]
 
+                mask_blur_factor = texcoord.outputs.get(get_entity_input_name(mask, 'blur_vector_factor'))
+                if mask_blur_factor: create_link(tree, mask_blur_factor, mask_blur_vector.inputs[0])
+
             if mask_mapping:
                 mask_vector = create_link(tree, mask_vector, mask_mapping.inputs[0])[0]
                 #create_link(tree, mask_mapping.outputs[0], mask_source.inputs[0])
@@ -1846,6 +1848,9 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
             root_mask_val = create_link(tree, root_mask_val, mmix.inputs[mixcol0])[mixout]
             create_link(tree, mask_val, mmix.inputs[mixcol1])
 
+        # Mask intensity
+        mask_intensity = texcoord.outputs.get(get_entity_input_name(mask, 'intensity_value'))
+
         # Mask channels
         for j, c in enumerate(mask.channels):
             root_ch = yp.channels[j]
@@ -1867,14 +1872,20 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
 
             if mix_pure:
                 create_link(tree, mask_val, mix_pure.inputs[mp_mixcol1])
+                if mask_intensity: create_link(tree, mask_intensity, mix_pure.inputs[0])
 
             if mix_remains:
                 create_link(tree, mask_val, mix_remains.inputs[mr_mixcol1])
+                if mask_intensity: create_link(tree, mask_intensity, mix_remains.inputs[0])
 
             if mix_normal:
                 create_link(tree, mask_val, mix_normal.inputs[mn_mixcol1])
+                if mask_intensity: create_link(tree, mask_intensity, mix_normal.inputs[0])
 
             if mask_mix:
+
+                if mask_intensity: create_link(tree, mask_intensity, mask_mix.inputs[0])
+
                 create_link(tree, mask_val, mask_mix.inputs[mmixcol1])
                 if root_ch.type == 'NORMAL' and root_ch.enable_smooth_bump:
                     if mask.type in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:

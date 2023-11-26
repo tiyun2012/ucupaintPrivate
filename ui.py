@@ -2072,7 +2072,7 @@ def draw_layer_masks(context, layout, layer):
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if mask.enable_blur_vector:
-                    splits.prop(mask, 'blur_vector_factor', text='')
+                    draw_input_prop(splits, mask, 'blur_vector_factor')
                 rrow.prop(mask, 'enable_blur_vector', text='')
 
         draw_mask_modifier_stack(layer, mask, rrcol, maskui)
@@ -2081,7 +2081,7 @@ def draw_layer_masks(context, layout, layer):
         rrow.label(text='', icon_value=lib.get_icon('blend'))
         rrow.label(text='Blend:')
         rrow.prop(mask, 'blend_type', text='')
-        rrow.prop(mask, 'intensity_value', text='')
+        draw_input_prop(rrow, mask, 'intensity_value')
 
         # Mask Channels row
         rrow = rrcol.row(align=True)

@@ -502,6 +502,19 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                 dirty = create_prop_input(ch, 'transition_ao_inside_intensity', valid_inputs, input_index, dirty)
                 input_index += 1
 
+        # Mask prop inputs
+        for mask in layer.masks:
+            if not mask.enable: continue
+
+            # Create intensity socket
+            dirty = create_prop_input(mask, 'intensity_value', valid_inputs, input_index, dirty)
+            input_index += 1
+
+            # Mask blur vector
+            if mask.enable_blur_vector:
+                dirty = create_prop_input(mask, 'blur_vector_factor', valid_inputs, input_index, dirty)
+                input_index += 1
+
     # Tree input and outputs
     for i, ch in enumerate(layer.channels):
         #if yp.disable_quick_toggle and not ch.enable: continue
