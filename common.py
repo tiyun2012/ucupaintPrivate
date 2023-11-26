@@ -3124,17 +3124,17 @@ def refresh_temp_uv(obj, entity):
             (0, 0, 0, 1),
             ))
 
-        # Rotate x matrix
-        m3 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
-        m3.rotate(Euler((-rotation_x, 0, 0)))
+        # Rotate z matrix
+        m1 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+        m1.rotate(Euler((0, 0, -rotation_z)))
 
         # Rotate y matrix
         m2 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
         m2.rotate(Euler((0, -rotation_y, 0)))
 
-        # Rotate z matrix
-        m1 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
-        m1.rotate(Euler((0, 0, -rotation_z)))
+        # Rotate x matrix
+        m3 = Matrix(((1, 0, 0), (0, 1, 0), (0, 0, 1)))
+        m3.rotate(Euler((-rotation_x, 0, 0)))
 
         # Scale matrix
         m4 = Matrix((
