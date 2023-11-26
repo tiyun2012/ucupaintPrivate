@@ -4883,9 +4883,11 @@ def update_layer_blur_vector(self, context):
     if layer.enable_blur_vector:
         blur_vector = new_node(tree, layer, 'blur_vector', 'ShaderNodeGroup', 'Blur Vector')
         blur_vector.node_tree = get_node_tree_lib(lib.BLUR_VECTOR)
-        blur_vector.inputs[0].default_value = layer.blur_vector_factor / 100.0
+        blur_vector.inputs[0].default_value = layer.blur_vector_factor
     else:
         remove_node(tree, layer, 'blur_vector')
+
+    check_layer_tree_ios(layer, tree)
 
     rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
@@ -4900,7 +4902,7 @@ def update_layer_blur_vector_factor(self, context):
     blur_vector = tree.nodes.get(layer.blur_vector)
 
     if blur_vector:
-        blur_vector.inputs[0].default_value = layer.blur_vector_factor / 100.0
+        blur_vector.inputs[0].default_value = layer.blur_vector_factor
 
 class YLayer(bpy.types.PropertyGroup):
     name : StringProperty(default='', update=update_layer_name)

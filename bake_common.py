@@ -897,7 +897,7 @@ def blur_image(image, alpha_aware=True, factor=1.0, samples=512, bake_device='GP
 
     blur = mat.node_tree.nodes.new('ShaderNodeGroup')
     blur.node_tree = get_node_tree_lib(lib.BLUR_VECTOR)
-    blur.inputs[0].default_value = factor / 100.0
+    blur.inputs[0].default_value = factor
 
     source_tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
     target_tex = mat.node_tree.nodes.new('ShaderNodeTexImage')

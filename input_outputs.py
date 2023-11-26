@@ -402,6 +402,13 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
 
     # Prop inputs
     if not remove_props:
+
+        # Layer prop inputs
+        if layer.enable_blur_vector:
+            dirty = create_prop_input(layer, 'blur_vector_factor', valid_inputs, input_index, dirty)
+            input_index += 1
+        
+        # Channel prop inputs
         for i, ch in enumerate(layer.channels):
             if not ch.enable: continue
 

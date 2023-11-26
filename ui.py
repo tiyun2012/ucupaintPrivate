@@ -1206,7 +1206,7 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if layer.enable_blur_vector:
-                    splits.prop(layer, 'blur_vector_factor', text='')
+                    draw_input_prop(splits, layer, 'blur_vector_factor')
                 rrow.prop(layer, 'enable_blur_vector', text='')
 
     layout.separator()

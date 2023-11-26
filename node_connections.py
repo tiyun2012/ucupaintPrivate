@@ -1595,6 +1595,10 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
         if vector and blur_vector:
             vector = create_link(tree, vector, blur_vector.inputs[1])[0]
 
+            layer_blur_factor = texcoord.outputs.get(get_entity_input_name(layer, 'blur_vector_factor'))
+            if layer_blur_factor:
+                create_link(tree, layer_blur_factor, blur_vector.inputs[0])
+
         if vector and mapping:
             vector = create_link(tree, vector, mapping.inputs[0])[0]
             #create_link(tree, mapping.outputs[0], source.inputs[0])
