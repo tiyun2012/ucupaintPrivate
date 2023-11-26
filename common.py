@@ -3075,7 +3075,6 @@ def refresh_temp_uv(obj, entity):
 
     # New uv layers
     temp_uv_layer = uv_layers.new(name=TEMP_UV)
-    #temp_uv_layer = obj.data.uv_layers.new(name=TEMP_UV)
     uv_layers.active = temp_uv_layer
     temp_uv_layer.active_render = True
 
@@ -3114,7 +3113,6 @@ def refresh_temp_uv(obj, entity):
         m[1][3] = translation_y
         m[2][3] = translation_z
 
-    # NOTE: STILL BROKEN
     elif mapping.vector_type == 'TEXTURE': 
         # Translate matrix
         m = Matrix((
@@ -3145,7 +3143,6 @@ def refresh_temp_uv(obj, entity):
 
     # Create numpy array to store uv coordinates
     arr = numpy.zeros(len(obj.data.loops)*2, dtype=numpy.float32)
-    #obj.data.uv_layers.active.data.foreach_get('uv', arr)
     temp_uv_layer.data.foreach_get('uv', arr)
     arr.shape = (arr.shape[0]//2, 2)
 
@@ -3186,7 +3183,6 @@ def refresh_temp_uv(obj, entity):
                 uv[1] = vec[1]
 
     # Set back uv coordinates
-    #obj.data.uv_layers.active.data.foreach_set('uv', arr.ravel())
     temp_uv_layer.data.foreach_set('uv', arr.ravel())
 
     # Set UV mirror offset
