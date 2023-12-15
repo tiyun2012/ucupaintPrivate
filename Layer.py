@@ -158,7 +158,8 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
         source.image = image
 
     elif layer_type == 'VCOL':
-        set_source_vcol_name(source, vcol.name)
+        if vcol: set_source_vcol_name(source, vcol.name)
+        else: set_source_vcol_name(source, layer_name)
 
     elif layer_type == 'COLOR':
         col = (solid_color[0], solid_color[1], solid_color[2], 1.0)
@@ -243,7 +244,7 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
 
         # New vertex color
         elif mask_type in {'VCOL', 'COLOR_ID'}:
-            objs = [obj]
+            objs = [obj] if obj.type == 'MESH' else []
             if mat.users > 1:
                 for o in get_scene_objects():
                     if o.type != 'MESH': continue
@@ -254,14 +255,14 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
 
                 for o in objs:
                     if mask_name not in get_vertex_colors(o):
-                        try:
-                            mask_vcol = new_vertex_color(o, mask_name, mask_vcol_data_type, mask_vcol_domain)
-                            if mask_color == 'WHITE':
-                                set_obj_vertex_colors(o, mask_vcol.name, (1.0, 1.0, 1.0, 1.0))
-                            elif mask_color == 'BLACK':
-                                set_obj_vertex_colors(o, mask_vcol.name, (0.0, 0.0, 0.0, 1.0))
-                            set_active_vertex_color(o, mask_vcol)
-                        except Exception as e: print (e)
+                        if not is_greater_than_330() and len(get_vertex_colors(o)) >= 8: continue
+                        mask_vcol = new_vertex_color(o, mask_name, mask_vcol_data_type, mask_vcol_domain)
+                        if mask_color == 'WHITE':
+                            set_obj_vertex_colors(o, mask_vcol.name, (1.0, 1.0, 1.0, 1.0))
+                        elif mask_color == 'BLACK':
+                            set_obj_vertex_colors(o, mask_vcol.name, (0.0, 0.0, 0.0, 1.0))
+                        set_active_vertex_color(o, mask_vcol)
+
             elif mask_type == 'COLOR_ID':
                 check_colorid_vcol(objs)
 
@@ -312,8 +313,8 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     #yp.halt_update = False
 
     # Rearrange node inside layers
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
     return layer
 
@@ -427,7 +428,7 @@ class YNewVcolToOverrideChannel(bpy.types.Operator):
         if not ch.override:
             ch.override = True
 
-        objs = [obj]
+        objs = [obj] if obj.type == 'MESH' else []
         if mat.users > 1:
             for o in get_scene_objects():
                 if o.type != 'MESH': continue
@@ -436,11 +437,10 @@ class YNewVcolToOverrideChannel(bpy.types.Operator):
 
         for o in objs:
             if self.name not in get_vertex_colors(o):
-                try:
-                    vcol = new_vertex_color(o, self.name, self.data_type, self.domain)
-                    set_obj_vertex_colors(o, vcol.name, (1.0, 1.0, 1.0, 1.0))
-                    set_active_vertex_color(o, vcol)
-                except: pass
+                if not is_greater_than_330() and len(get_vertex_colors(o)) >= 8: continue
+                vcol = new_vertex_color(o, self.name, self.data_type, self.domain)
+                set_obj_vertex_colors(o, vcol.name, (1.0, 1.0, 1.0, 1.0))
+                set_active_vertex_color(o, vcol)
 
         # Update vcol cache
         if ch.override_type == 'VCOL':
@@ -654,7 +654,7 @@ class YNewLayer(bpy.types.Operator):
             items = bpy.data.images
         elif self.type == 'VCOL' and obj.type == 'MESH':
             name = obj.active_material.name + DEFAULT_NEW_VCOL_SUFFIX
-            items = get_vertex_colors(obj)
+            items = get_vertex_color_names(obj)
         else:
             name = [i[1] for i in layer_type_items if i[0] == self.type][0]
             items = yp.layers
@@ -922,7 +922,7 @@ class YNewLayer(bpy.types.Operator):
         node = get_active_ypaint_node()
         yp = node.node_tree.yp
         ypui = context.window_manager.ypui
-        vcols = get_vertex_colors(obj)
+        vcol_names = get_vertex_color_names(obj)
 
         # Check if object is not a mesh
         if (self.type == 'VCOL' or (self.add_mask and self.mask_type == 'VCOL')) and obj.type != 'MESH':
@@ -932,10 +932,10 @@ class YNewLayer(bpy.types.Operator):
         if (not is_greater_than_330() and
                 (
                 ((self.type == 'VCOL' or (self.add_mask and self.mask_type == 'VCOL')) 
-                and len(vcols) >= 8) 
+                and len(vcol_names) >= 8) 
             or
                 ((self.type == 'VCOL' and (self.add_mask and self.mask_type == 'VCOL')) 
-                and len(vcols) >= 7)
+                and len(vcol_names) >= 7)
                 )
             ):
             self.report({'ERROR'}, "Mesh can only use 8 vertex colors!")
@@ -945,14 +945,15 @@ class YNewLayer(bpy.types.Operator):
         if self.type == 'IMAGE':
             same_name = [i for i in bpy.data.images if i.name == self.name]
         elif self.type == 'VCOL':
-            same_name = [i for i in vcols if i.name == self.name]
+            same_name = [i for i in vcol_names if i == self.name]
         else: same_name = [lay for lay in yp.layers if lay.name == self.name]
         if same_name:
             if self.type == 'IMAGE':
                 self.report({'ERROR'}, "Image named '" + self.name +"' is already available!")
             elif self.type == 'VCOL':
                 self.report({'ERROR'}, "Vertex Color named '" + self.name +"' is already available!")
-            self.report({'ERROR'}, "Layer named '" + self.name +"' is already available!")
+            else:
+                self.report({'ERROR'}, "Layer named '" + self.name +"' is already available!")
             return {'CANCELLED'}
 
         # Clearing unused image atlas segments
@@ -1006,7 +1007,7 @@ class YNewLayer(bpy.types.Operator):
         vcol = None
         if self.type == 'VCOL':
 
-            objs = [obj]
+            objs = [obj] if obj.type == 'MESH' else []
             if mat.users > 1:
                 for o in get_scene_objects():
                     if o.type != 'MESH': continue
@@ -1015,15 +1016,14 @@ class YNewLayer(bpy.types.Operator):
 
             for o in objs:
                 if self.name not in get_vertex_colors(o):
-                    try:
-                        vcol = new_vertex_color(o, self.name, self.vcol_data_type, self.vcol_domain)
+                    if not is_greater_than_330() and len(get_vertex_colors(o)) >= 8: continue
+                    vcol = new_vertex_color(o, self.name, self.vcol_data_type, self.vcol_domain)
 
-                        if is_greater_than_292():
-                            set_obj_vertex_colors(o, vcol.name, (0.0, 0.0, 0.0, 0.0))
-                        else: set_obj_vertex_colors(o, vcol.name, (1.0, 1.0, 1.0, 1.0))
+                    if is_greater_than_292():
+                        set_obj_vertex_colors(o, vcol.name, (0.0, 0.0, 0.0, 0.0))
+                    else: set_obj_vertex_colors(o, vcol.name, (1.0, 1.0, 1.0, 1.0))
 
-                        set_active_vertex_color(o, vcol)
-                    except Exception as e: print(e)
+                    set_active_vertex_color(o, vcol)
 
         yp.halt_update = True
 
@@ -1047,6 +1047,8 @@ class YNewLayer(bpy.types.Operator):
         yp.halt_update = False
 
         # Reconnect and rearrange nodes
+        check_start_end_root_ch_nodes(node.node_tree)
+        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -1626,6 +1628,8 @@ class BaseMultipleImagesLayer():
                     ch.override_type = 'IMAGE'
 
         ## Reconnect and rearrange nodes
+        check_start_end_root_ch_nodes(node.node_tree)
+        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -1945,6 +1949,8 @@ class YOpenImageToLayer(bpy.types.Operator, ImportHelper):
         node.node_tree.yp.halt_update = False
 
         # Reconnect and rearrange nodes
+        check_start_end_root_ch_nodes(node.node_tree)
+        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -2108,8 +2114,8 @@ class YOpenAvailableDataToOverrideChannel(bpy.types.Operator):
                     self.image_coll.add().name = img.name
         elif self.type == 'VCOL':
             self.vcol_coll.clear()
-            for vcol in get_vertex_colors(obj):
-                self.vcol_coll.add().name = vcol.name
+            for vcol_name in get_vertex_color_names(obj):
+                self.vcol_coll.add().name = vcol_name
 
         return context.window_manager.invoke_props_dialog(self)
 
@@ -2190,17 +2196,19 @@ class YOpenAvailableDataToOverrideChannel(bpy.types.Operator):
                 self.report({'ERROR'}, "Vertex Color name cannot be empty!")
                 return {'CANCELLED'}
 
-            vcols = get_vertex_colors(obj)
-            vcol = vcols.get(self.vcol_name)
-            if not vcol:
+            if self.vcol_name not in get_vertex_color_names(obj):
                 self.report({'ERROR'}, "Vertex Color named " + self.vcol_name + " is not found!")
                 return {'CANCELLED'}
+
+            vcols = get_vertex_colors(obj)
+            if self.vcol_name in vcols:
+                vcol = vcols.get(self.vcol_name)
 
             # Make sure override is on
             if not ch.override:
                 ch.override = True
 
-            objs = [obj]
+            objs = [obj] if obj.type == 'MESH' else []
             if mat.users > 1:
                 for o in get_scene_objects():
                     if o.type != 'MESH': continue
@@ -2208,19 +2216,12 @@ class YOpenAvailableDataToOverrideChannel(bpy.types.Operator):
                         objs.append(o)
 
             for o in objs:
-
                 if self.vcol_name not in get_vertex_colors(o):
-                    try:
-                        if is_greater_than_320():
-                            other_v = new_vertex_color(o, self.vcol_name, vcol.data_type, vcol.domain)
-                        else: other_v = new_vertex_color(o, self.vcol_name)
-                        #if vcol_color == 'WHITE':
-                        #    set_obj_vertex_colors(o, other_v.name, (1.0, 1.0, 1.0, 1.0))
-                        #elif vcol_color == 'BLACK':
-                        #    set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 1.0))
-                        set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 1.0))
-                        set_active_vertex_color(o, other_v)
-                    except Exception as e: pass
+                    if not is_greater_than_330() and len(get_vertex_colors(o)) >= 8: continue
+                    data_type, domain = get_vcol_data_type_and_domain_by_name(o, self.vcol_name)
+                    other_v = new_vertex_color(o, self.vcol_name, data_type, domain)
+                    set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 1.0))
+                    set_active_vertex_color(o, other_v)
 
             # Update vcol cache
             if ch.override_type == 'VCOL':
@@ -2332,8 +2333,8 @@ class YOpenAvailableDataToLayer(bpy.types.Operator):
                     self.image_coll.add().name = img.name
         elif self.type == 'VCOL':
             self.vcol_coll.clear()
-            for vcol in get_vertex_colors(obj):
-                self.vcol_coll.add().name = vcol.name
+            for vcol_name in get_vertex_color_names(obj):
+                self.vcol_coll.add().name = vcol_name
 
         return context.window_manager.invoke_props_dialog(self)
 
@@ -2402,26 +2403,28 @@ class YOpenAvailableDataToLayer(bpy.types.Operator):
         if self.type == 'IMAGE':
             image = bpy.data.images.get(self.image_name)
             name = image.name
-            #if image.colorspace_settings.name != 'Non-Color':
-            #    image.colorspace_settings.name = 'Non-Color'
         elif self.type == 'VCOL':
+            name = self.vcol_name
             vcols = get_vertex_colors(obj)
-            vcol = vcols.get(self.vcol_name)
-            name = vcol.name
+            if self.vcol_name in vcols:
+                vcol = vcols.get(self.vcol_name)
 
+            objs = [obj] if obj.type == 'MESH' else []
             if mat.users > 1:
                 for o in get_scene_objects():
-                    if o.type != 'MESH' or o == obj: continue
-                    if mat.name in o.data.materials and self.vcol_name not in get_vertex_colors(o):
-                        try:
-                            if is_greater_than_320():
-                                other_v = new_vertex_color(o, self.vcol_name, vcol.data_type, vcol.domain)
-                            else: other_v = new_vertex_color(o, self.vcol_name)
-                            if is_greater_than_292():
-                                set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 0.0))
-                            else: set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 1.0))
-                            set_active_vertex_color(o, other_v)
-                        except: pass
+                    if o.type != 'MESH': continue
+                    if mat.name in o.data.materials and o not in objs:
+                        objs.append(o)
+
+            for o in objs:
+                if self.vcol_name not in get_vertex_colors(o):
+                    if not is_greater_than_330() and len(get_vertex_colors(o)) >= 8: continue
+                    data_type, domain = get_vcol_data_type_and_domain_by_name(o, self.vcol_name)
+                    other_v = new_vertex_color(o, self.vcol_name, data_type, domain)
+                    if is_greater_than_292():
+                        set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 0.0))
+                    else: set_obj_vertex_colors(o, other_v.name, (0.0, 0.0, 0.0, 1.0))
+                    set_active_vertex_color(o, other_v)
 
         add_new_layer(node.node_tree, name, self.type, int(self.channel_idx), self.blend_type, 
                 self.normal_blend_type, self.normal_map_type, self.texcoord_type, self.uv_map, 
@@ -2431,6 +2434,8 @@ class YOpenAvailableDataToLayer(bpy.types.Operator):
         node.node_tree.yp.halt_update = False
 
         # Reconnect and rearrange nodes
+        check_start_end_root_ch_nodes(node.node_tree)
+        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -2482,6 +2487,10 @@ class YMoveInOutLayerGroup(bpy.types.Operator):
             neighbor_idx = -1
             neighbor_layer = None
 
+        #move_outside_up = False
+        #move_outside_down = False
+        original_parent_idx = -1
+
         # Move outside up
         if is_top_member(layer) and self.direction == 'UP':
             #print('Case 1')
@@ -2493,11 +2502,15 @@ class YMoveInOutLayerGroup(bpy.types.Operator):
 
             yp.active_layer_index = neighbor_idx
 
+            original_parent_idx = last_member_idx
+
         # Move outside down
         elif is_bottom_member(layer) and self.direction == 'DOWN':
             #print('Case 2')
 
             parent_dict = set_parent_dict_val(yp, parent_dict, layer.name, yp.layers[layer.parent_idx].parent_idx)
+
+            original_parent_idx = layer.parent_idx
 
         elif neighbor_layer and neighbor_layer.type == 'GROUP':
 
@@ -2531,12 +2544,22 @@ class YMoveInOutLayerGroup(bpy.types.Operator):
 
         #if layer.type == 'GROUP' or has_parent:
         check_all_layer_channel_io_and_nodes(layer) #, has_parent=has_parent)
-        rearrange_layer_nodes(layer)
         reconnect_layer_nodes(layer)
+        rearrange_layer_nodes(layer)
+
+        # Also check original parent io and nodes
+        if original_parent_idx != -1:
+            original_parent = yp.layers[original_parent_idx]
+            check_all_layer_channel_io_and_nodes(original_parent) #, has_parent=has_parent)
+            reconnect_layer_nodes(original_parent)
+            rearrange_layer_nodes(original_parent)
+
+        # Background layers should update its ios
+        recheck_background_layers_ios(yp, index_dict)
 
         # Refresh layer channel blend nodes
-        rearrange_yp_nodes(node.node_tree)
         reconnect_yp_nodes(node.node_tree)
+        rearrange_yp_nodes(node.node_tree)
 
         # Update UI
         wm.ypui.need_update = True
@@ -2680,6 +2703,9 @@ class YMoveLayer(bpy.types.Operator):
         # Height calculation can be changed after moving layer
         height_root_ch = get_root_height_channel(yp)
         if height_root_ch: update_displacement_height_ratio(height_root_ch)
+
+        # Background layers should update its ios
+        recheck_background_layers_ios(yp, index_dict)
 
         # Refresh layer channel blend nodes
         reconnect_yp_nodes(node.node_tree)
@@ -2954,14 +2980,18 @@ class YRemoveLayer(bpy.types.Operator):
         for i in child_ids:
             lay = yp.layers[i-1]
             check_all_layer_channel_io_and_nodes(lay)
-            rearrange_layer_nodes(lay)
             reconnect_layer_nodes(lay)
+            rearrange_layer_nodes(lay)
 
         # Update max height
         height_ch = get_root_height_channel(yp)
         if height_ch: update_displacement_height_ratio(height_ch)
 
+        # Background layers should update its ios
+        recheck_background_layers_ios(yp, index_dict)
+
         # Refresh layer channel blend nodes
+        check_start_end_root_ch_nodes(group_tree)
         reconnect_yp_nodes(group_tree)
         rearrange_yp_nodes(group_tree)
 
@@ -3110,12 +3140,12 @@ def replace_layer_type(layer, new_type, item_name='', remove_data=False):
     # Check childrens which need rearrange
     for lay in yp.layers:
         check_all_layer_channel_io_and_nodes(lay)
-        rearrange_layer_nodes(lay)
         reconnect_layer_nodes(lay)
+        rearrange_layer_nodes(lay)
 
     if layer.type in {'BACKGROUND', 'GROUP'} or ori_type == 'GROUP':
-        rearrange_yp_nodes(layer.id_data)
         reconnect_yp_nodes(layer.id_data)
+        rearrange_yp_nodes(layer.id_data)
 
 def replace_mask_type(mask, new_type, item_name='', remove_data=False):
 
@@ -3256,20 +3286,20 @@ def replace_mask_type(mask, new_type, item_name='', remove_data=False):
         #lay = yp.layers[i]
     #for lay in yp.layers:
     #    check_all_layer_channel_io_and_nodes(lay)
-    #    rearrange_layer_nodes(lay)
     #    reconnect_layer_nodes(lay)
+    #    rearrange_layer_nodes(lay)
 
     for lay in yp.layers:
         check_all_layer_channel_io_and_nodes(lay)
-        rearrange_layer_nodes(lay)
         reconnect_layer_nodes(lay)
+        rearrange_layer_nodes(lay)
 
-    #rearrange_layer_nodes(layer)
     #reconnect_layer_nodes(layer)
+    #rearrange_layer_nodes(layer)
 
     #if mask.type in {'BACKGROUND', 'GROUP'} or ori_type == 'GROUP':
-    rearrange_yp_nodes(mask.id_data)
     reconnect_yp_nodes(mask.id_data)
+    rearrange_yp_nodes(mask.id_data)
 
 class YReplaceLayerChannelOverride(bpy.types.Operator):
     bl_idname = "node.y_replace_layer_channel_override"
@@ -3351,8 +3381,8 @@ class YReplaceLayerType(bpy.types.Operator):
                     if not img.yia.is_image_atlas and img not in baked_channel_images:
                         self.item_coll.add().name = img.name
             else:
-                for vcol in get_vertex_colors(obj):
-                    self.item_coll.add().name = vcol.name
+                for vcol_name in get_vertex_color_names(obj):
+                    self.item_coll.add().name = vcol_name
 
             return context.window_manager.invoke_props_dialog(self)#, width=400)
 
@@ -3745,8 +3775,8 @@ class YDuplicateLayer(bpy.types.Operator):
         yp.halt_update = False
 
         # Rearrange and reconnect
-        rearrange_yp_nodes(tree)
         reconnect_yp_nodes(tree)
+        rearrange_yp_nodes(tree)
 
         # Refresh active layer
         yp.active_layer_index = yp.active_layer_index
@@ -3921,8 +3951,8 @@ class YPasteLayer(bpy.types.Operator):
             # Refresh io and nodes
             check_all_layer_channel_io_and_nodes(nl)
 
-            rearrange_layer_nodes(nl)
             reconnect_layer_nodes(nl)
+            rearrange_layer_nodes(nl)
 
         # Remap parents for non pasted layers
         for lay in yp.layers:
@@ -3939,8 +3969,9 @@ class YPasteLayer(bpy.types.Operator):
         yp.halt_update = False
 
         # Rearrange and reconnect
-        rearrange_yp_nodes(tree)
+        check_start_end_root_ch_nodes(tree)
         reconnect_yp_nodes(tree)
+        rearrange_yp_nodes(tree)
 
         # Refresh active layer
         yp.active_layer_index = yp.active_layer_index
@@ -3993,8 +4024,8 @@ def update_layer_channel_override_1(self, context):
         ch.halt_update = False
 
     check_all_layer_channel_io_and_nodes(layer) #, has_parent=has_parent)
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
 def update_layer_channel_override(self, context):
     yp = self.id_data.yp
@@ -4015,8 +4046,8 @@ def update_layer_channel_override(self, context):
         ch.halt_update = False
 
     check_all_layer_channel_io_and_nodes(layer) #, has_parent=has_parent)
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
     # Reselect layer so vcol or image will be updated
     yp.active_layer_index = yp.active_layer_index
@@ -4048,11 +4079,12 @@ def update_channel_enable(self, context):
         yp.layer_preview_mode = yp.layer_preview_mode
     else:
 
-        rearrange_layer_nodes(layer)
         reconnect_layer_nodes(layer)
+        rearrange_layer_nodes(layer)
 
-        rearrange_yp_nodes(self.id_data)
+        check_start_end_root_ch_nodes(self.id_data)
         reconnect_yp_nodes(self.id_data)
+        rearrange_yp_nodes(self.id_data)
 
     # Disable active edit on overrides
     if not ch.enable:
@@ -4070,11 +4102,14 @@ def update_normal_map_type(self, context):
     root_ch = yp.channels[int(m.group(2))]
     tree = get_tree(layer)
 
-    check_channel_normal_map_nodes(tree, layer, root_ch, self)
+    check_all_layer_channel_io_and_nodes(layer, tree, self)
 
     #if not yp.halt_reconnect:
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
+
+    reconnect_yp_nodes(self.id_data)
+    rearrange_yp_nodes(self.id_data)
 
 def update_blend_type(self, context):
     T = time.time()
@@ -4084,17 +4119,21 @@ def update_blend_type(self, context):
     if yp.halt_update: return
     m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]', self.path_from_id())
     layer = yp.layers[int(m.group(1))]
+    tree = get_tree(layer)
     ch_index = int(m.group(2))
     root_ch = yp.channels[ch_index]
 
-    if check_blend_type_nodes(root_ch, layer, self): # and not yp.halt_reconnect:
+    check_all_layer_channel_io_and_nodes(layer, tree, self)
 
-        rearrange_layer_nodes(layer)
+    # Reconnect all layer channels if normal channel is updated
+    if root_ch.type == 'NORMAL':
+        reconnect_layer_nodes(layer) 
+    else: reconnect_layer_nodes(layer, ch_index)
 
-        # Reconnect all layer channels if normal channel is updated
-        if root_ch.type == 'NORMAL':
-            reconnect_layer_nodes(layer) 
-        else: reconnect_layer_nodes(layer, ch_index)
+    rearrange_layer_nodes(layer)
+
+    reconnect_yp_nodes(self.id_data)
+    rearrange_yp_nodes(self.id_data)
 
     print('INFO: Layer', layer.name, ' blend type is changed at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
     wm.yptimer.time = str(time.time())
@@ -4107,7 +4146,7 @@ def update_flip_backface_normal(self, context):
     tree = get_tree(layer)
 
     normal_flip = tree.nodes.get(self.normal_flip)
-    normal_flip.mute = self.invert_backface_normal
+    if normal_flip: normal_flip.mute = self.invert_backface_normal
 
 def update_write_height(self, context):
     yp = self.id_data.yp
@@ -4119,12 +4158,14 @@ def update_write_height(self, context):
     ch = self
     tree = get_tree(layer)
 
-    check_channel_normal_map_nodes(tree, layer, root_ch, ch)
-
+    check_all_layer_channel_io_and_nodes(layer, tree, self)
     update_displacement_height_ratio(root_ch)
 
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer) #, ch_index)
+    rearrange_layer_nodes(layer)
+
+    reconnect_yp_nodes(self.id_data)
+    rearrange_yp_nodes(self.id_data)
 
 def update_normal_strength(self, context):
     yp = self.id_data.yp
@@ -4230,13 +4271,13 @@ def update_uv_name(self, context):
     check_layer_tree_ios(layer, tree)
 
     #if yp_dirty or layer_dirty: #and not yp.halt_reconnect:
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
     # Update layer tree inputs
     #if yp_dirty:
-    rearrange_yp_nodes(group_tree)
     reconnect_yp_nodes(group_tree)
+    rearrange_yp_nodes(group_tree)
 
 def update_texcoord_type(self, context):
     yp = self.id_data.yp
@@ -4266,13 +4307,13 @@ def update_texcoord_type(self, context):
     check_layer_tree_ios(layer, tree)
 
     #if not yp.halt_reconnect:
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
     # Update layer tree inputs
     #if yp_dirty:
-    rearrange_yp_nodes(self.id_data)
     reconnect_yp_nodes(self.id_data)
+    rearrange_yp_nodes(self.id_data)
 
 def update_hemi_space(self, context):
     if self.type != 'HEMI': return
@@ -4298,8 +4339,8 @@ def update_hemi_camera_ray_mask(self, context):
             trans = source.node_tree.nodes.get('Vector Transform')
             if trans: trans.convert_from = self.hemi_space
 
-            rearrange_layer_nodes(self)
             reconnect_layer_nodes(self)
+            rearrange_layer_nodes(self)
 
         source.inputs['Camera Ray Mask'].default_value = 1.0 if self.hemi_camera_ray_mask else 0.0
 
@@ -4312,8 +4353,8 @@ def update_hemi_use_prev_normal(self, context):
     check_layer_tree_ios(layer, tree)
     check_layer_bump_process(layer, tree)
 
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
     reconnect_yp_nodes(layer.id_data)
 
@@ -4406,13 +4447,20 @@ def update_layer_enable(self, context):
     if height_root_ch:
         update_displacement_height_ratio(height_root_ch)
 
+    check_uv_nodes(yp)
+    check_all_layer_channel_io_and_nodes(layer, tree)
+    check_start_end_root_ch_nodes(layer.id_data)
+
+    reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
+
     if yp.layer_preview_mode:
         # Refresh preview mode, rearrange and reconnect already done in this event
         yp.layer_preview_mode = yp.layer_preview_mode
     else:
         #if yp.disable_quick_toggle:
-        rearrange_yp_nodes(layer.id_data)
         reconnect_yp_nodes(layer.id_data)
+        rearrange_yp_nodes(layer.id_data)
 
     context.window_manager.yptimer.time = str(time.time())
 
@@ -4460,8 +4508,8 @@ def update_divide_rgb_by_alpha(self, context):
 
     check_layer_divider_alpha(self)
 
-    rearrange_layer_nodes(self)
     reconnect_layer_nodes(self)
+    rearrange_layer_nodes(self)
 
 def update_image_flip_y(self, context):
     yp = self.id_data.yp
@@ -4488,8 +4536,8 @@ def update_image_flip_y(self, context):
     else:
         remove_node(tree, self, 'flip_y')
 
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
 def update_channel_active_edit(self, context):
     yp = self.id_data.yp
@@ -4972,8 +5020,8 @@ def update_layer_blur_vector(self, context):
     else:
         remove_node(tree, layer, 'blur_vector')
 
-    rearrange_layer_nodes(layer)
     reconnect_layer_nodes(layer)
+    rearrange_layer_nodes(layer)
 
 def update_layer_blur_vector_factor(self, context):
     yp = self.id_data.yp
