@@ -824,33 +824,34 @@ def draw_root_channels_ui(context, layout, node):
 
             if channel.type == 'NORMAL':
                 brow = bcol.row(align=True)
-                if channel.enable_smooth_bump:
-                    if chui.expand_smooth_bump_settings:
-                        icon_value = lib.custom_icons["uncollapsed_input"].icon_id
-                    else: icon_value = lib.custom_icons["collapsed_input"].icon_id
-                    brow.prop(chui, 'expand_smooth_bump_settings', text='', emboss=False, icon_value=icon_value)
-                else:
-                    brow.label(text='', icon_value=lib.get_icon('input'))
+                #if channel.enable_smooth_bump:
+                if chui.expand_smooth_bump_settings:
+                    icon_value = lib.custom_icons["uncollapsed_input"].icon_id
+                else: icon_value = lib.custom_icons["collapsed_input"].icon_id
+                brow.prop(chui, 'expand_smooth_bump_settings', text='', emboss=False, icon_value=icon_value)
+                #else:
+                #    brow.label(text='', icon_value=lib.get_icon('input'))
                 brow.label(text='Smooth Bump:')
                 if not yp.use_baked:
                     brow.prop(channel, 'enable_smooth_bump', text='')
                 else:
                     brow.label(text='', icon_value=lib.custom_icons['texture'].icon_id)
 
-                if chui.expand_smooth_bump_settings and channel.enable_smooth_bump:
+                if chui.expand_smooth_bump_settings: # and channel.enable_smooth_bump:
                     brow = bcol.row(align=True)
                     brow.label(text='', icon='BLANK1')
                     bbox = brow.box()
                     bbcol = bbox.column() #align=True)
 
-                    brow = bbcol.row(align=True)
-                    brow.label(text='Main UV:')
-                    #brow.label(text=channel.main_uv)
-                    #brow.prop(channel, 'main_uv', text='')
-                    brow.prop_search(channel, "main_uv", context.object.data, "uv_layers", text='', icon='GROUP_UVS')
+                    if channel.enable_smooth_bump:
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Main UV:')
+                        #brow.label(text=channel.main_uv)
+                        #brow.prop(channel, 'main_uv', text='')
+                        brow.prop_search(channel, "main_uv", context.object.data, "uv_layers", text='', icon='GROUP_UVS')
 
                     brow = bbcol.row(align=True)
-                    brow.label(text='Backface Bump Up:')
+                    brow.label(text='Backface Normal Up:')
                     brow.prop(yp, 'enable_backface_always_up', text='')
 
                 brow = bcol.row(align=True)
@@ -1473,11 +1474,13 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 cccol = bbox.column(align=True)
 
                 #if ch.normal_map_type != 'BUMP_NORMAL_MAP':
-                brow = cccol.row(align=True)
-                brow.label(text='Write Height:') #, icon_value=lib.get_icon('input'))
-                if ch.normal_map_type == 'NORMAL_MAP':
-                    brow.prop(ch, 'normal_write_height', text='')
-                else: brow.prop(ch, 'write_height', text='')
+                if ch.normal_map_type != 'NORMAL_MAP' or ch.enable_transition_bump:
+                    brow = cccol.row(align=True)
+                    brow.label(text='Write Height:') #, icon_value=lib.get_icon('input'))
+                    #if ch.normal_map_type == 'NORMAL_MAP':
+                    #    brow.prop(ch, 'normal_write_height', text='')
+                    #else: 
+                    brow.prop(ch, 'write_height', text='')
 
                 #if ch.normal_map_type in {'BUMP_MAP', 'FINE_BUMP_MAP'}:
 
@@ -1499,20 +1502,6 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         brow = cccol.row(align=True)
                         brow.label(text='Normal Strength:') #, icon_value=lib.get_icon('input'))
                         brow.prop(ch, 'normal_strength', text='')
-
-                    if ch.normal_map_type == 'NORMAL_MAP':
-                        brow = cccol.row(align=True)
-                        brow.label(text='Bump Height:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'normal_bump_distance', text='')
-
-                    #if any(layer.masks):
-                    if not ch.write_height and any(layer.masks):
-                        brow = cccol.row(align=True)
-                        #write_height = ch.normal_write_height if ch.normal_map_type == 'NORMAL_MAP' else ch.write_height 
-                        write_height = get_write_height(ch)
-                        brow.active = not ch.enable_transition_bump and any(layer.masks) and not write_height
-                        brow.label(text='Affected Masks:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'transition_bump_chain', text='')
 
                 #brow = cccol.row(align=True)
                 #brow.label(text='Invert Backface Normal')
