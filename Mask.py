@@ -28,9 +28,11 @@ def add_new_mask(layer, name, mask_type, texcoord_type, uv_name, image = None, v
     if segment:
         mask.segment_name = segment.name
 
+    source = None
     if mask_type == 'VCOL':
         source = new_node(tree, mask, 'source', get_vcol_bl_idname(), 'Mask Source')
-    else: source = new_node(tree, mask, 'source', layer_node_bl_idnames[mask_type], 'Mask Source')
+    elif mask.type != 'BACKFACE': source = new_node(tree, mask, 'source', layer_node_bl_idnames[mask_type], 'Mask Source')
+
     if image:
         source.image = image
         if hasattr(source, 'color_space'):
@@ -394,7 +396,7 @@ class YNewLayerMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             col.label(text='')
 
-        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
             col.label(text='Vector:')
             if self.type == 'IMAGE':
                 if UDIM.is_udim_supported():
@@ -432,7 +434,7 @@ class YNewLayerMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             col.prop(self, 'hdr')
 
-        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
             crow = col.row(align=True)
             crow.prop(self, 'texcoord_type', text='')
             if obj.type == 'MESH' and self.texcoord_type == 'UV':
@@ -1316,7 +1318,7 @@ def update_mask_uv_name(self, context):
     tree = get_tree(layer)
     mask = self
 
-    if mask.type in {'HEMI', 'OBJECT_INDEX', 'COLOR_ID'} or mask.texcoord_type != 'UV':
+    if mask.type in {'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} or mask.texcoord_type != 'UV':
         return
 
     # Cannot use temp uv as standard uv
