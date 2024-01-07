@@ -99,7 +99,7 @@ def enable_channel_source_tree(layer, root_ch, ch, rearrange = False):
         if linear_ref: layer_tree.nodes.remove(linear_ref)
 
     # Create uv neighbor
-    if ch.override_type in {'VCOL', 'HEMI'}: #, 'OBJECT_INDEX'}:
+    if ch.override_type in {'VCOL', 'HEMI'}:
         uv_neighbor = replace_new_node(layer_tree, ch, 'uv_neighbor', 'ShaderNodeGroup', 'Neighbor UV', 
                 lib.NEIGHBOR_FAKE, hard_replace=True)
     #else: 
@@ -119,11 +119,11 @@ def enable_layer_source_tree(layer, rearrange=False):
 
     # Check if source tree is already available
     if layer.type in {'BACKGROUND', 'COLOR'}: return
-    if layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX'} and layer.source_group != '': return
+    if layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'} and layer.source_group != '': return
 
     layer_tree = get_tree(layer)
 
-    if layer.type not in {'VCOL', 'GROUP', 'HEMI', 'OBJECT_INDEX'}:
+    if layer.type not in {'VCOL', 'GROUP', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'}:
         # Get current source for reference
         source_ref = layer_tree.nodes.get(layer.source)
         linear_ref = layer_tree.nodes.get(layer.linear)
@@ -186,7 +186,7 @@ def enable_layer_source_tree(layer, rearrange=False):
         if layer.type == 'VCOL':
             uv_neighbor_1 = replace_new_node(layer_tree, layer, 'uv_neighbor_1', 'ShaderNodeGroup', 'Neighbor UV 1', 
                     lib.NEIGHBOR_FAKE, hard_replace=True)
-    elif layer.type not in {'GROUP', 'OBJECT_INDEX'}: 
+    elif layer.type not in {'GROUP', 'OBJECT_INDEX', 'BACKFACE'}: 
         uv_neighbor = replace_new_node(layer_tree, layer, 'uv_neighbor', 'ShaderNodeGroup', 'Neighbor UV', 
                 lib.get_neighbor_uv_tree_name(layer.texcoord_type, entity=layer), hard_replace=True)
         set_uv_neighbor_resolution(layer, uv_neighbor)
@@ -253,15 +253,15 @@ def disable_layer_source_tree(layer, rearrange=True, force=False):
     if not force:
         smooth_bump_ch = None
         for i, root_ch in enumerate(yp.channels):
-            if root_ch.type == 'NORMAL' and root_ch.enable_smooth_bump and get_channel_enabled(layer.channels[i], layer, root_ch):
+            if root_ch.type == 'NORMAL' and root_ch.enable_smooth_bump and get_channel_enabled(layer.channels[i], layer, root_ch) and is_height_process_needed(layer):
                 smooth_bump_ch = root_ch
 
-        if (layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX'} and layer.source_group == '') or smooth_bump_ch:
+        if (layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'} and layer.source_group == '') or smooth_bump_ch:
             return
 
     layer_tree = get_tree(layer)
 
-    if force or layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX'}:
+    if force or layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'}:
         source_group = layer_tree.nodes.get(layer.source_group)
         if source_group:
             source_ref = source_group.node_tree.nodes.get(layer.source)
@@ -349,11 +349,11 @@ def set_mask_uv_neighbor(tree, layer, mask, mask_idx=-1):
     # Get chain
     chain = get_bump_chain(layer)
 
-    if smooth_bump_ch and get_channel_enabled(smooth_bump_ch) and (write_height_ch or mask_idx < chain) and mask.type not in {'OBJECT_INDEX', 'COLOR_ID'}:
+    if smooth_bump_ch and get_channel_enabled(smooth_bump_ch) and (write_height_ch or mask_idx < chain) and mask.type not in {'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
 
         #print('ntob')
 
-        if mask.type in {'VCOL', 'HEMI'}: #, 'OBJECT_INDEX'}: 
+        if mask.type in {'VCOL', 'HEMI'}:
             lib_name = lib.NEIGHBOR_FAKE
         else: lib_name = lib.get_neighbor_uv_tree_name(mask.texcoord_type, entity=mask)
 
@@ -369,7 +369,7 @@ def set_mask_uv_neighbor(tree, layer, mask, mask_idx=-1):
 def enable_mask_source_tree(layer, mask, reconnect = False):
 
     # Check if source tree is already available
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'} and mask.group_node != '': return
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} and mask.group_node != '': return
 
     layer_tree = get_tree(layer)
 
@@ -378,7 +378,7 @@ def enable_mask_source_tree(layer, mask, reconnect = False):
 
     #return
 
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
         # Get current source for reference
         source_ref = layer_tree.nodes.get(mask.source)
         linear_ref = layer_tree.nodes.get(mask.linear)
@@ -433,11 +433,11 @@ def enable_mask_source_tree(layer, mask, reconnect = False):
 def disable_mask_source_tree(layer, mask, reconnect=False):
 
     # Check if source tree is already gone
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'} and mask.group_node == '': return
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} and mask.group_node == '': return
 
     layer_tree = get_tree(layer)
 
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
 
         mask_tree = get_mask_tree(mask)
 
@@ -525,6 +525,8 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
     trans_bump = get_transition_bump_channel(layer)
     trans_bump_flip = trans_bump.transition_bump_flip if trans_bump else False
 
+    height_process_needed = is_height_process_needed(layer)
+
     chain = get_bump_chain(layer)
 
     for i, mask in enumerate(layer.masks):
@@ -549,7 +551,7 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
                     if remove_node(tree, c, 'mix_normal'): need_reconnect = True
                 continue
 
-            if (root_ch.type == 'NORMAL' and root_ch.enable_smooth_bump and
+            if (root_ch.type == 'NORMAL' and root_ch.enable_smooth_bump and height_process_needed and
                 (write_height or (not write_height and i < chain))
                 ):
                 mix = tree.nodes.get(c.mix)
@@ -640,7 +642,7 @@ def check_mask_mix_nodes(layer, tree=None, specific_mask=None, specific_ch=None)
 
             if layer.type == 'GROUP' and mask.blend_type in limited_mask_blend_types:
 
-                if root_ch.type != 'NORMAL' or not root_ch.enable_smooth_bump:
+                if root_ch.type != 'NORMAL' or not root_ch.enable_smooth_bump and height_process_needed:
                     mix_limit = tree.nodes.get(c.mix_limit)
                     if not mix_limit:
                         need_reconnect = True
@@ -671,12 +673,12 @@ def check_mask_source_tree(layer, specific_mask=None): #, ch=None):
     write_height_ch = get_write_height_normal_channel(layer)
     chain = get_bump_chain(layer)
 
-    channel_enabled = get_channel_enabled(smooth_bump_ch) if smooth_bump_ch else False
+    height_process_needed = is_height_process_needed(layer)
 
     for i, mask in enumerate(layer.masks):
         if specific_mask and specific_mask != mask: continue
 
-        if get_mask_enabled(mask) and channel_enabled and (write_height_ch or i < chain):
+        if get_mask_enabled(mask) and height_process_needed and (write_height_ch or i < chain):
             enable_mask_source_tree(layer, mask)
         else: disable_mask_source_tree(layer, mask)
 
@@ -1488,6 +1490,43 @@ def remove_uv_nodes(uv, obj):
 
     #yp.uvs.remove(uv)
 
+def check_layer_projection_blends(layer):
+
+    if layer.type == 'IMAGE':
+        source = get_layer_source(layer)
+        if hasattr(source, 'projection_blend'):
+            source.projection_blend = layer.projection_blend
+
+    for ch in layer.channels:
+        if ch.override and ch.override_type == 'IMAGE':
+            source = get_channel_source(ch, layer)
+            if hasattr(source, 'projection_blend'):
+                source.projection_blend = layer.projection_blend
+
+        if ch.override_1 and ch.override_1_type == 'IMAGE':
+            source = get_channel_source_1(ch, layer)
+            if hasattr(source, 'projection_blend'):
+                source.projection_blend = layer.projection_blend
+
+def check_layer_projections(layer):
+    # Set image source projection
+    if layer.type == 'IMAGE':
+        source = get_layer_source(layer)
+        source.projection = 'BOX' if layer.texcoord_type in {'Generated', 'Object'} else 'FLAT'
+
+    # Set channel override images
+    for ch in layer.channels:
+        if ch.override and ch.override_type == 'IMAGE':
+            source = get_channel_source(ch, layer)
+            source.projection = 'BOX' if layer.texcoord_type in {'Generated', 'Object'} else 'FLAT'
+
+        if ch.override_1 and ch.override_1_type == 'IMAGE':
+            source = get_channel_source_1(ch, layer)
+            source.projection = 'BOX' if layer.texcoord_type in {'Generated', 'Object'} else 'FLAT'
+
+    # Check projection blends
+    check_layer_projection_blends(layer)
+
 def check_uv_nodes(yp, generate_missings=False):
 
     # Check for UV needed
@@ -1638,6 +1677,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     if root_ch.type != 'NORMAL': return need_reconnect
 
     channel_enabled = get_channel_enabled(ch, layer, root_ch)
+    height_process_needed = is_height_process_needed(layer)
     write_height = get_write_height(ch)
 
     # Check mask source tree
@@ -1650,7 +1690,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     if check_create_spread_alpha(layer, tree, root_ch, ch): need_reconnect = True
 
     # Dealing with neighbor related nodes
-    if channel_enabled and root_ch.enable_smooth_bump:
+    if channel_enabled and root_ch.enable_smooth_bump and height_process_needed:
         enable_layer_source_tree(layer)
     else: 
         disable_layer_source_tree(layer, False)
@@ -1660,7 +1700,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
         #    disable_channel_source_tree(layer, root_ch, ch, False)
 
     # Dealing with channel override
-    if channel_enabled and ch.override and root_ch.enable_smooth_bump and ch.override_type != 'DEFAULT' and ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
+    if channel_enabled and ch.override and root_ch.enable_smooth_bump and ch.override_type != 'DEFAULT' and ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} and height_process_needed:
         enable_channel_source_tree(layer, root_ch, ch)
     else:
         disable_channel_source_tree(layer, root_ch, ch, False)
@@ -1672,6 +1712,8 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
 
         max_height = get_displacement_max_height(root_ch, layer)
         update_displacement_height_ratio(root_ch)
+
+    if channel_enabled and height_process_needed:
 
         # Height Process
         if ch.normal_map_type == 'NORMAL_MAP':
@@ -1819,27 +1861,40 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     # Normal Process
     if channel_enabled and is_normal_process_needed(layer):
 
-        if ch.normal_map_type == 'NORMAL_MAP' or (ch.normal_map_type == 'BUMP_NORMAL_MAP' and not ch.write_height):
+        if layer.type == 'GROUP':
             if root_ch.enable_smooth_bump:
-                if ch.enable_transition_bump:
-                    lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH_TRANSITION
-                else:
-                    lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH
+                lib_name = lib.NORMAL_PROCESS_SMOOTH_GROUP
             else:
-                if ch.enable_transition_bump:
-                    lib_name = lib.NORMAL_MAP_PROCESS_TRANSITION
-                else:
-                    lib_name = lib.NORMAL_MAP_PROCESS
+                lib_name = lib.NORMAL_PROCESS_GROUP
+
+        elif ch.normal_map_type == 'NORMAL_MAP':
+            if ch.enable_transition_bump:
+                if root_ch.enable_smooth_bump:
+                    lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH_TRANSITION
+                else: lib_name = lib.NORMAL_MAP_PROCESS_TRANSITION
+            else:
+                lib_name = lib.NORMAL_MAP
+
         elif ch.normal_map_type == 'BUMP_MAP':
             if root_ch.enable_smooth_bump:
                 lib_name = lib.NORMAL_PROCESS_SMOOTH
             else:
                 lib_name = lib.NORMAL_PROCESS
 
-            if layer.type == 'GROUP':
-                lib_name += ' Group'
         elif ch.normal_map_type == 'BUMP_NORMAL_MAP':
-            lib_name = lib.NORMAL_MAP
+            if not ch.write_height:
+                if root_ch.enable_smooth_bump:
+                    if ch.enable_transition_bump:
+                        lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH_TRANSITION
+                    else:
+                        lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH
+                else:
+                    if ch.enable_transition_bump:
+                        lib_name = lib.NORMAL_MAP_PROCESS_TRANSITION
+                    else:
+                        lib_name = lib.NORMAL_MAP_PROCESS
+            else:
+                lib_name = lib.NORMAL_MAP
 
         normal_proc, need_reconnect = replace_new_node(
                 tree, ch, 'normal_proc', 'ShaderNodeGroup', 'Normal Process', 
@@ -1856,10 +1911,11 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
             normal_proc.inputs['Intensity'].default_value = ch.intensity_value
 
         if 'Strength' in normal_proc.inputs:
-            normal_proc.inputs['Strength'].default_value = ch.normal_strength
+            normal_proc.inputs['Strength'].default_value = ch.normal_strength * ch.intensity_value
 
+        # NOTE: Normal flip node is kinda unecessary since non smooth bump don't support backface up for now
         # Normal flip
-        if not root_ch.enable_smooth_bump and not write_height:
+        if False and not root_ch.enable_smooth_bump and not write_height:
             if is_greater_than_280(): lib_name = lib.FLIP_BACKFACE_BUMP
             else: lib_name = lib.FLIP_BACKFACE_BUMP_LEGACY
 
@@ -1868,7 +1924,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
 
             set_bump_backface_flip(normal_flip, yp.enable_backface_always_up)
         else:
-            remove_node(tree, ch, 'normal_flip')
+            if remove_node(tree, ch, 'normal_flip'): need_reconnect = True
     else:
         if remove_node(tree, ch, 'normal_proc'): need_reconnect = True
         if remove_node(tree, ch, 'normal_flip'): need_reconnect = True
@@ -2281,7 +2337,6 @@ def check_layer_image_linear_node(layer, source_tree=None):
 
         source = source_tree.nodes.get(layer.source)
         image = source.image
-
         if not image: return
 
         # Create linear if image type is srgb or float image
@@ -2292,16 +2347,15 @@ def check_layer_image_linear_node(layer, source_tree=None):
                 linear.inputs[1].default_value = 1.0 / GAMMA
 
             return
-    else:
 
-        # Delete linear
-        remove_node(source_tree, layer, 'linear')
+    # Delete linear
+    remove_node(source_tree, layer, 'linear')
 
 def check_mask_image_linear_node(mask, mask_tree=None):
 
     if not mask_tree: mask_tree = get_mask_tree(mask)
 
-    if mask.type == 'IMAGE':
+    if get_mask_enabled(mask) and mask.type == 'IMAGE':
 
         source = mask_tree.nodes.get(mask.source)
         image = source.image
@@ -2309,14 +2363,11 @@ def check_mask_image_linear_node(mask, mask_tree=None):
         if not image: return
 
         # Create linear if image type is srgb
-        #if image.colorspace_settings.name == 'sRGB':
         if is_image_source_srgb(image, source):
             linear = mask_tree.nodes.get(mask.linear)
             if not linear:
                 linear = new_node(mask_tree, mask, 'linear', 'ShaderNodeGamma', 'Linear')
                 linear.inputs[1].default_value = 1.0 / GAMMA
-                #linear = new_node(mask_tree, mask, 'linear', 'ShaderNodeGroup', 'Linear')
-                #linear.node_tree = get_node_tree_lib(lib.LINEAR_2_SRGB)
 
             return
 

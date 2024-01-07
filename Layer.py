@@ -302,6 +302,9 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     # Check uv maps
     check_uv_nodes(yp)
 
+    # Check image projections
+    check_layer_projections(layer)
+
     # Check and create layer channel nodes
     check_all_layer_channel_io_and_nodes(layer, tree) #, has_parent=has_parent)
 
@@ -311,6 +314,10 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     # Unhalt rearrangements and reconnections since all nodes already created
     yp.halt_reconnect = False
     #yp.halt_update = False
+
+    # Check layer IO
+    check_all_layer_channel_io_and_nodes(layer)
+    check_start_end_root_ch_nodes(group_tree)
 
     # Rearrange node inside layers
     reconnect_layer_nodes(layer)
@@ -506,7 +513,8 @@ class YNewLayer(bpy.types.Operator):
     hdr = BoolProperty(name='32 bit Float', default=False)
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Layer Coordinate Type',
+            description = 'Layer Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -1047,8 +1055,6 @@ class YNewLayer(bpy.types.Operator):
         yp.halt_update = False
 
         # Reconnect and rearrange nodes
-        check_start_end_root_ch_nodes(node.node_tree)
-        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -1380,7 +1386,8 @@ class BaseMultipleImagesLayer():
     relative = BoolProperty(name="Relative Path", default=True, description="Apply relative paths")
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Layer Coordinate Type',
+            description = 'Layer Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -1627,9 +1634,10 @@ class BaseMultipleImagesLayer():
                     ch.override = True
                     ch.override_type = 'IMAGE'
 
+        # Check image projections
+        check_layer_projections(layer)
+
         ## Reconnect and rearrange nodes
-        check_start_end_root_ch_nodes(node.node_tree)
-        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -1758,7 +1766,6 @@ class YOpenMultipleImagesToSingleLayer(bpy.types.Operator, ImportHelper, BaseMul
     bl_label = "Open Multiple Images to Single Layer"
     bl_options = {'REGISTER', 'UNDO'}
 
-
     @classmethod
     def poll(cls, context):
         #return hasattr(context, 'group_node') and context.group_node
@@ -1807,7 +1814,8 @@ class YOpenImageToLayer(bpy.types.Operator, ImportHelper):
     relative = BoolProperty(name="Relative Path", default=True, description="Apply relative paths")
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Layer Coordinate Type',
+            description = 'Layer Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -1949,8 +1957,6 @@ class YOpenImageToLayer(bpy.types.Operator, ImportHelper):
         node.node_tree.yp.halt_update = False
 
         # Reconnect and rearrange nodes
-        check_start_end_root_ch_nodes(node.node_tree)
-        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -2264,7 +2270,8 @@ class YOpenAvailableDataToLayer(bpy.types.Operator):
             default = 'IMAGE')
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Layer Coordinate Type',
+            description = 'Layer Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -2434,8 +2441,6 @@ class YOpenAvailableDataToLayer(bpy.types.Operator):
         node.node_tree.yp.halt_update = False
 
         # Reconnect and rearrange nodes
-        check_start_end_root_ch_nodes(node.node_tree)
-        check_uv_nodes(node.node_tree.yp)
         reconnect_yp_nodes(node.node_tree)
         rearrange_yp_nodes(node.node_tree)
 
@@ -4183,7 +4188,7 @@ def update_normal_strength(self, context):
 
     normal_proc = tree.nodes.get(ch.normal_proc)
     if 'Strength' in normal_proc.inputs:
-        normal_proc.inputs['Strength'].default_value = ch.normal_strength
+        normal_proc.inputs['Strength'].default_value = ch.normal_strength * ch.intensity_value
 
 def update_bump_distance(self, context):
     group_tree = self.id_data
@@ -4283,6 +4288,9 @@ def update_uv_name(self, context):
     reconnect_yp_nodes(group_tree)
     rearrange_yp_nodes(group_tree)
 
+def update_projection_blend(self, context):
+    check_layer_projection_blends(self)
+
 def update_texcoord_type(self, context):
     yp = self.id_data.yp
     layer = self
@@ -4303,12 +4311,12 @@ def update_texcoord_type(self, context):
             uv_neighbor = replace_new_node(tree, smooth_bump_ch, 'uv_neighbor', 'ShaderNodeGroup', 'Neighbor UV', 
                     lib.get_neighbor_uv_tree_name(layer.texcoord_type, entity=layer), hard_replace=True)
             set_uv_neighbor_resolution(smooth_bump_ch, uv_neighbor)
-    #else:
-    #    remove_node(tree, layer, 'uv_neighbor')
 
     # Update layer tree inputs
-    #yp_dirty = True if check_layer_tree_ios(layer, tree) else False
     check_layer_tree_ios(layer, tree)
+
+    # Check layer projections
+    check_layer_projections(layer)
 
     #if not yp.halt_reconnect:
     reconnect_layer_nodes(layer)
@@ -4373,26 +4381,27 @@ def update_channel_intensity_value(self, context):
     ch = self
     root_ch = yp.channels[ch_index]
 
-    mute = not layer.enable or not ch.enable
-
     intensity = tree.nodes.get(ch.intensity)
     if intensity:
-        intensity.inputs[1].default_value = 0.0 if mute else ch.intensity_value
+        intensity.inputs[1].default_value = ch.intensity_value
 
     height_proc = tree.nodes.get(ch.height_proc)
     if height_proc:
-        height_proc.inputs['Intensity'].default_value = 0.0 if mute else ch.intensity_value
+        height_proc.inputs['Intensity'].default_value = ch.intensity_value
 
     normal_proc = tree.nodes.get(ch.normal_proc)
-    if normal_proc and 'Intensity' in normal_proc.inputs:
-        normal_proc.inputs['Intensity'].default_value = 0.0 if mute else ch.intensity_value
+    if normal_proc:
+        if 'Strength' in normal_proc.inputs:
+            normal_proc.inputs['Strength'].default_value = ch.normal_strength * ch.intensity_value
+        elif 'Intensity' in normal_proc.inputs:
+            normal_proc.inputs['Intensity'].default_value = ch.intensity_value
 
     if ch.enable_transition_ramp:
         transition.set_ramp_intensity_value(tree, layer, ch)
 
     if ch.enable_transition_ao:
         tao = tree.nodes.get(ch.tao)
-        if tao: tao.inputs['Intensity'].default_value = 0.0 if mute else transition.get_transition_ao_intensity(ch)
+        if tao: tao.inputs['Intensity'].default_value = transition.get_transition_ao_intensity(ch)
 
     if root_ch.type == 'NORMAL':
         update_displacement_height_ratio(root_ch)
@@ -5063,10 +5072,17 @@ class YLayer(bpy.types.PropertyGroup):
             update=update_layer_color_chortcut)
 
     texcoord_type = EnumProperty(
-        name = 'Layer Coordinate Type',
-        items = texcoord_type_items,
-        default = 'UV',
-        update=update_texcoord_type)
+            name = 'Layer Coordinate Type',
+            description = 'Layer Coordinate Type',
+            items = texcoord_type_items,
+            default = 'UV',
+            update=update_texcoord_type)
+
+    projection_blend = FloatProperty(
+            name = 'Box Projection Blend',
+            description = 'Amount of blend to use between sides',
+            default=0.0, min=0.0, max=1.0, subtype='FACTOR',
+            update=update_projection_blend)
 
     # For temporary bake
     use_temp_bake = BoolProperty(
@@ -5124,7 +5140,10 @@ class YLayer(bpy.types.PropertyGroup):
     # To get segment if using image atlas
     segment_name = StringProperty(default='')
 
-    uv_name = StringProperty(default='', update=update_uv_name)
+    uv_name = StringProperty(
+            name = 'UV Name',
+            description = 'UV Name to use for layer coordinate',
+            default='', update=update_uv_name)
 
     # Parent index
     parent_idx = IntProperty(default=-1)

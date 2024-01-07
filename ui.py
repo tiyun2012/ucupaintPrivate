@@ -241,6 +241,8 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
 
     scol.label(text='Extension:')
     #scol.label(text='Projection:')
+    #if source.projection == 'BOX':
+    #    scol.label(text='Blend:')
 
     scol = split.column()
 
@@ -257,6 +259,8 @@ def draw_image_props(context, source, layout, entity=None, show_flip_y=False):
 
     scol.prop(source, 'extension', text='')
     #scol.prop(source, 'projection', text='')
+    #if source.projection == 'BOX':
+    #    scol.prop(entity, 'projection_blend', text='')
 
 def draw_object_index_props(entity, layout):
     col = layout.column()
@@ -824,33 +828,34 @@ def draw_root_channels_ui(context, layout, node):
 
             if channel.type == 'NORMAL':
                 brow = bcol.row(align=True)
-                if channel.enable_smooth_bump:
-                    if chui.expand_smooth_bump_settings:
-                        icon_value = lib.custom_icons["uncollapsed_input"].icon_id
-                    else: icon_value = lib.custom_icons["collapsed_input"].icon_id
-                    brow.prop(chui, 'expand_smooth_bump_settings', text='', emboss=False, icon_value=icon_value)
-                else:
-                    brow.label(text='', icon_value=lib.get_icon('input'))
+                #if channel.enable_smooth_bump:
+                if chui.expand_smooth_bump_settings:
+                    icon_value = lib.custom_icons["uncollapsed_input"].icon_id
+                else: icon_value = lib.custom_icons["collapsed_input"].icon_id
+                brow.prop(chui, 'expand_smooth_bump_settings', text='', emboss=False, icon_value=icon_value)
+                #else:
+                #    brow.label(text='', icon_value=lib.get_icon('input'))
                 brow.label(text='Smooth Bump:')
                 if not yp.use_baked:
                     brow.prop(channel, 'enable_smooth_bump', text='')
                 else:
                     brow.label(text='', icon_value=lib.custom_icons['texture'].icon_id)
 
-                if chui.expand_smooth_bump_settings and channel.enable_smooth_bump:
+                if chui.expand_smooth_bump_settings: # and channel.enable_smooth_bump:
                     brow = bcol.row(align=True)
                     brow.label(text='', icon='BLANK1')
                     bbox = brow.box()
                     bbcol = bbox.column() #align=True)
 
-                    brow = bbcol.row(align=True)
-                    brow.label(text='Main UV:')
-                    #brow.label(text=channel.main_uv)
-                    #brow.prop(channel, 'main_uv', text='')
-                    brow.prop_search(channel, "main_uv", context.object.data, "uv_layers", text='', icon='GROUP_UVS')
+                    if channel.enable_smooth_bump:
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Main UV:')
+                        #brow.label(text=channel.main_uv)
+                        #brow.prop(channel, 'main_uv', text='')
+                        brow.prop_search(channel, "main_uv", context.object.data, "uv_layers", text='', icon='GROUP_UVS')
 
                     brow = bbcol.row(align=True)
-                    brow.label(text='Backface Bump Up:')
+                    brow.label(text='Backface Normal Up:')
                     brow.prop(yp, 'enable_backface_always_up', text='')
 
                 brow = bcol.row(align=True)
@@ -1136,6 +1141,11 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
 
                 ssplit.prop(layer, 'texcoord_type', text='')
                 ssplit.prop_search(layer, "uv_name", obj.data, "uv_layers", text='', icon='GROUP_UVS')
+            elif layer.type == 'IMAGE' and layer.texcoord_type in {'Generated', 'Object'} and not lui.expand_vector:
+                ssplit = split_layout(split, 0.5, align=True)
+
+                ssplit.prop(layer, 'texcoord_type', text='')
+                ssplit.prop(layer, 'projection_blend', text='')
             else:
                 split.prop(layer, 'texcoord_type', text='')
 
@@ -1152,7 +1162,11 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                     #bbox.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
-                    crow = row.column()
+                    if layer.type == 'IMAGE' and layer.texcoord_type in {'Generated', 'Object'}:
+                        splits = split_layout(bbox, 0.5, align=True)
+                        splits.label(text='Projection Blend:')
+                        splits.prop(layer, 'projection_blend', text='')
+
                     bbox.prop(layer, 'translation', text='Offset')
                     bbox.prop(layer, 'rotation')
                     bbox.prop(layer, 'scale')
@@ -1473,11 +1487,13 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 cccol = bbox.column(align=True)
 
                 #if ch.normal_map_type != 'BUMP_NORMAL_MAP':
-                brow = cccol.row(align=True)
-                brow.label(text='Write Height:') #, icon_value=lib.get_icon('input'))
-                if ch.normal_map_type == 'NORMAL_MAP':
-                    brow.prop(ch, 'normal_write_height', text='')
-                else: brow.prop(ch, 'write_height', text='')
+                if ch.normal_map_type != 'NORMAL_MAP' or ch.enable_transition_bump:
+                    brow = cccol.row(align=True)
+                    brow.label(text='Write Height:') #, icon_value=lib.get_icon('input'))
+                    #if ch.normal_map_type == 'NORMAL_MAP':
+                    #    brow.prop(ch, 'normal_write_height', text='')
+                    #else: 
+                    brow.prop(ch, 'write_height', text='')
 
                 #if ch.normal_map_type in {'BUMP_MAP', 'FINE_BUMP_MAP'}:
 
@@ -1499,20 +1515,6 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         brow = cccol.row(align=True)
                         brow.label(text='Normal Strength:') #, icon_value=lib.get_icon('input'))
                         brow.prop(ch, 'normal_strength', text='')
-
-                    if ch.normal_map_type == 'NORMAL_MAP':
-                        brow = cccol.row(align=True)
-                        brow.label(text='Bump Height:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'normal_bump_distance', text='')
-
-                    #if any(layer.masks):
-                    if not ch.write_height and any(layer.masks):
-                        brow = cccol.row(align=True)
-                        #write_height = ch.normal_write_height if ch.normal_map_type == 'NORMAL_MAP' else ch.write_height 
-                        write_height = get_write_height(ch)
-                        brow.active = not ch.enable_transition_bump and any(layer.masks) and not write_height
-                        brow.label(text='Affected Masks:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'transition_bump_chain', text='')
 
                 #brow = cccol.row(align=True)
                 #brow.label(text='Invert Backface Normal')
@@ -1762,7 +1764,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 draw_image_props(context, ch_source_1, rbox, entity=ch, show_flip_y=True)
 
         # Layer input
-        if layer.type not in {'IMAGE', 'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'MUSGRAVE'}: #, 'OBJECT_INDEX'
+        if layer.type not in {'IMAGE', 'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'MUSGRAVE'}:
             row = mcol.row(align=True)
 
             input_settings_available = (ch.layer_input != 'ALPHA' 
@@ -1903,6 +1905,8 @@ def draw_layer_masks(context, layout, layer):
                 row.prop(mask, 'active_edit', text='', toggle=True, icon_value=lib.get_icon('object_index'))
             elif mask.type == 'COLOR_ID':
                 row.prop(mask, 'active_edit', text='', toggle=True, icon_value=lib.get_icon('color'))
+            elif mask.type == 'BACKFACE':
+                row.prop(mask, 'active_edit', text='', toggle=True, icon_value=lib.get_icon('backface'))
             else:
                 row.prop(mask, 'active_edit', text='', toggle=True, icon_value=lib.get_icon('texture'))
 
@@ -1927,8 +1931,9 @@ def draw_layer_masks(context, layout, layer):
         rrow = rrcol.row(align=True)
 
         if mask.type == 'VCOL':
-            #rrow.label(text='', icon='GROUP_VCOL')
             rrow.label(text='', icon_value=lib.get_icon('vertex_color'))
+        elif mask.type == 'BACKFACE':
+            rrow.label(text='', icon_value=lib.get_icon('backface'))
         else:
             if mask.type == 'IMAGE':
                 suffix = 'image' 
@@ -1949,7 +1954,7 @@ def draw_layer_masks(context, layout, layer):
             rrow.label(text='Source: ' + mask_image.name)
         else: rrow.label(text='Source: ' + mask.name)
 
-        if maskui.expand_source and mask.type != 'VCOL':
+        if maskui.expand_source and mask.type not in {'VCOL', 'BACKFACE'}:
             rrow = rrcol.row(align=True)
             rrow.label(text='', icon='BLANK1')
             rbox = rrow.box()
@@ -1967,7 +1972,7 @@ def draw_layer_masks(context, layout, layer):
             else: draw_tex_props(mask_source, rbox)
 
         # Input row
-        if mask.type not in {'COLOR_ID', 'HEMI', 'OBJECT_INDEX'} and (is_greater_than_292() or mask.type != 'VCOL'):
+        if mask.type not in {'COLOR_ID', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'} and (is_greater_than_292() or mask.type != 'VCOL'):
             rrow = rrcol.row(align=True)
             rrow.label(text='', icon_value=lib.get_icon('input'))
             splits = split_layout(rrow, 0.3)
@@ -1975,7 +1980,7 @@ def draw_layer_masks(context, layout, layer):
             splits.prop(mask, 'source_input', text='')
 
         # Vector row
-        if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+        if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
             rrow = rrcol.row(align=True)
 
             if maskui.expand_vector:
@@ -1985,11 +1990,10 @@ def draw_layer_masks(context, layout, layer):
 
             splits = split_layout(rrow, 0.3)
 
-            #splits = rrow.split(percentage=0.3)
+            mask_src = get_mask_source(mask)
+
             splits.label(text='Vector:')
-            if mask.texcoord_type != 'UV':
-                splits.prop(mask, 'texcoord_type', text='')
-            else:
+            if mask.texcoord_type == 'UV':
 
                 rrrow = split_layout(splits, 0.35, align=True)
                 rrrow.prop(mask, 'texcoord_type', text='')
@@ -1999,6 +2003,13 @@ def draw_layer_masks(context, layout, layer):
                 if is_greater_than_280():
                     rrow.menu("NODE_MT_y_uv_special_menu", icon='PREFERENCES', text='')
                 else: rrow.menu("NODE_MT_y_uv_special_menu", icon='SCRIPTWIN', text='')
+            elif mask.type == 'IMAGE' and mask.texcoord_type in {'Generated', 'Object'} and not maskui.expand_vector:
+                rrrow = split_layout(splits, 0.5, align=True)
+
+                rrrow.prop(mask, 'texcoord_type', text='')
+                rrrow.prop(mask_src, 'projection_blend', text='')
+            else:
+                splits.prop(mask, 'texcoord_type', text='')
 
             if maskui.expand_vector:
                 rrow = rrcol.row(align=True)
@@ -2008,6 +2019,11 @@ def draw_layer_masks(context, layout, layer):
                     #rbox.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
+                    if mask.type == 'IMAGE' and mask.texcoord_type in {'Generated', 'Object'}:
+                        splits = split_layout(rbox, 0.5, align=True)
+                        splits.label(text='Projection Blend:')
+                        splits.prop(mask_src, 'projection_blend', text='')
+
                     rbox.prop(mask, 'translation', text='Offset')
                     rbox.prop(mask, 'rotation')
                     rbox.prop(mask, 'scale')
@@ -2289,7 +2305,7 @@ def draw_layers_ui(context, layout, node):
                     #entities.append(layer.name)
 
             for mask in layer.masks:
-                if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+                if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
                     uv_layer = uv_layers.get(mask.uv_name)
                     if not uv_layer and mask.uv_name not in uv_missings:
                         uv_missings.append(mask.uv_name)
@@ -3168,6 +3184,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     row.label(text='', icon_value=lib.get_icon('object_index'))
                 elif m.type == 'COLOR_ID':
                     row.label(text='', icon_value=lib.get_icon('color'))
+                elif m.type == 'BACKFACE':
+                    row.label(text='', icon_value=lib.get_icon('backface'))
                 else:
                     row.label(text='', icon_value=lib.get_icon('texture'))
             else:
@@ -3188,6 +3206,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     row.prop(m, 'active_edit', text='', emboss=False, icon_value=lib.get_icon('object_index'))
                 elif m.type == 'COLOR_ID':
                     row.prop(m, 'active_edit', text='', emboss=False, icon_value=lib.get_icon('color'))
+                elif m.type == 'BACKFACE':
+                    row.prop(m, 'active_edit', text='', emboss=False, icon_value=lib.get_icon('backface'))
                 else:
                     row.prop(m, 'active_edit', text='', emboss=False, icon_value=lib.get_icon('texture'))
 
@@ -3320,6 +3340,7 @@ def draw_ypaint_about(self, context):
     col.operator('wm.url_open', text='arsa', icon='ARMATURE_DATA').url = 'https://sites.google.com/view/arsanagara'
     col.operator('wm.url_open', text='swifterik', icon='ARMATURE_DATA').url = 'https://jblaha.art/'
     col.operator('wm.url_open', text='rifai', icon='ARMATURE_DATA').url = 'https://github.com/rifai'
+    col.operator('wm.url_open', text='morirain', icon='ARMATURE_DATA').url = 'https://github.com/morirain'
     col.separator()
 
     from . import addon_updater_ops
@@ -4015,6 +4036,7 @@ class YAddLayerMaskMenu(bpy.types.Menu):
 
         col.separator()
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('object_index'), text='Object Index').type = 'OBJECT_INDEX'
+        col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('backface'), text='Backface').type = 'BACKFACE'
 
         col = row.column()
         col.label(text='Bake as Mask:')

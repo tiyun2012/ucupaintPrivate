@@ -28,9 +28,11 @@ def add_new_mask(layer, name, mask_type, texcoord_type, uv_name, image = None, v
     if segment:
         mask.segment_name = segment.name
 
+    source = None
     if mask_type == 'VCOL':
         source = new_node(tree, mask, 'source', get_vcol_bl_idname(), 'Mask Source')
-    else: source = new_node(tree, mask, 'source', layer_node_bl_idnames[mask_type], 'Mask Source')
+    elif mask.type != 'BACKFACE': source = new_node(tree, mask, 'source', layer_node_bl_idnames[mask_type], 'Mask Source')
+
     if image:
         source.image = image
         if hasattr(source, 'color_space'):
@@ -233,7 +235,8 @@ class YNewLayerMask(bpy.types.Operator):
     hdr = BoolProperty(name='32 bit Float', default=False)
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Mask Coordinate Type',
+            description = 'Mask Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -394,7 +397,7 @@ class YNewLayerMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             col.label(text='')
 
-        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
             col.label(text='Vector:')
             if self.type == 'IMAGE':
                 if UDIM.is_udim_supported():
@@ -432,7 +435,7 @@ class YNewLayerMask(bpy.types.Operator):
         if self.type == 'IMAGE':
             col.prop(self, 'hdr')
 
-        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}:
+        if self.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
             crow = col.row(align=True)
             crow.prop(self, 'texcoord_type', text='')
             if obj.type == 'MESH' and self.texcoord_type == 'UV':
@@ -605,7 +608,8 @@ class YOpenImageAsMask(bpy.types.Operator, ImportHelper):
     relative = BoolProperty(name="Relative Path", default=True, description="Apply relative paths")
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Mask Coordinate Type',
+            description = 'Mask Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -764,7 +768,8 @@ class YOpenAvailableDataAsMask(bpy.types.Operator):
             default = 'IMAGE')
 
     texcoord_type = EnumProperty(
-            name = 'Texture Coordinate Type',
+            name = 'Mask Coordinate Type',
+            description = 'Mask Coordinate Type',
             items = texcoord_type_items,
             default = 'UV')
 
@@ -1287,6 +1292,7 @@ def update_mask_texcoord_type(self, context):
     match = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]', self.path_from_id())
     layer = yp.layers[int(match.group(1))]
     mask_idx = int(match.group(2))
+    mask = self
     tree = get_tree(layer)
 
     # Update global uv
@@ -1296,6 +1302,11 @@ def update_mask_texcoord_type(self, context):
     check_all_layer_channel_io_and_nodes(layer, tree)
 
     set_mask_uv_neighbor(tree, layer, self, mask_idx)
+
+    # Set image source projection
+    if mask.type == 'IMAGE':
+        source = get_mask_source(mask)
+        source.projection = 'BOX' if mask.texcoord_type in {'Generated', 'Object'} else 'FLAT'
 
     reconnect_layer_nodes(layer)
     rearrange_layer_nodes(layer)
@@ -1316,7 +1327,7 @@ def update_mask_uv_name(self, context):
     tree = get_tree(layer)
     mask = self
 
-    if mask.type in {'HEMI', 'OBJECT_INDEX', 'COLOR_ID'} or mask.texcoord_type != 'UV':
+    if mask.type in {'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} or mask.texcoord_type != 'UV':
         return
 
     # Cannot use temp uv as standard uv
@@ -1553,10 +1564,11 @@ class YLayerMask(bpy.types.PropertyGroup):
             default = 'IMAGE')
 
     texcoord_type = EnumProperty(
-        name = 'Texture Coordinate Type',
-        items = texcoord_type_items,
-        default = 'UV',
-        update=update_mask_texcoord_type)
+            name = 'Mask Coordinate Type',
+            description = 'Mask Coordinate Type',
+            items = texcoord_type_items,
+            default = 'UV',
+            update=update_mask_texcoord_type)
 
     hemi_space = EnumProperty(
             name = 'Fake Lighting Space',
@@ -1575,7 +1587,10 @@ class YLayerMask(bpy.types.PropertyGroup):
             description = 'Take account previous Normal',
             default = False, update=update_mask_hemi_use_prev_normal)
 
-    uv_name = StringProperty(default='', update=update_mask_uv_name)
+    uv_name = StringProperty(
+            name = 'UV Name',
+            description = 'UV Name to use for mask coordinate',
+            default='', update=update_mask_uv_name)
 
     blend_type = EnumProperty(
         name = 'Blend',

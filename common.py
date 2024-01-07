@@ -169,7 +169,8 @@ mask_type_items = (
         ('VCOL', 'Vertex Color', ''),
         ('HEMI', 'Fake Lighting', ''),
         ('OBJECT_INDEX', 'Object Index', ''),
-        ('COLOR_ID', 'Color ID', '')
+        ('COLOR_ID', 'Color ID', ''),
+        ('BACKFACE', 'Backface', '')
         )
 
 channel_override_type_items = (
@@ -382,6 +383,7 @@ layer_node_bl_idnames = {
         'HEMI' : 'ShaderNodeGroup',
         'OBJECT_INDEX' : 'ShaderNodeGroup',
         'COLOR_ID' : 'ShaderNodeGroup',
+        'BACKFACE' : 'ShaderNodeNewGeometry',
         }
 
 io_suffix = {
@@ -1605,8 +1607,8 @@ def get_node_tree_lib(name):
 
         # Load node groups
         exist_groups = [ng.name for ng in bpy.data.node_groups]
-        from_ngs = data_from.node_groups if hasattr(data_from, 'node_groups') else getattr(data_from, 'node groups')
-        to_ngs = data_to.node_groups if hasattr(data_to, 'node_groups') else getattr(data_to, 'node groups')
+        from_ngs = data_from.node_groups
+        to_ngs = data_to.node_groups
         for ng in from_ngs:
             if ng == name: # and ng not in exist_groups:
                 to_ngs.append(ng)
@@ -2742,7 +2744,7 @@ def get_udim_segment_mapping_offset(segment):
         offset_y += tiles_height + 1
 
 def is_mapping_possible(entity_type):
-    return entity_type not in {'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'} 
+    return entity_type not in {'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} 
 
 def clear_mapping(entity):
 
@@ -4132,7 +4134,7 @@ def is_uv_input_needed(layer, uv_name):
         
         for mask in layer.masks:
             if not get_mask_enabled(mask): continue
-            if mask.type in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID'}: continue
+            if mask.type in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}: continue
             if mask.texcoord_type == 'UV' and mask.uv_name == uv_name:
                 return True
 
@@ -4149,7 +4151,7 @@ def is_entity_need_tangent_input(entity, uv_name):
         layer = entity
         entity_enabled = get_layer_enabled(entity)
 
-    if entity_enabled and entity.type not in {'BACKGROUND', 'COLOR', 'GROUP', 'OBJECT_INDEX', 'COLOR_ID'}:
+    if entity_enabled and entity.type not in {'BACKGROUND', 'COLOR', 'GROUP', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
 
         height_root_ch = get_root_height_channel(yp)
         height_ch = get_height_channel(layer)
@@ -4194,7 +4196,7 @@ def is_tangent_process_needed(yp, uv_name):
     height_root_ch = get_root_height_channel(yp)
     if height_root_ch:
 
-        if height_root_ch.main_uv == uv_name and (any_layers_using_channel(height_root_ch, check_normal_map=True) or height_root_ch.enable_smooth_bump):
+        if height_root_ch.main_uv == uv_name and (any_layers_using_normal_map(height_root_ch) or height_root_ch.enable_smooth_bump):
             return True
 
         for layer in yp.layers:
@@ -4203,8 +4205,11 @@ def is_tangent_process_needed(yp, uv_name):
 
     return False
 
-def is_normal_process_needed(layer):
+def is_height_process_needed(layer):
     yp = layer.id_data.yp
+    height_root_ch = get_root_height_channel(yp)
+    if not height_root_ch: return False
+
     if yp.layer_preview_mode: return True
 
     layers = []
@@ -4214,7 +4219,28 @@ def is_normal_process_needed(layer):
 
     for l in layers:
         height_ch = get_height_channel(l)
-        if not height_ch.enable: continue
+        if not height_ch or not height_ch.enable: continue
+
+        if l.type != 'GROUP' and height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} or height_ch.enable_transition_bump:
+            return True
+
+    return False
+
+def is_normal_process_needed(layer):
+    yp = layer.id_data.yp
+    height_root_ch = get_root_height_channel(yp)
+    if not height_root_ch: return False
+
+    if yp.layer_preview_mode: return True
+
+    layers = []
+    if layer.type == 'GROUP':
+        layers, layer_ids = get_list_of_all_childs_and_child_ids(layer)
+    layers.append(layer)
+
+    for l in layers:
+        height_ch = get_height_channel(l)
+        if not height_ch or not height_ch.enable: continue
 
         if l.type == 'GROUP': 
             if not height_ch.write_height:
@@ -4236,7 +4262,14 @@ def get_layer_enabled(layer):
             parent_enable = False
             break
 
-    return layer.enable and parent_enable
+    # Check if no channel is enabled
+    channel_enabled = False
+    for ch in layer.channels:
+        if ch.enable:
+            channel_enabled = True
+            break
+
+    return layer.enable and parent_enable and channel_enabled
     #return (layer.enable and parent_enable) or yp.layer_preview_mode
 
 ''' Check if mask is practically enabled or not '''
@@ -4251,6 +4284,7 @@ def get_mask_enabled(mask, layer=None):
 
 ''' Check if channel is practically enabled or not '''
 def get_channel_enabled(ch, layer=None, root_ch=None):
+    #print('Checking', layer.name, root_ch.name, "if it's enabled or not...")
     yp = ch.id_data.yp
 
     if not layer or not root_ch:
@@ -4294,24 +4328,82 @@ def get_channel_enabled(ch, layer=None, root_ch=None):
 
 def is_any_entity_using_uv(yp, uv_name):
 
+    if yp.baked_uv_name != '' and yp.baked_uv_name == uv_name:
+        return True
+
     for layer in yp.layers:
         if is_uv_input_needed(layer, uv_name):
             return True
 
     return False
 
-def any_layers_using_channel(root_ch, check_normal_map=False): #, parent=None):
+def is_layer_using_bump_map(layer, root_ch=None):
+    yp = layer.id_data.yp
+    if not root_ch: root_ch = get_root_height_channel(yp)
+    if not root_ch: return False
+
+    channel_idx = get_channel_index(root_ch)
+    try: ch = layer.channels[channel_idx]
+    except: return False
+    if get_channel_enabled(ch, layer, root_ch):
+        if layer.type == 'GROUP':
+            childs = get_list_of_direct_childrens(layer)
+            for child in childs:
+                if is_layer_using_bump_map(child):
+                    return True
+        elif ch.write_height and  (ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} or ch.enable_transition_bump):
+            return True
+
+    return False
+
+def is_layer_using_normal_map(layer, root_ch=None):
+    yp = layer.id_data.yp
+    if not root_ch: root_ch = get_root_height_channel(yp)
+    if not root_ch: return False
+
+    channel_idx = get_channel_index(root_ch)
+    try: ch = layer.channels[channel_idx]
+    except: return False
+    if get_channel_enabled(ch, layer, root_ch):
+        if layer.type == 'GROUP':
+            childs = get_list_of_direct_childrens(layer)
+            for child in childs:
+                if is_layer_using_normal_map(child):
+                    return True
+        elif not ch.write_height or ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}:
+            return True
+
+    return False
+
+def any_layers_using_bump_map(root_ch):
+    if root_ch.type != 'NORMAL': return False
+    yp = root_ch.id_data.yp
+
+    for layer in yp.layers:
+        if is_layer_using_bump_map(layer, root_ch):
+            return True
+
+    return False
+
+def any_layers_using_normal_map(root_ch):
+    if root_ch.type != 'NORMAL': return False
     yp = root_ch.id_data.yp
     channel_idx = get_channel_index(root_ch)
 
     for layer in yp.layers:
-        ch = layer.channels[channel_idx]
-        if get_channel_enabled(ch, layer, root_ch):
-            if check_normal_map:
-                if root_ch.type == 'NORMAL' and (ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'} or not ch.write_height):
-                    return True
-                continue
+        if is_layer_using_normal_map(layer, root_ch):
+            return True
 
+    return False
+
+def any_layers_using_channel(root_ch):
+    yp = root_ch.id_data.yp
+    channel_idx = get_channel_index(root_ch)
+
+    for layer in yp.layers:
+        try: ch = layer.channels[channel_idx]
+        except: continue
+        if get_channel_enabled(ch, layer, root_ch):
             return True
 
     return False
@@ -4575,7 +4667,7 @@ def get_all_baked_channel_images(tree):
     return images
 
 def is_layer_using_vector(layer):
-    if layer.type not in {'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'OBJECT_INDEX'}:
+    if layer.type not in {'VCOL', 'BACKGROUND', 'COLOR', 'GROUP', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'}:
         return True
 
     for ch in layer.channels:
@@ -4767,13 +4859,9 @@ def any_linear_images_problem(yp):
     return False
 
 def get_write_height(ch):
-    if ch.normal_map_type == 'NORMAL_MAP':
-        return ch.normal_write_height
-    #if ch.normal_map_type == 'BUMP_MAP':
+    #if ch.normal_map_type == 'NORMAL_MAP':
+    #    return ch.normal_write_height
     return ch.write_height
-
-    # BUMP_NORMAL_MAP currently always write height
-    #return True 
 
 def get_flow_vcol(obj, uv0, uv1):
 

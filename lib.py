@@ -132,9 +132,9 @@ STRAIGHT_OVER_HEIGHT_COMPARE = '~yPL Straight Over Height Compare'
 STRAIGHT_OVER_HEIGHT_COMPARE_SMOOTH = '~yPL Straight Over Height Compare Smooth'
 
 NORMAL_PROCESS = '~yPL Normal Process'
-#NORMAL_PROCESS_GROUP = '~yPL Normal Process Group'
+NORMAL_PROCESS_GROUP = '~yPL Normal Process Group'
 NORMAL_PROCESS_SMOOTH = '~yPL Normal Process Smooth'
-#NORMAL_PROCESS_SMOOTH_GROUP = '~yPL Normal Process Smooth Group'
+NORMAL_PROCESS_SMOOTH_GROUP = '~yPL Normal Process Smooth Group'
 
 NORMAL_MAP_PROCESS = '~yPL Normal Map Process'
 NORMAL_MAP_PROCESS_TRANSITION = '~yPL Normal Map Process Transition'
@@ -329,6 +329,8 @@ def load_custom_icons():
     custom_icons.load('object_index', filepath + 'object_index_icon.png', 'IMAGE')
     custom_icons.load('collapsed_object_index', filepath + 'collapsed_object_index_icon.png', 'IMAGE')
     custom_icons.load('uncollapsed_object_index', filepath + 'uncollapsed_object_index_icon.png', 'IMAGE')
+
+    custom_icons.load('backface', filepath + 'backface_icon.png', 'IMAGE')
 
     custom_icons.load('hemi', filepath + 'hemi_icon.png', 'IMAGE')
     custom_icons.load('collapsed_hemi', filepath + 'collapsed_hemi_icon.png', 'IMAGE')
