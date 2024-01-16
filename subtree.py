@@ -1861,6 +1861,8 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
     # Normal Process
     if channel_enabled and is_normal_process_needed(layer):
 
+        lib_name = ''
+
         if layer.type == 'GROUP':
             if root_ch.enable_smooth_bump:
                 lib_name = lib.NORMAL_PROCESS_SMOOTH_GROUP
@@ -1872,7 +1874,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
                 if root_ch.enable_smooth_bump:
                     lib_name = lib.NORMAL_MAP_PROCESS_SMOOTH_TRANSITION
                 else: lib_name = lib.NORMAL_MAP_PROCESS_TRANSITION
-            else:
+            elif is_parallax_enabled(root_ch):
                 lib_name = lib.NORMAL_MAP
 
         elif ch.normal_map_type == 'BUMP_MAP':
@@ -1893,12 +1895,19 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
                         lib_name = lib.NORMAL_MAP_PROCESS_TRANSITION
                     else:
                         lib_name = lib.NORMAL_MAP_PROCESS
-            else:
+            elif is_parallax_enabled(root_ch):
                 lib_name = lib.NORMAL_MAP
 
-        normal_proc, need_reconnect = replace_new_node(
-                tree, ch, 'normal_proc', 'ShaderNodeGroup', 'Normal Process', 
-                lib_name, return_status = True, hard_replace=True, dirty=need_reconnect)
+        if lib_name == '':
+            normal_proc, need_reconnect = replace_new_node(
+                    tree, ch, 'normal_proc', 'ShaderNodeNormalMap', 'Normal Process', 
+                    return_status = True, hard_replace=True, dirty=need_reconnect)
+
+            normal_proc.uv_map = layer.uv_name
+        else:
+            normal_proc, need_reconnect = replace_new_node(
+                    tree, ch, 'normal_proc', 'ShaderNodeGroup', 'Normal Process', 
+                    lib_name, return_status = True, hard_replace=True, dirty=need_reconnect)
 
         if 'Max Height' in normal_proc.inputs:
             normal_proc.inputs['Max Height'].default_value = max_height
@@ -2220,7 +2229,9 @@ def check_blend_type_nodes(root_ch, layer, ch):
         else:
             if remove_node(tree, ch, 'blend'): need_reconnect = True
 
-        if layer.type == 'GROUP' and is_layer_using_normal_map(layer) and not is_normal_process_needed(layer):
+        if channel_enabled and ((layer.type == 'GROUP' and is_layer_using_normal_map(layer) and not is_normal_process_needed(layer)) or
+                (layer.type != 'GROUP' and ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'} and not ch.enable_transition_bump)
+                ):
             # Intensity nodes
             intensity = tree.nodes.get(ch.intensity)
             if not intensity:

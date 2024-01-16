@@ -2912,7 +2912,7 @@ class YRemoveLayer(bpy.types.Operator):
         obj = context.object
         if obj.mode != 'OBJECT':
             self.layout.label(text='You cannot UNDO this operation under this mode, are you sure?', icon='ERROR')
-        elif self.using_udim_atlas:
+        elif hasattr(self, 'using_udim_atlas') and self.using_udim_atlas:
             col = self.layout.column(align=True)
             col.label(text='This layer is using UDIM atlas image segment', icon='ERROR')
             col.label(text='You cannot UNDO after removal', icon='BLANK1')
@@ -4133,6 +4133,7 @@ def update_blend_type(self, context):
     root_ch = yp.channels[ch_index]
 
     check_all_layer_channel_io_and_nodes(layer, tree, self)
+    check_uv_nodes(yp)
 
     # Reconnect all layer channels if normal channel is updated
     if root_ch.type == 'NORMAL':
@@ -4263,7 +4264,7 @@ def update_uv_name(self, context):
 
     # Update uv neighbor
     smooth_bump_ch = get_smooth_bump_channel(layer)
-    if smooth_bump_ch and smooth_bump_ch.enable:
+    if smooth_bump_ch and smooth_bump_ch.enable and (smooth_bump_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} or smooth_bump_ch.enable_transition_bump):
         uv_neighbor = replace_new_node(tree, layer, 'uv_neighbor', 'ShaderNodeGroup', 'Neighbor UV', 
                 lib.get_neighbor_uv_tree_name(layer.texcoord_type, entity=layer), 
                 return_status=False, hard_replace=True)
@@ -4274,9 +4275,16 @@ def update_uv_name(self, context):
                     return_status=False, hard_replace=True)
             set_uv_neighbor_resolution(smooth_bump_ch, uv_neighbor)
 
-    # Update neighbor uv if mask bump is active
-    for i, mask in enumerate(layer.masks):
-        set_mask_uv_neighbor(tree, layer, mask, i)
+        # Update neighbor uv if mask bump is active
+        for i, mask in enumerate(layer.masks):
+            set_mask_uv_neighbor(tree, layer, mask, i)
+
+    # Update normal process uv
+    normal_ch = get_height_channel(layer)
+    if normal_ch:
+        normal_proc = nodes.get(normal_ch.normal_proc)
+        if hasattr(normal_proc, 'uv_map'):
+            normal_proc.uv_map = layer.uv_name
 
     # Update layer tree inputs
     check_layer_tree_ios(layer, tree)
@@ -4305,7 +4313,7 @@ def update_texcoord_type(self, context):
 
     # Update uv neighbor
     smooth_bump_ch = get_smooth_bump_channel(layer)
-    if smooth_bump_ch and smooth_bump_ch.enable:
+    if smooth_bump_ch and smooth_bump_ch.enable and (smooth_bump_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'} or smooth_bump_ch.enable_transition_bump):
         uv_neighbor = replace_new_node(tree, layer, 'uv_neighbor', 'ShaderNodeGroup', 'Neighbor UV', 
                 lib.get_neighbor_uv_tree_name(layer.texcoord_type, entity=layer), hard_replace=True)
         set_uv_neighbor_resolution(layer, uv_neighbor)

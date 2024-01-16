@@ -4165,11 +4165,14 @@ def is_entity_need_tangent_input(entity, uv_name):
             elif uv_name == height_root_ch.main_uv:
 
                 # Main UV tangent is needed for normal process
-                if height_ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'} or yp.layer_preview_mode or not height_ch.write_height:
+                if is_parallax_enabled(height_root_ch) and height_ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'} or yp.layer_preview_mode or not height_ch.write_height:
+                    return True
+
+                if height_ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'} and (height_ch.normal_blend_type == 'OVERLAY' or height_ch.enable_transition_bump):
                     return True
 
                 # Main UV Tangent is needed if smooth bump is on and entity is using non-uv texcoord or have different UV
-                if height_root_ch.enable_smooth_bump and (entity.texcoord_type != 'UV' or entity.uv_name != uv_name):
+                if height_root_ch.enable_smooth_bump and (entity.texcoord_type != 'UV' or entity.uv_name != uv_name) and height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
                     return True
 
                 # Previous normal is calculated using normal process
@@ -4180,7 +4183,7 @@ def is_entity_need_tangent_input(entity, uv_name):
             elif entity.uv_name == uv_name and entity.texcoord_type == 'UV':
 
                 # Entity UV tangent is needed if smooth bump is on and entity is using different UV than main UV
-                if height_root_ch.enable_smooth_bump and height_root_ch.main_uv != uv_name:
+                if height_root_ch.enable_smooth_bump and height_root_ch.main_uv != uv_name and height_ch.normal_map_type in {'BUMP_MAP', 'BUMP_NORMAL_MAP'}:
                     return True
 
     return False
@@ -4201,7 +4204,10 @@ def is_tangent_process_needed(yp, uv_name):
     height_root_ch = get_root_height_channel(yp)
     if height_root_ch:
 
-        if height_root_ch.main_uv == uv_name and (any_layers_using_normal_map(height_root_ch) or height_root_ch.enable_smooth_bump):
+        if height_root_ch.main_uv == uv_name and (
+                (height_root_ch.enable_smooth_bump and any_layers_using_bump_map(height_root_ch)) or
+                (not height_root_ch.enable_smooth_bump and any_layers_using_bump_map(height_root_ch) and any_layers_using_normal_map(height_root_ch))
+                ):
             return True
 
         for layer in yp.layers:
