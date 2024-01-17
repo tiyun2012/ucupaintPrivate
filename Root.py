@@ -396,7 +396,7 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
             description = 'Set Stencil Mask Opacity found in the 3D Viewport\'s Overlays menu to 0',
             default = True)
 
-    use_linear_blending : BoolProperty(
+    use_linear_blending = BoolProperty(
             name = 'Use Linear Color Blending',
             description = 'Use more accurate linear color blending (it will behave diffrently than Photoshop)',
             default = True)
@@ -3341,7 +3341,7 @@ class YPaint(bpy.types.PropertyGroup):
     need_temp_uv_refresh = BoolProperty(default=False)
 
     # Use linear color blending
-    use_linear_blending : BoolProperty(
+    use_linear_blending = BoolProperty(
             name = 'Use Linear Color Blending',
             description = 'Use more accurate linear color blending (it will behave diffrently than Photoshop)',
             default=False, update=update_use_linear_blending)
