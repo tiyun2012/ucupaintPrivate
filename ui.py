@@ -407,7 +407,12 @@ def draw_tex_props(source, layout):
         col = row.column(align=True)
         if is_greater_than_281():
             col.label(text='Dimensions:')
-            col.separator()
+            if hasattr(source, 'noise_type'):
+                col.label(text='Type:')
+            if is_greater_than_400():
+                col.label(text='Normalize:')
+            else:
+                col.separator()
 
         for inp in source.inputs:
             if is_input_skipped(inp): continue
@@ -416,7 +421,13 @@ def draw_tex_props(source, layout):
         col = row.column(align=True)
         if is_greater_than_281():
             col.prop(source, 'noise_dimensions', text='')
-            col.separator()
+
+            if hasattr(source, 'noise_type'):
+                col.prop(source, 'noise_type', text='')
+            if is_greater_than_400():
+                col.prop(source, 'normalize', text='')
+            else:
+                col.separator()
 
         for inp in source.inputs:
             if is_input_skipped(inp): continue
@@ -436,7 +447,10 @@ def draw_tex_props(source, layout):
             if source.feature not in {'DISTANCE_TO_EDGE', 'N_SPHERE_RADIUS'}:
                 col.label(text='Distance:')
 
-        col.separator()
+        if is_greater_than_400():
+            col.label(text='Normalize:')
+        else:
+            col.separator()
 
         for inp in source.inputs:
             if is_input_skipped(inp): continue
@@ -452,7 +466,11 @@ def draw_tex_props(source, layout):
             col.prop(source, 'feature', text='')
             if source.feature not in {'DISTANCE_TO_EDGE', 'N_SPHERE_RADIUS'}:
                 col.prop(source, 'distance', text='')
-        col.separator()
+
+        if is_greater_than_400():
+            col.prop(source, 'normalize', text='')
+        else:
+            col.separator()
 
         for inp in source.inputs:
             if is_input_skipped(inp): continue
@@ -502,6 +520,12 @@ def draw_solid_color_props(layer, source, layout):
     row = col.row()
     row.label(text='Shortcut on list:')
     row.prop(layer, 'color_shortcut', text='')
+
+def draw_edge_detect_props(layer, source, layout):
+    col = layout.column()
+    row = col.row()
+    row.label(text='Radius:')
+    row.prop(layer, 'edge_detect_radius', text='')
 
 def draw_mask_modifier_stack(layer, mask, layout, ui):
     ypui = bpy.context.window_manager.ypui
@@ -1972,10 +1996,12 @@ def draw_layer_masks(context, layout, layer):
                 draw_object_index_props(mask, rbox)
             elif mask.type == 'COLOR_ID':
                 draw_colorid_props(mask, mask_source, rbox)
+            elif mask.type == 'EDGE_DETECT':
+                draw_edge_detect_props(mask, mask_source, rbox)
             else: draw_tex_props(mask_source, rbox)
 
         # Input row
-        if mask.type not in {'COLOR_ID', 'HEMI', 'OBJECT_INDEX', 'BACKFACE'} and (is_greater_than_292() or mask.type != 'VCOL'):
+        if mask.type not in {'COLOR_ID', 'HEMI', 'OBJECT_INDEX', 'BACKFACE', 'EDGE_DETECT'} and (is_greater_than_292() or mask.type != 'VCOL'):
             rrow = rrcol.row(align=True)
             rrow.label(text='', icon_value=lib.get_icon('input'))
             splits = split_layout(rrow, 0.3)
@@ -1983,7 +2009,7 @@ def draw_layer_masks(context, layout, layer):
             splits.prop(mask, 'source_input', text='')
 
         # Vector row
-        if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
+        if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE', 'EDGE_DETECT'}:
             rrow = rrcol.row(align=True)
 
             if maskui.expand_vector:
@@ -2301,14 +2327,14 @@ def draw_layers_ui(context, layout, node):
 
         # Check layer and mask uv
         for layer in yp.layers:
-            if layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'COLOR', 'BACKGROUND'}:
+            if layer.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'COLOR', 'BACKGROUND', 'EDGE_DETECT'}:
                 uv_layer = uv_layers.get(layer.uv_name)
                 if not uv_layer and layer.uv_name not in uv_missings:
                     uv_missings.append(layer.uv_name)
                     #entities.append(layer.name)
 
             for mask in layer.masks:
-                if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
+                if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE', 'EDGE_DETECT'}:
                     uv_layer = uv_layers.get(mask.uv_name)
                     if not uv_layer and mask.uv_name not in uv_missings:
                         uv_missings.append(mask.uv_name)
@@ -2509,6 +2535,20 @@ def draw_layers_ui(context, layout, node):
             col.alert = True
             col.operator('node.y_use_linear_color_space', text='Refresh Linear Color Space', icon='ERROR')
             col.alert = False
+
+        # Check if AO is enabled or not
+        scene = bpy.context.scene
+        if is_greater_than_293() and not scene.eevee.use_gtao and scene.render.engine != 'BLENDER_EEVEE_NEXT':
+            edge_detect_found = False
+            for l in yp.layers:
+                for m in l.masks:
+                    if m.type == 'EDGE_DETECT' and get_mask_enabled(m, l):
+                        edge_detect_found = True
+                        break
+            if edge_detect_found:
+                col.alert = True
+                col.operator('node.y_fix_edge_detect_ao', text='Fix EEVEE Edge Detect AO', icon='ERROR')
+                col.alert = False
 
         if obj.type == 'MESH' and colorid_vcol:
 
@@ -3563,7 +3603,7 @@ class YNewLayerMenu(bpy.types.Menu):
         col.operator("node.y_new_layer", text='Checker').type = 'CHECKER'
         col.operator("node.y_new_layer", text='Gradient').type = 'GRADIENT'
         col.operator("node.y_new_layer", text='Magic').type = 'MAGIC'
-        col.operator("node.y_new_layer", text='Musgrave').type = 'MUSGRAVE'
+        if not is_greater_than_410(): col.operator("node.y_new_layer", text='Musgrave').type = 'MUSGRAVE'
         col.operator("node.y_new_layer", text='Noise').type = 'NOISE'
         col.operator("node.y_new_layer", text='Voronoi').type = 'VORONOI'
         col.operator("node.y_new_layer", text='Wave').type = 'WAVE'
@@ -4035,7 +4075,7 @@ class YAddLayerMaskMenu(bpy.types.Menu):
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Checker').type = 'CHECKER'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Gradient').type = 'GRADIENT'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Magic').type = 'MAGIC'
-        col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Musgrave').type = 'MUSGRAVE'
+        if not is_greater_than_410(): col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Musgrave').type = 'MUSGRAVE'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Noise').type = 'NOISE'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Voronoi').type = 'VORONOI'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Wave').type = 'WAVE'
@@ -4046,6 +4086,10 @@ class YAddLayerMaskMenu(bpy.types.Menu):
         col.separator()
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('object_index'), text='Object Index').type = 'OBJECT_INDEX'
         col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('backface'), text='Backface').type = 'BACKFACE'
+
+        if is_greater_than_293():
+            col.separator()
+            col.operator("node.y_new_layer_mask", icon_value=lib.get_icon('texture'), text='Edge Detect').type = 'EDGE_DETECT'
 
         col = row.column()
         col.label(text='Bake as Mask:')
@@ -4494,7 +4538,7 @@ class YLayerSpecialMenu(bpy.types.Menu):
         col.operator('node.y_replace_layer_type', text='Checker', icon_value=lib.get_icon('texture')).type = 'CHECKER'
         col.operator('node.y_replace_layer_type', text='Gradient', icon_value=lib.get_icon('texture')).type = 'GRADIENT'
         col.operator('node.y_replace_layer_type', text='Magic', icon_value=lib.get_icon('texture')).type = 'MAGIC'
-        col.operator('node.y_replace_layer_type', text='Musgrave', icon_value=lib.get_icon('texture')).type = 'MUSGRAVE'
+        if not is_greater_than_410(): col.operator('node.y_replace_layer_type', text='Musgrave', icon_value=lib.get_icon('texture')).type = 'MUSGRAVE'
         col.operator('node.y_replace_layer_type', text='Noise', icon_value=lib.get_icon('texture')).type = 'NOISE'
         col.operator('node.y_replace_layer_type', text='Voronoi', icon_value=lib.get_icon('texture')).type = 'VORONOI'
         col.operator('node.y_replace_layer_type', text='Wave', icon_value=lib.get_icon('texture')).type = 'WAVE'

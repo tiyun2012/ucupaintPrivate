@@ -353,7 +353,7 @@ def set_mask_uv_neighbor(tree, layer, mask, mask_idx=-1):
 
         #print('ntob')
 
-        if mask.type in {'VCOL', 'HEMI'}:
+        if mask.type in {'VCOL', 'HEMI', 'EDGE_DETECT'}:
             lib_name = lib.NEIGHBOR_FAKE
         else: lib_name = lib.get_neighbor_uv_tree_name(mask.texcoord_type, entity=mask)
 
@@ -369,7 +369,7 @@ def set_mask_uv_neighbor(tree, layer, mask, mask_idx=-1):
 def enable_mask_source_tree(layer, mask, reconnect = False):
 
     # Check if source tree is already available
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} and mask.group_node != '': return
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE', 'EDGE_DETECT'} and mask.group_node != '': return
 
     layer_tree = get_tree(layer)
 
@@ -378,7 +378,7 @@ def enable_mask_source_tree(layer, mask, reconnect = False):
 
     #return
 
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
+    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE', 'EDGE_DETECT'}:
         # Get current source for reference
         source_ref = layer_tree.nodes.get(mask.source)
         linear_ref = layer_tree.nodes.get(mask.linear)
@@ -433,11 +433,11 @@ def enable_mask_source_tree(layer, mask, reconnect = False):
 def disable_mask_source_tree(layer, mask, reconnect=False):
 
     # Check if source tree is already gone
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} and mask.group_node == '': return
+    #if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'} and mask.group_node == '': return
 
     layer_tree = get_tree(layer)
 
-    if mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
+    if mask.group_node != '' and mask.type not in {'VCOL', 'HEMI', 'OBJECT_INDEX', 'COLOR_ID', 'BACKFACE'}:
 
         mask_tree = get_mask_tree(mask)
 
@@ -678,7 +678,7 @@ def check_mask_source_tree(layer, specific_mask=None): #, ch=None):
     for i, mask in enumerate(layer.masks):
         if specific_mask and specific_mask != mask: continue
 
-        if get_mask_enabled(mask) and height_process_needed and (write_height_ch or i < chain):
+        if smooth_bump_ch and get_mask_enabled(mask) and height_process_needed and (write_height_ch or i < chain):
             enable_mask_source_tree(layer, mask)
         else: disable_mask_source_tree(layer, mask)
 
@@ -2332,12 +2332,27 @@ def check_layer_channel_linear_node(ch, layer=None, root_ch=None, reconnect=Fals
         )):
         if root_ch.type == 'VALUE':
             linear = replace_new_node(source_tree, ch, 'linear', 'ShaderNodeMath', 'Linear')
-            linear.inputs[1].default_value = 1.0
             linear.operation = 'POWER'
-        else:
-            linear = replace_new_node(source_tree, ch, 'linear', 'ShaderNodeGamma', 'Linear')
+        else: linear = replace_new_node(source_tree, ch, 'linear', 'ShaderNodeGamma', 'Linear')
 
         linear.inputs[1].default_value = 1.0 / GAMMA
+
+    elif channel_enabled and (
+            yp.use_linear_blending
+            and root_ch.type != 'NORMAL' 
+            and root_ch.colorspace == 'SRGB' 
+            and (
+                (ch.gamma_space and ch.layer_input == 'RGB' and layer.type not in {'IMAGE', 'BACKGROUND', 'GROUP'})
+                #or (layer.type == 'IMAGE' and image.is_float and image.colorspace_settings.name == 'sRGB') 
+                )
+        ):
+        if root_ch.type == 'VALUE':
+            linear = replace_new_node(source_tree, ch, 'linear', 'ShaderNodeMath', 'Linear')
+            linear.operation = 'POWER'
+        else: linear = replace_new_node(source_tree, ch, 'linear', 'ShaderNodeGamma', 'Linear')
+
+        linear.inputs[1].default_value = GAMMA
+
     else:
         remove_node(source_tree, ch, 'linear')
 
@@ -2372,7 +2387,7 @@ def check_layer_image_linear_node(layer, source_tree=None):
         if not image: return
 
         # Create linear if image type is srgb or float image
-        if not yp.use_linear_blending and is_image_source_srgb(image, source):
+        if is_image_source_srgb(image, source) and (not yp.use_linear_blending or (yp.use_linear_blending and image.is_float)):
             linear = source_tree.nodes.get(layer.linear)
             if not linear:
                 linear = new_node(source_tree, layer, 'linear', 'ShaderNodeGamma', 'Linear')
@@ -2380,7 +2395,7 @@ def check_layer_image_linear_node(layer, source_tree=None):
 
             return
 
-        elif yp.use_linear_blending and not is_image_source_srgb(image, source):
+        elif yp.use_linear_blending and not image.is_float and not is_image_source_srgb(image, source):
             linear = source_tree.nodes.get(layer.linear)
             if not linear:
                 linear = new_node(source_tree, layer, 'linear', 'ShaderNodeGamma', 'Linear')
