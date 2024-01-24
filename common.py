@@ -1446,6 +1446,8 @@ def unmute_node(tree, entity, prop):
 
 def set_default_value(node, input_name_or_index, value):
 
+    if node.type == 'GROUP' and not node.node_tree: return
+
     # HACK: Sometimes Blender bug will cause node with no inputs
     # So try to reload the group again
     # Tested on Blender 3.6.2
@@ -1627,7 +1629,7 @@ def load_from_lib_blend(tree_name, filename):
 
     return lib_found
 
-def get_node_tree_lib(name, filename='lib'):
+def get_node_tree_lib(name):
 
     # Try to get from local lib first
     node_tree = bpy.data.node_groups.get(name)
@@ -3769,11 +3771,12 @@ def update_displacement_height_ratio(root_ch, max_height=None):
 
     end_linear = group_tree.nodes.get(root_ch.end_linear)
     if end_linear:
-        if max_height != 0.0:
-            end_linear.inputs['Max Height'].default_value = max_height
-        else: end_linear.inputs['Max Height'].default_value = 1.0
+        if 'Max Height' in end_linear.inputs:
+            if max_height != 0.0:
+                end_linear.inputs['Max Height'].default_value = max_height
+            else: end_linear.inputs['Max Height'].default_value = 1.0
 
-        if root_ch.enable_smooth_bump:
+        if root_ch.enable_smooth_bump and 'Bump Height Scale' in end_linear.inputs:
             end_linear.inputs['Bump Height Scale'].default_value = get_fine_bump_distance(max_height)
 
     end_max_height = group_tree.nodes.get(root_ch.end_max_height)
