@@ -2356,6 +2356,15 @@ def update_layer_index(self, context):
         update_tool_canvas_image(context, None)
         return
 
+    # Set active node to be layer group node so active keyframe can be visible on fcurve
+    for i, l in enumerate(yp.layers):
+        layer_node = group_tree.nodes.get(l.group_node)
+        if layer_node:
+            if i == yp.active_layer_index:
+                layer_node.select = True
+                #group_tree.nodes.active = layer_node
+            else: layer_node.select = False
+
     if yp.layer_preview_mode: update_layer_preview_mode(yp, context)
 
     # Set image paint mode to Image
@@ -3459,7 +3468,8 @@ def ypaint_last_object_update(scene):
             elif len(yp.layers) > 0 :
                 image, uv_name, src_of_img, mapping, vcol = get_active_image_and_stuffs(obj, yp)
                 update_image_editor_image(bpy.context, image)
-                scene.tool_settings.image_paint.canvas = image
+                try: scene.tool_settings.image_paint.canvas = image
+                except Exception as e: print('EXCEPTIION: Cannot set image canvas!')
 
     if obj.type == 'MESH' and ypwm.last_object == obj.name and ypwm.last_mode != obj.mode:
 
