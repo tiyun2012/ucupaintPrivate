@@ -2073,13 +2073,32 @@ def change_layer_name(yp, obj, src, layer, texes):
         layer.name = '___TEMP___'
         layer.name = get_unique_name(name, texes) 
 
-    # Update node group label
     m1 = re.match(r'^yp\.layers\[(\d+)\]$', layer.path_from_id())
     m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', layer.path_from_id())
     if m1:
         group_tree = yp.id_data
+
+        # Update node group label
         layer_group = group_tree.nodes.get(layer.group_node)
         layer_group.label = layer.name
+
+        # Also update mask name if it's in certain pattern
+        for mask in layer.masks:
+            m = re.match(r'^Mask\s.*\((.+)\)$', mask.name)
+            if m:
+                old_layer_name = m.group(1)
+                new_mask_name = mask.name.replace(old_layer_name, layer.name)
+                if mask.type == 'IMAGE':
+                    msrc = get_mask_source(mask)
+                    if msrc.image: 
+                        msrc.image.name = '___TEMP___'
+                        msrc.image.name = get_unique_name(new_mask_name, bpy.data.images) 
+                elif mask.type == 'VCOL':
+                    msrc = get_mask_source(mask)
+                    mask.name = '___TEMP___'
+                    change_vcol_name(yp, obj, msrc, new_mask_name, mask)
+                else:
+                    mask.name = new_mask_name
 
     yp.halt_update = False
 
@@ -4216,7 +4235,7 @@ def is_entity_need_tangent_input(entity, uv_name):
         if height_root_ch and check_need_prev_normal(layer):
             return True
 
-        if height_root_ch and height_ch and height_ch.enable:
+        if height_root_ch and height_ch and get_channel_enabled(height_ch, layer, height_root_ch):
 
             if entity.type == 'GROUP':
 
@@ -4377,7 +4396,7 @@ def get_channel_enabled(ch, layer=None, root_ch=None):
             if l.type not in {'GROUP', 'BACKGROUND'} and c.enable:
                 return True
 
-            if l.type == 'GROUP' and get_channel_enabled(l.channels[channel_idx]):
+            if l.type == 'GROUP' and get_channel_enabled(l.channels[channel_idx], l, root_ch):
                 return True
 
         return False
