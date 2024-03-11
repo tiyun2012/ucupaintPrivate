@@ -588,8 +588,8 @@ class YResizeImage(bpy.types.Operator):
     layer_name = StringProperty(default='')
     image_name = StringProperty(default='')
 
-    width = IntProperty(name='Width', default = 1024, min=1, max=4096)
-    height = IntProperty(name='Height', default = 1024, min=1, max=4096)
+    width = IntProperty(name='Width', default = 1024, min=1, max=16384)
+    height = IntProperty(name='Height', default = 1024, min=1, max=16384)
 
     samples = IntProperty(name='Bake Samples', 
             description='Bake Samples, more means less jagged on generated image', 
@@ -1039,7 +1039,7 @@ def bake_vcol_channel_items(self, context):
     items.append(('Sort By Channel Order', 'Sort By Channel Order', '', '', 1))
 
     for i, ch in enumerate(yp.channels):
-        if not ch.bake_target == 'VCOL': continue
+        if not ch.enable_bake_to_vcol: continue
         # Add two spaces to prevent text from being translated
         text_ch_name = ch.name + '  '
         # Index plus one, minus one when read
@@ -1056,8 +1056,8 @@ class YBakeChannels(bpy.types.Operator):
     bl_label = "Bake channels to Image"
     bl_options = {'REGISTER', 'UNDO'}
 
-    width = IntProperty(name='Width', default = 1234, min=1, max=4096)
-    height = IntProperty(name='Height', default = 1234, min=1, max=4096)
+    width = IntProperty(name='Width', default = 1234, min=1, max=16384)
+    height = IntProperty(name='Height', default = 1234, min=1, max=16384)
 
     uv_map = StringProperty(default='', update=update_bake_channel_uv_map)
     uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
@@ -1164,7 +1164,7 @@ class YBakeChannels(bpy.types.Operator):
                     break
             
             for ch in yp.channels:
-                if ch.bake_target == 'VCOL':
+                if ch.enable_bake_to_vcol:
                     self.enable_bake_as_vcol = True
                     break
 
@@ -1456,6 +1456,116 @@ class YBakeChannels(bpy.types.Operator):
                 try: setattr(bi, attr, getattr(self, attr))
                 except: pass
 
+        # Process custom bake target images
+        for bt in yp.bake_targets:
+            print("INFO: Processing custom bake target '" + bt.name + "'...")
+            bt_node = tree.nodes.get(bt.image_node)
+            btimg = bt_node.image if bt_node and bt_node.image else None 
+            
+            old_img = None
+            filepath = ''
+            if btimg and (
+                    btimg.size[0] != self.width or btimg.size[1] != self.height or
+                    (btimg.source == 'TILED' and not self.use_udim) or
+                    (btimg.source != 'TILED' and self.use_udim) 
+                    ):
+                old_img = btimg
+                btimg = None
+                if (old_img.source == 'TILED' and self.use_udim) or (old_img.source != 'TILED' and not self.use_udim):
+                    filepath = old_img.filepath
+
+            # Get default colors
+            color = []
+            for letter in rgba_letters:
+                btc = getattr(bt, letter)
+                ch = yp.channels.get(getattr(btc, 'channel_name'))
+                if ch and ch.type == 'NORMAL':
+                    if btc.normal_type in {'COMBINED', 'OVERLAY_ONLY'}:
+                        # Normal RG default value
+                        if btc.subchannel_index in {'0', '1'}:
+                            color.append(0.5)
+                        else: 
+                            # Normal BA default value
+                            color.append(1.0)
+                    else: 
+                        # Displacement default value
+                        color.append(0.5)
+                else:
+                    color.append(btc.default_value)
+
+            if not btimg:
+                # Set new bake target image
+                if len(tilenums) > 1:
+                    btimg = bpy.data.images.new(name=bt.name, width=self.width, height=self.height, 
+                            alpha=True, tiled=True) #float_buffer=hdr)
+                    btimg.filepath = filepath
+
+                    # Fill tiles
+                    for tilenum in tilenums:
+                        UDIM.fill_tile(btimg, tilenum, color, self.width, self.height)
+
+                    UDIM.initial_pack_udim(btimg, color)
+                else:
+                    btimg = bpy.data.images.new(name=bt.name,
+                        width=self.width, height=self.height, alpha=True, float_buffer=False)
+                    btimg.filepath = filepath
+                    btimg.generated_color = color
+            else:
+                for tilenum in tilenums:
+
+                    # Swap tile
+                    if tilenum != 1001:
+                        UDIM.swap_tile(btimg, 1001, tilenum)
+
+                    # Only set image color if image is already found
+                    set_image_pixels(btimg, color)
+
+                    # Swap tile again to recover
+                    if tilenum != 1001:
+                        UDIM.swap_tile(btimg, 1001, tilenum)
+
+            # Copy image channels
+            for i, letter in enumerate(rgba_letters):
+                btc = getattr(bt, letter)
+                ch = yp.channels.get(getattr(btc, 'channel_name'))
+                if ch:
+
+                    # Get image channel
+                    subidx = 0
+                    if ch.type in {'RGB', 'NORMAL'}:
+                        subidx = int(getattr(btc, 'subchannel_index'))
+
+                    # Get baked node
+                    baked = None
+                    if ch.type == 'NORMAL' and btc.normal_type == 'OVERLAY_ONLY':
+                        baked = tree.nodes.get(ch.baked_normal_overlay)
+                    elif ch.type == 'NORMAL' and btc.normal_type == 'DISPLACEMENT':
+                        baked = tree.nodes.get(ch.baked_disp)
+                        subidx = 0
+                    else: baked = tree.nodes.get(ch.baked)
+
+                    if baked and baked.image:
+                        for tilenum in tilenums:
+                            # Swap tile
+                            if tilenum != 1001:
+                                UDIM.swap_tile(btimg, 1001, tilenum)
+                                UDIM.swap_tile(baked.image, 1001, tilenum)
+
+                            # Copy pixels
+                            copy_image_channel_pixels(baked.image, btimg, src_idx=subidx, dest_idx=i)
+
+                            # Swap tile again to recover
+                            if tilenum != 1001:
+                                UDIM.swap_tile(btimg, 1001, tilenum)
+                                UDIM.swap_tile(baked.image, 1001, tilenum)
+
+            # Set bake target image
+            if old_img: 
+                replace_image(old_img, btimg)
+            else: 
+                bt_node = check_new_node(tree, bt, 'image_node', 'ShaderNodeTexImage')
+                bt_node.image = btimg
+
         # Set baked uv
         yp.baked_uv_name = self.uv_map
 
@@ -1494,7 +1604,7 @@ class YBakeChannels(bpy.types.Operator):
                 real_force_first_ch_idx = int(self.vcol_force_first_ch_idx) - 2
                 if real_force_first_ch_idx < len(yp.channels) and real_force_first_ch_idx >= 0:
                     target_ch = yp.channels[real_force_first_ch_idx]
-                    if not (target_ch and target_ch.bake_target == 'VCOL'):
+                    if not (target_ch and target_ch.enable_bake_to_vcol):
                         real_force_first_ch_idx = -1
                 else: real_force_first_ch_idx = -1
             else:
@@ -1503,11 +1613,11 @@ class YBakeChannels(bpy.types.Operator):
             current_vcol_order = 0
             prepare_bake_settings(book, objs, yp, disable_problematic_modifiers=True, bake_device=self.bake_device, bake_target='VERTEX_COLORS')
             for ch in yp.channels:
-                if ch.bake_target == 'VCOL' and ch.type != 'NORMAL':
+                if ch.enable_bake_to_vcol and ch.type != 'NORMAL':
                     # Check vertex color
                     for ob in objs:
                         vcols = get_vertex_colors(ob)
-                        vcol = vcols.get(ch.bake_vcol_name)
+                        vcol = vcols.get(ch.bake_to_vcol_name)
 
                         # Set index to first so new vcol will copy their value
                         if len(vcols) > 0:
@@ -1516,7 +1626,7 @@ class YBakeChannels(bpy.types.Operator):
 
                         if not vcol:
                             try: 
-                                vcol = new_vertex_color(ob, ch.bake_vcol_name)
+                                vcol = new_vertex_color(ob, ch.bake_to_vcol_name)
                             except Exception as e: print(e)
 
                         # Get newly created vcol name
@@ -1530,11 +1640,11 @@ class YBakeChannels(bpy.types.Operator):
                         # Get the newly created vcol to avoid pointer error
                         vcol = vcols.get(vcol_name)
                         set_active_vertex_color(ob, vcol)
-                    bake_to_vcol(mat, node, ch, objs, None, 1, ch.bake_to_vcol_alpha or ch.enable_alpha, ch.bake_vcol_name)
+                    bake_to_vcol(mat, node, ch, objs, None, 1, ch.bake_to_vcol_alpha or ch.enable_alpha, ch.bake_to_vcol_name)
                     baked = tree.nodes.get(ch.baked_vcol)
                     if not baked or not is_root_ch_prop_node_unique(ch, 'baked_vcol'):
                         baked = new_node(tree, ch, 'baked_vcol', get_vcol_bl_idname(), 'Baked Vcol ' + ch.name)
-                    set_source_vcol_name(baked, ch.bake_vcol_name)
+                    set_source_vcol_name(baked, ch.bake_to_vcol_name)
                     for ob in objs:
                         # Recover material index
                         if ori_mat_ids[ob.name]:
@@ -1576,6 +1686,10 @@ class YBakeChannels(bpy.types.Operator):
 
         # Refresh active channel index
         yp.active_channel_index = yp.active_channel_index
+
+        # Refresh bake target index to show up the image result
+        if len(yp.bake_targets) > 0:
+            yp.active_bake_target_index = yp.active_bake_target_index
 
         # Update baked outside nodes
         update_enable_baked_outside(yp, context)
@@ -2266,8 +2380,8 @@ class YBakeTempImage(bpy.types.Operator):
             description = 'Bake margin in pixels',
             default=5, subtype='PIXEL')
 
-    width = IntProperty(name='Width', default = 1234, min=1, max=4096)
-    height = IntProperty(name='Height', default = 1234, min=1, max=4096)
+    width = IntProperty(name='Width', default = 1234, min=1, max=16384)
+    height = IntProperty(name='Height', default = 1234, min=1, max=16384)
 
     hdr = BoolProperty(name='32 bit Float', default=True)
 
@@ -2405,27 +2519,31 @@ def update_enable_baked_outside(self, context):
         for n in mtree.nodes:
             if n.location.x > node.location.x:
                 shift_nodes.append(n)
-                #n.location.x += 600
 
         # Baked outside nodes should be contained inside of frame
         frame = mtree.nodes.get(yp.baked_outside_frame)
         if not frame:
             frame = mtree.nodes.new('NodeFrame')
-            #frame.label = get_addon_title() + ' Baked Textures'
-            frame.label = node.name + 'Baked Textures'
-            frame.name = node.name + 'Baked Textures'
+            frame.label = tree.name + ' Baked Textures'
+            frame.name = tree.name + ' Baked Textures'
             yp.baked_outside_frame = frame.name
+
+        # Custom bake target images also have their own frame
+        bt_frame = mtree.nodes.get(yp.bake_target_outside_frame)
+        if not bt_frame:
+            bt_frame = mtree.nodes.new('NodeFrame')
+            bt_frame.label = tree.name + ' Custom Bake Targets'
+            bt_frame.name = tree.name + ' Custom Bake Targets'
+            yp.bake_target_outside_frame = bt_frame.name
 
         loc_x = node.location.x + 180
         loc_y = node.location.y
 
         uv = check_new_node(mtree, yp, 'baked_outside_uv', 'ShaderNodeUVMap')
-        #uv = mtree.nodes.new('ShaderNodeUVMap')
         uv.uv_map = yp.baked_uv_name
         uv.location.x = loc_x
         uv.location.y = loc_y
         uv.parent = frame
-        #yp.baked_outside_uv = uv.name
 
         loc_x += 180
         max_x = loc_x
@@ -2475,9 +2593,9 @@ def update_enable_baked_outside(self, context):
 
                 baked_vcol = tree.nodes.get(ch.baked_vcol)
                 vcol = None
-                if baked_vcol and ch.bake_target == 'VCOL':
+                if baked_vcol and ch.enable_bake_to_vcol:
                     vcol = check_new_node(mtree, ch, 'baked_outside_vcol', get_vcol_bl_idname())
-                    set_source_vcol_name(vcol, ch.bake_vcol_name)
+                    set_source_vcol_name(vcol, ch.bake_to_vcol_name)
                     loc_x += 280
                     vcol.location.x = loc_x
                     vcol.location.y = loc_y - 100
@@ -2490,7 +2608,7 @@ def update_enable_baked_outside(self, context):
 
                 if outp_alpha:
                     for l in outp_alpha.links:
-                        if vcol and ch.bake_target == 'VCOL':
+                        if vcol and ch.enable_bake_to_vcol:
                             mtree.links.new(vcol.outputs['Alpha'], l.to_socket)
                         else:
                             mtree.links.new(tex.outputs[1], l.to_socket)
@@ -2498,7 +2616,7 @@ def update_enable_baked_outside(self, context):
                 if ch.type != 'NORMAL':
 
                     for l in outp.links:
-                        if vcol and ch.bake_target == 'VCOL':
+                        if vcol and ch.enable_bake_to_vcol:
                             outp_name = 'Alpha' if ch.bake_to_vcol_alpha else 'Color'
                             mtree.links.new(vcol.outputs[outp_name], l.to_socket)
                         else:
@@ -2579,7 +2697,7 @@ def update_enable_baked_outside(self, context):
                         if output_mat and ch.enable_subdiv_setup and ch.subdiv_adaptive:
                             mtree.links.new(disp.outputs[0], output_mat[0].inputs['Displacement'])
 
-                    if ch.bake_target == 'VCOL':
+                    if ch.enable_bake_to_vcol:
                         mtree.links.new(vcol.outputs['Color'], l.to_socket)
                 loc_y -= 300
 
@@ -2600,6 +2718,28 @@ def update_enable_baked_outside(self, context):
                     for l in outp_height.links:
                         copy_default_value(inp_height, l.to_socket)
 
+        # Bake targets
+        first_bt_found = False
+        for bt in yp.bake_targets:
+            image_node = tree.nodes.get(bt.image_node)
+            if image_node and image_node.image:
+
+                if not first_bt_found:
+                    loc_y -= 75
+                    first_bt_found = True
+
+                tex = check_new_node(mtree, bt, 'image_node_outside', 'ShaderNodeTexImage')
+                tex.image = image_node.image
+                tex.location.x = loc_x
+                tex.location.y = loc_y
+                tex.parent = bt_frame
+                mtree.links.new(uv.outputs[0], tex.inputs[0])
+
+                loc_y -= 300
+
+        if not first_bt_found:
+            remove_node(mtree, yp, 'bake_target_outside_frame')
+
         # Remove links
         for outp in node.outputs:
             for l in outp.links:
@@ -2613,7 +2753,9 @@ def update_enable_baked_outside(self, context):
 
     else:
         baked_outside_frame = mtree.nodes.get(yp.baked_outside_frame)
+        bake_target_outside_frame = mtree.nodes.get(yp.bake_target_outside_frame)
 
+        # Channels
         for ch in yp.channels:
 
             outp = node.outputs.get(ch.name)
@@ -2645,9 +2787,16 @@ def update_enable_baked_outside(self, context):
                 remove_node(mtree, ch, 'baked_outside_normal_process', parent=baked_outside_frame)
                 remove_node(mtree, ch, 'baked_outside_disp_process', parent=baked_outside_frame)
 
+        # Bake targets
+        for bt in yp.bake_targets:
+            remove_node(mtree, bt, 'image_node_outside', parent=bake_target_outside_frame)
+
         if baked_outside_frame:
             remove_node(mtree, yp, 'baked_outside_uv', parent=baked_outside_frame)
             remove_node(mtree, yp, 'baked_outside_frame')
+
+        if bake_target_outside_frame:
+            remove_node(mtree, yp, 'bake_target_outside_frame')
 
         # Shift back nodes location
         for n in mtree.nodes:
@@ -2710,7 +2859,7 @@ def update_use_baked(self, context):
     # Update baked outside
     update_enable_baked_outside(self, context)
 
-def update_bake_target(self, context):
+def update_enable_bake_to_vcol(self, context):
     tree = self.id_data
     yp = tree.yp
 

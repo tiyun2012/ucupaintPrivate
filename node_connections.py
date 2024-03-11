@@ -992,10 +992,9 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
         bitangent = None
 
     baked_uv = yp.uvs.get(yp.baked_uv_name)
-    #print('Baked UV_Name:', yp.baked_uv_name, baked_uv)
-    if yp.use_baked and baked_uv:
+    baked_uv_map = nodes.get(baked_uv.uv_map).outputs[0] if baked_uv else None
 
-        baked_uv_map = nodes.get(baked_uv.uv_map).outputs[0]
+    if yp.use_baked and baked_uv:
 
         if parallax_ch and baked_parallax:
             if baked_parallax_filter:
@@ -1299,7 +1298,7 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
             mixcol0, mixcol1, mixout = get_mix_color_indices(clamp)
             rgb = create_link(tree, rgb, clamp.inputs[mixcol0])[mixout]
 
-        if yp.use_baked and not ch.no_layer_using and not ch.disable_global_baked and not ch.bake_target == 'VCOL': # and baked_uv:
+        if yp.use_baked and not ch.no_layer_using and not ch.disable_global_baked and not ch.enable_bake_to_vcol: # and baked_uv:
             baked = nodes.get(ch.baked)
             if baked:
                 rgb = baked.outputs[0]
@@ -1345,7 +1344,7 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
             #create_link(tree, geometry.outputs['Backfacing'], end_backface.inputs[1])
             create_link(tree, get_essential_node(tree, GEOMETRY)['Backfacing'], end_backface.inputs[1])
 
-        if yp.use_baked and ch.bake_target == 'VCOL' and not ch.disable_global_baked:
+        if yp.use_baked and ch.enable_bake_to_vcol and not ch.disable_global_baked:
             baked_vcol = nodes.get(ch.baked_vcol)
             if baked_vcol:
                 if ch.bake_to_vcol_alpha:
@@ -1360,7 +1359,7 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
         #if ch.type == 'RGB' and ch.enable_alpha:
         if ch.enable_alpha:
             create_link(tree, alpha, end.inputs[io_alpha_name])
-        if ch.type == 'NORMAL' and not ch.bake_target == 'VCOL':
+        if ch.type == 'NORMAL' and not ch.enable_bake_to_vcol:
             create_link(tree, height, end.inputs[io_height_name])
             if ch.name + io_suffix['MAX_HEIGHT'] in end.inputs:
                 max_height = height
@@ -1372,6 +1371,12 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                     max_height = create_link(tree, max_height, end_max_height_tweak.inputs[0])[0]
                 
                 create_link(tree, max_height, end.inputs[ch.name + io_suffix['MAX_HEIGHT']])
+
+    # Bake target image nodes
+    for bt in yp.bake_targets:
+        image_node = nodes.get(bt.image_node)
+        if image_node and baked_uv_map:
+            create_link(tree, baked_uv_map, image_node.inputs[0])
 
     # Merge process doesn't care with parents
     if merged_layer_ids: return

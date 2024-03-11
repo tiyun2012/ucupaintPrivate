@@ -5,7 +5,7 @@ from .common import *
 from .subtree import *
 from .node_arrangements import *
 from .node_connections import *
-from . import lib, Modifier, Layer, Mask, transition, Bake, ImageAtlas
+from . import lib, Modifier, Layer, Mask, transition, Bake, ImageAtlas, BakeTarget
 from .input_outputs import *
 
 YP_GROUP_SUFFIX = ' ' + get_addon_title()
@@ -114,7 +114,7 @@ def create_new_yp_channel(group_tree, name, channel_type, non_color=True, enable
     # Add new channel
     channel = yp.channels.add()
     channel.name = name
-    channel.bake_vcol_name = 'Baked ' + name
+    channel.bake_to_vcol_name = 'Baked ' + name
     channel.type = channel_type
 
     # Get last index
@@ -2016,6 +2016,21 @@ class YCleanYPCaches(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def get_channel_name(self):
+    return self['name']
+
+def set_channel_name(self, value):
+    yp = self.id_data.yp 
+
+    # Update bake target channel name
+    for bt in yp.bake_targets:
+        for letter in rgba_letters:
+            btc = getattr(bt, letter)
+            if getattr(btc, 'channel_name') == self.name:
+                setattr(btc, 'channel_name', value)
+
+    self['name'] = value
+
 def update_channel_name(self, context):
     T = time.time()
 
@@ -2929,16 +2944,16 @@ def update_channel_main_uv(self, context):
 
 # Prevent vcol name from being null
 def get_channel_vcol_name(self):
-    name = self.get('bake_vcol_name', '') # May be null
+    name = self.get('bake_to_vcol_name', '') # May be null
     if name == '':
-        self['bake_vcol_name'] = 'Baked ' + self.name
-    return self['bake_vcol_name']
+        self['bake_to_vcol_name'] = 'Baked ' + self.name
+    return self['bake_to_vcol_name']
 
 def set_channel_vcol_name(self, value):
     if value == '':
-        self['bake_vcol_name'] = 'Baked ' + self.name
+        self['bake_to_vcol_name'] = 'Baked ' + self.name
     else:
-        self['bake_vcol_name'] = value
+        self['bake_to_vcol_name'] = value
 
 def update_use_linear_blending(self, context):
     check_start_end_root_ch_nodes(self.id_data)
@@ -3008,7 +3023,7 @@ class YPaintChannel(bpy.types.PropertyGroup):
             name='Channel Name', 
             description = 'Name of the channel',
             default='Albedo',
-            update=update_channel_name)
+            update=update_channel_name, get=get_channel_name, set=set_channel_name)
 
     type = EnumProperty(
             name = 'Channel Type',
@@ -3074,21 +3089,16 @@ class YPaintChannel(bpy.types.PropertyGroup):
                 ),
             default = 'BOTH', update=update_backface_mode)
 
-    bake_target = EnumProperty(
-            name = 'Bake Target',
-            description = 'Bake target',
-            items = (
-                ('IMAGE', 'Image', '', 'IMAGE_DATA', 0),
-                ('VCOL', 'Vertex Color', '', 'GROUP_VCOL', 1),
-                ),
-            default='IMAGE', update=Bake.update_bake_target)
+    enable_bake_to_vcol = BoolProperty(name='Enable Bake to Vertex Color',
+            description='Enable vertex color as bake target',
+            default=False, update=Bake.update_enable_bake_to_vcol)
 
     bake_to_vcol_alpha = BoolProperty(
             name='Bake To Vertex Color Alpha', 
             description='When enabled, the channel are baked only to Alpha with vertex color', 
             default=False)
 
-    bake_vcol_name = StringProperty(
+    bake_to_vcol_name = StringProperty(
             name='Target Vertex Color Name',
             description='Target Vertex Color Name',
             default='', get=get_channel_vcol_name, set=set_channel_vcol_name)
@@ -3269,7 +3279,7 @@ class YPaintChannel(bpy.types.PropertyGroup):
     expand_subdiv_settings = BoolProperty(default=False)
     expand_parallax_settings = BoolProperty(default=False)
     expand_alpha_settings = BoolProperty(default=False)
-    expand_bake_target_settings = BoolProperty(default=False)
+    expand_bake_to_vcol_settings = BoolProperty(default=False)
     expand_smooth_bump_settings = BoolProperty(default=False)
 
     # Connection related
@@ -3329,6 +3339,10 @@ class YPaint(bpy.types.PropertyGroup):
     # UVs
     uvs = CollectionProperty(type=YPaintUV)
 
+    # Bake Targets
+    bake_targets = CollectionProperty(type=BakeTarget.YBakeTarget)
+    active_bake_target_index = IntProperty(default=0, update=BakeTarget.update_active_bake_target_index)
+
     # Temp channels to remember last channel selected when adding new layer
     #temp_channels = CollectionProperty(type=YChannelUI)
     preview_mode = BoolProperty(default=False, update=update_preview_mode)
@@ -3387,12 +3401,13 @@ class YPaint(bpy.types.PropertyGroup):
     # Outside nodes
     baked_outside_uv = StringProperty(default='')
     baked_outside_frame = StringProperty(default='')
+    bake_target_outside_frame = StringProperty(default='')
     baked_outside_x_shift = IntProperty(default=0)
 
     # Flip backface
     enable_backface_always_up = BoolProperty(
             name= 'Make backface normal always up',
-            description= 'Make sure normal will face toward camera even at backface',
+            description= 'Make sure normal will face toward camera even at backface\n(Need Normal channel with smooth bump on to enable this feature)',
             default=True, update=update_flip_backface)
 
     # Layer alpha Viewer Mode
