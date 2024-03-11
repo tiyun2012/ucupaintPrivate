@@ -115,7 +115,7 @@ class YNewBakeTarget(bpy.types.Operator):
             description = 'New bake target name',
             default='')
 
-    preset : EnumProperty(
+    preset = EnumProperty(
             name = 'Bake Target Preset',
             description = 'Customm bake target preset',
             items = (
