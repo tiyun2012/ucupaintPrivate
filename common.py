@@ -3079,7 +3079,7 @@ def refresh_temp_uv(obj, entity):
         remove_temp_uv(obj, entity)
         return False
 
-    if (m1 or m2) and entity.type != 'IMAGE':
+    if (m1 or m2) and (entity.type != 'IMAGE' and not entity.use_baked):
         remove_temp_uv(obj, entity)
         return False
 
@@ -3094,12 +3094,23 @@ def refresh_temp_uv(obj, entity):
 
     # Get source
     if m1: 
-        source = get_layer_source(entity)
-        mapping = get_layer_mapping(entity)
+        if entity.use_baked:
+            tree = get_tree(entity)
+            source = tree.nodes.get(entity.baked_source)
+            mapping = tree.nodes.get(entity.baked_mapping)
+        else:
+            source = get_layer_source(entity)
+            mapping = get_layer_mapping(entity)
         #print('Layer!')
     elif m2: 
-        source = get_mask_source(entity)
-        mapping = get_mask_mapping(entity)
+        if entity.use_baked:
+            mask_tree = get_mask_tree(entity)
+            source = mask_tree.nodes.get(entity.baked_source)
+            layer_tree = get_mask_tree(entity, True)
+            mapping = layer_tree.nodes.get(entity.baked_mapping)
+        else:
+            source = get_mask_source(entity)
+            mapping = get_mask_mapping(entity)
         #print('Mask!')
     elif m3: 
         source = layer_tree.nodes.get(entity.source)
@@ -5409,7 +5420,7 @@ def get_first_mirror_modifier(obj):
 
     return None
 
-def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0, segment=None, segment_src=None, flip_value=False):
+def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0, segment=None, segment_src=None, invert_value=False):
 
     start_x = 0
     start_y = 0
@@ -5444,7 +5455,7 @@ def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0, segment=None, se
         src_pxs.shape = (-1, src.size[0], 4)
 
         # Copy to selected channel
-        if flip_value:
+        if invert_value:
             dest_pxs[start_y:start_y+height, start_x:start_x+width][::, ::, dest_idx] = 1.0 - src_pxs[src_start_y:src_start_y+height, src_start_x:src_start_x+width][::, ::, src_idx]
         else: dest_pxs[start_y:start_y+height, start_x:start_x+width][::, ::, dest_idx] = src_pxs[src_start_y:src_start_y+height, src_start_x:src_start_x+width][::, ::, src_idx]
         dest.pixels.foreach_set(dest_pxs.ravel())
@@ -5455,7 +5466,7 @@ def copy_image_channel_pixels(src, dest, src_idx=0, dest_idx=0, segment=None, se
         dest_pxs = list(dest.pixels)
 
         # Copy to selected channel
-        if flip_value:
+        if invert_value:
             for y in range(height):
                 source_offset_y = width * 4 * (y + src_start_y)
                 offset_y = dest.size[0] * 4 * (y + start_y)
