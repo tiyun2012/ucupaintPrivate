@@ -211,8 +211,6 @@ def replace_segment_with_image(yp, segment, image, uv_name=''):
         # Make segment unused
         segment.unused = True
 
-    #print(segment.name, entities)
-
     return entities
 
 #class YUVTransformTest(bpy.types.Operator):
@@ -256,10 +254,10 @@ def get_segment_mapping(segment, image):
 
     return scale_x, scale_y, offset_x, offset_y
 
-def set_segment_mapping(entity, segment, image, force_create_mapping=False):
+def set_segment_mapping(entity, segment, image, use_baked=False):
 
     if image.source == 'TILED':
-        UDIM.set_udim_segment_mapping(entity, segment, image)
+        UDIM.set_udim_segment_mapping(entity, segment, image, use_baked)
         return
     
     scale_x, scale_y, offset_x, offset_y = get_segment_mapping(segment, image)
@@ -267,20 +265,8 @@ def set_segment_mapping(entity, segment, image, force_create_mapping=False):
     m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
     m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
 
-    if m1: 
-        tree = get_tree(entity)
-    else: tree = get_mask_tree(entity, True)
-
-    if entity.use_baked:
-        mapping_prop_name = 'baked_mapping'
-        mapping_label_name = 'Baked Mapping'
-    else: 
-        mapping_prop_name = 'mapping'
-        mapping_label_name = 'Mapping'
-
-    mapping = tree.nodes.get(getattr(entity, mapping_prop_name))
-    if not mapping and force_create_mapping:
-        mapping = new_node(tree, entity, mapping_prop_name, 'ShaderNodeMapping', mapping_label_name)
+    if m1: mapping = get_layer_mapping(entity, get_baked=use_baked)
+    else: mapping = get_mask_mapping(entity, get_baked=use_baked)
 
     if mapping:
         if is_greater_than_281():
@@ -509,24 +495,29 @@ class YConvertToImageAtlas(bpy.types.Operator):
         yp = node.node_tree.yp
 
         if self.all_images:
-            entities, images, segment_names = get_yp_entities_images_and_segments(yp)
+            entities, images, segment_names, segment_name_props = get_yp_entities_images_and_segments(yp)
         else:
             mapping = get_entity_mapping(context.entity)
-            if is_transformed(mapping):
+            if is_transformed(mapping) and not context.entity.use_baked:
                 self.report({'ERROR'}, "Cannot convert transformed image!")
                 return {'CANCELLED'}
 
             images = [context.image]
             entities = [[context.entity]]
-            segment_names = [context.entity.segment_name]
+            segment_name_prop = 'segment_name' if not context.entity.use_baked else 'baked_segment_name'
+            segment_name_props = [[segment_name_prop]]
+            segment_name = getattr(context.entity, segment_name_prop)
+            segment_names = [segment_name]
 
         for i, image in enumerate(images):
             if image.yia.is_image_atlas or image.yua.is_udim_atlas: continue
-            #if image.source == 'TILED': continue # UDIM Atlas is not supported yet
 
             used_by_masks = False
             valid_entities = []
-            for entity in entities[i]:
+            for j, entity in enumerate(entities[i]):
+
+                # Check if entity is baked to image atlas
+                use_baked = segment_name_props[i][j] == 'baked_segment_name'
 
                 # Mask will use different type of image atlas
                 m = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
@@ -534,7 +525,7 @@ class YConvertToImageAtlas(bpy.types.Operator):
 
                 # Transformed mapping on entity is not valid for conversion
                 mapping = get_entity_mapping(entity)
-                if not is_transformed(mapping):
+                if use_baked or not is_transformed(mapping):
                     valid_entities.append(entity)
 
             if not any(valid_entities):
@@ -562,13 +553,15 @@ class YConvertToImageAtlas(bpy.types.Operator):
                 copy_id_props(image.y_bake_info, new_segment.bake_info)
                 new_segment.bake_info.use_image_atlas = True
 
-            for entity in valid_entities:
+            for j, entity in enumerate(valid_entities):
                 # Set image atlas to entity
-                source = get_entity_source(entity)
+                use_baked = segment_name_props[i][j] == 'baked_segment_name'
+                source = get_entity_source(entity, get_baked=use_baked)
                 source.image = ia_image
 
                 # Set segment name
-                entity.segment_name = new_segment.name
+                #entity.segment_name = new_segment.name
+                setattr(entity, segment_name_props[i][j], new_segment.name)
 
                 # Set image to editor
                 if entity == context.entity:
@@ -576,8 +569,8 @@ class YConvertToImageAtlas(bpy.types.Operator):
                     context.scene.tool_settings.image_paint.canvas = ia_image
 
                 # Update mapping
-                update_mapping(entity)
-                set_uv_neighbor_resolution(entity)
+                update_mapping(entity, use_baked=use_baked)
+                set_uv_neighbor_resolution(entity, use_baked=use_baked)
 
             # Remove image if no one using it
             if image.users == 0:
@@ -608,16 +601,20 @@ class YConvertToStandardImage(bpy.types.Operator):
         yp = node.node_tree.yp
 
         if self.all_images:
-            entities, images, segment_names = get_yp_entities_images_and_segments(yp)
+            entities, images, segment_names, segment_name_props = get_yp_entities_images_and_segments(yp)
         else:
             images = [context.image]
 
+            segment_name_prop = 'segment_name' if not context.entity.use_baked else 'baked_segment_name'
+            segment_name_props = [[segment_name_prop]]
+            segment_name = getattr(context.entity, segment_name_prop)
+
             if context.image.yia.is_image_atlas:
-                segment = context.image.yia.segments.get(context.entity.segment_name)
-            else: segment = context.image.yua.segments.get(context.entity.segment_name)
+                segment = context.image.yia.segments.get(segment_name)
+            else: segment = context.image.yua.segments.get(segment_name)
 
             entities = [get_entities_with_specific_segment(yp, segment)]
-            segment_names = [context.entity.segment_name]
+            segment_names = [segment_name]
 
         image_atlases = []
 
@@ -674,16 +671,19 @@ class YConvertToStandardImage(bpy.types.Operator):
             else:
                 UDIM.remove_udim_atlas_segment_by_name(image, segment.name, yp)
 
-            for entity in entities[i]:
+            for j, entity in enumerate(entities[i]):
+
                 # Set new image to entity
-                source = get_entity_source(entity)
+                use_baked = segment_name_props[i][j] == 'baked_segment_name'
+                source = get_entity_source(entity, get_baked=use_baked)
                 source.image = new_image
-                clear_mapping(entity)
+                clear_mapping(entity, use_baked=use_baked)
                 entity.segment_name = ''
+                setattr(entity, segment_name_props[i][j], '')
 
                 # Set image to editor
                 if entity == context.entity:
-                    update_image_editor_image(bpy.context, new_image)
+                    update_image_editor_image(context, new_image)
                     context.scene.tool_settings.image_paint.canvas = new_image
 
                 # Set UV Neighbor resolution

@@ -1214,9 +1214,7 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                 row.alert = True
                 row.operator('node.y_back_to_original_uv', icon='EDITMODE_HLT', text='Edit Original UV')
     else:
-        #if ypui.disable_auto_temp_uv_update and yp.need_temp_uv_refresh:
-        #if yp.need_temp_uv_refresh or is_active_uv_map_match_entity(obj, layer):
-        if yp.need_temp_uv_refresh or is_active_uv_map_match_active_entity(obj, layer):
+        if yp.need_temp_uv_refresh or is_active_uv_map_missmatch_active_entity(obj, layer):
             row = row.row(align=True)
             row.alert = True
             row.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
@@ -1350,8 +1348,7 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                     bbox.prop(layer, 'rotation')
                     bbox.prop(layer, 'scale')
 
-                    if yp.need_temp_uv_refresh: # or is_active_uv_map_match_entity(obj, layer):
-                    #if yp.need_temp_uv_refresh or is_active_uv_map_match_active_entity(obj, layer):
+                    if yp.need_temp_uv_refresh:
                         rrow = bbox.row(align=True)
                         rrow.alert = True
                         rrow.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
@@ -2230,7 +2227,7 @@ def draw_layer_masks(context, layout, layer):
                     rbox.prop(mask, 'scale')
 
                     if mask.type == 'IMAGE' and mask.active_edit and (
-                            yp.need_temp_uv_refresh  #or is_active_uv_map_match_entity(obj, mask)
+                            yp.need_temp_uv_refresh
                             ):
                         rrow = rbox.row(align=True)
                         rrow.alert = True
@@ -2611,7 +2608,12 @@ def draw_layers_ui(context, layout, node):
                     mask = entity = m
                     mask_idx = i
                     source = get_mask_source(m)
-                    if m.type == 'IMAGE':
+                    if m.use_baked:
+                        mask_tree = get_mask_tree(m)
+                        baked_source = mask_tree.nodes.get(m.baked_source)
+                        if baked_source:
+                            mask_image = baked_source.image
+                    elif m.type == 'IMAGE':
                         #mask_tree = get_mask_tree(m)
                         #source = mask_tree.nodes.get(m.source)
                         #image = source.image
@@ -4091,7 +4093,7 @@ class YLayerListSpecialMenu(bpy.types.Menu):
             col.operator("image.y_convert_image_bit_depth", icon='IMAGE_DATA', text=text)
 
             if UDIM.is_udim_supported():
-                col.separator()
+                #col.separator()
                 text = 'Convert to ' + ('Non UDIM ' if context.image.source == 'TILED' else 'UDIM ') + 'Image'
                 col.operator("image.y_convert_image_tiled", icon='IMAGE_DATA', text=text)
 
