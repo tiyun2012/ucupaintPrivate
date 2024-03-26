@@ -1681,6 +1681,8 @@ def get_node_tree_lib(name):
     lib_found = load_from_lib_blend(name, 'lib.blend')
     if not lib_found:
         lib_found = load_from_lib_blend(name, 'lib_281.blend')
+    if not lib_found:
+        lib_found = load_from_lib_blend(name, 'lib_282.blend')
 
     node_tree = bpy.data.node_groups.get(name)
 
@@ -2086,6 +2088,23 @@ def change_vcol_name(yp, obj, src, new_name, layer=None):
                 vname = get_source_vcol_name(csrc)
                 if ori_name == vname:
                     set_source_vcol_name(csrc, new_name)
+
+    # HACK: Blender 3.2+ did not automatically update viewport after vertex color rename
+    if is_greater_than_320():
+        mat = get_active_material()
+        objs = get_all_objects_with_same_materials(mat, True) if mat.users > 1 else [obj]
+
+        for o in objs:
+            set_active_object(o)
+            if o.mode == 'OBJECT':
+                bpy.ops.object.mode_set(mode='SCULPT')
+                bpy.ops.object.mode_set(mode='OBJECT')
+            else:
+                ori_mode = o.mode
+                bpy.ops.object.mode_set(mode='OBJECT')
+                bpy.ops.object.mode_set(mode=ori_mode)
+
+        set_active_object(obj)
 
 def change_layer_name(yp, obj, src, layer, texes):
     if yp.halt_update: return
