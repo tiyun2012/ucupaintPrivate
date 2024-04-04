@@ -1042,6 +1042,7 @@ class YDeleteBakedChannelImages(bpy.types.Operator):
                 remove_node(tree, root_ch, 'baked_normal_overlay')
                 remove_node(tree, root_ch, 'baked_normal_prep')
                 remove_node(tree, root_ch, 'baked_normal')
+                remove_node(tree, root_ch, 'end_max_height')
 
         # Reconnect
         reconnect_yp_nodes(tree)
@@ -2035,21 +2036,11 @@ class YMergeLayer(bpy.types.Operator):
         main_ch = yp.channels[int(self.channel_idx)]
         ch = layer.channels[int(self.channel_idx)]
         neighbor_ch = neighbor_layer.channels[int(self.channel_idx)]
-
+        
         # Get parent dict
-        parent_dict = get_parent_dict(yp)
+        parent_dict = get_parent_dict(yp)  
 
         merge_success = False
-
-        # Get max height
-        if height_root_ch and main_ch.type == 'NORMAL':
-            end_max_height = tree.nodes.get(height_root_ch.end_max_height)
-            ori_max_height = 0.0
-            max_height = 0.0
-            if end_max_height:
-                ori_max_height = end_max_height.outputs[0].default_value
-                max_height = get_max_height_from_list_of_layers([layer, neighbor_layer], int(self.channel_idx))
-                end_max_height.outputs[0].default_value = max_height
 
         # Merge image layers
         if (layer.type == 'IMAGE' and layer.texcoord_type == 'UV'): # and neighbor_layer.type == 'IMAGE'):
@@ -2064,6 +2055,17 @@ class YMergeLayer(bpy.types.Operator):
             temp_objs = []
             if len(objs) > 1 and not is_join_objects_problematic(yp):
                 objs = temp_objs = [get_merged_mesh_objects(scene, objs)]
+
+            # Get list of parent ids
+            pids = get_list_of_parent_ids(layer)
+
+            # Disable other layers
+            layer_oris = []
+            for i, l in enumerate(yp.layers):
+                layer_oris.append(l.enable)
+                if i in pids or l in {layer, neighbor_layer}:
+                    l.enable = True
+                else: l.enable = False
 
             # Disable modfiers and transformations if apply modifiers is not enabled
             if not self.apply_modifiers:
@@ -2090,7 +2092,6 @@ class YMergeLayer(bpy.types.Operator):
 
             # Bake main channel
             merge_success = bake_channel(layer.uv_name, mat, node, main_ch, target_layer=layer)
-            #return {'FINISHED'}
 
             # Remove temporary objects
             if temp_objs:
@@ -2105,6 +2106,11 @@ class YMergeLayer(bpy.types.Operator):
             if not self.apply_modifiers:
                 recover_layer_modifiers_and_transforms(layer, mod_oris)
             else: remove_layer_modifiers_and_transforms(layer)
+
+            # Recover layer enable
+            for i, le in enumerate(layer_oris):
+                if yp.layers[i].enable != le:
+                    yp.layers[i].enable = le
 
             # Recover original props
             main_ch.enable_alpha = ori_enable_alpha
@@ -2195,10 +2201,6 @@ class YMergeLayer(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "This kind of merge is not supported yet!")
             return {'CANCELLED'}
-
-        # Recover max height
-        if height_root_ch and main_ch.type == 'NORMAL':
-            if end_max_height: end_max_height.outputs[0].default_value = ori_max_height
 
         if merge_success:
             # Remove neighbor layer
@@ -2736,12 +2738,12 @@ def update_enable_baked_outside(self, context):
                         if is_greater_than_280():
                             if not disp:
                                 disp = mtree.nodes.new('ShaderNodeDisplacement')
-                            disp.inputs['Scale'].default_value = get_displacement_max_height(ch) * ch.subdiv_tweak
+                            disp.inputs['Scale'].default_value = get_displacement_max_height(ch) * ch.height_tweak
                         else:
                             if not disp:
                                 disp = mat.node_tree.nodes.new('ShaderNodeGroup')
                                 disp.node_tree = get_node_tree_lib(lib.BL27_DISP)
-                            disp.inputs[1].default_value = get_displacement_max_height(ch) * ch.subdiv_tweak
+                            disp.inputs[1].default_value = get_displacement_max_height(ch) * ch.height_tweak
 
                         disp.location.x = loc_x
                         disp.location.y = loc_y
@@ -3024,14 +3026,6 @@ def check_subdiv_setup(height_ch):
     img = baked_disp.image if baked_disp and baked_disp.image else None
     max_height = end_max_height.outputs[0].default_value if end_max_height else 0.0
 
-    # Max height tweak node
-    if height_ch.enable_subdiv_setup and (yp.use_baked or ypup.eevee_next_displacement):
-        end_max_height = check_new_node(tree, height_ch, 'end_max_height_tweak', 'ShaderNodeMath', 'Max Height Tweak')
-        end_max_height.operation = 'MULTIPLY'
-        end_max_height.inputs[1].default_value = height_ch.subdiv_tweak
-    else:
-        remove_node(tree, height_ch, 'end_max_height_tweak')
-
     # Get active output material
     try: output_mat = [n for n in mtree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output][0]
     except: return
@@ -3206,7 +3200,7 @@ def check_subdiv_setup(height_ch):
             displace.texture = tex
             displace.texture_coords = 'UV'
 
-            displace.strength = height_ch.subdiv_tweak * max_height
+            displace.strength = height_ch.height_tweak * max_height
             displace.mid_level = height_ch.parallax_ref_plane
             displace.uv_layer = yp.baked_uv_name
 
@@ -3313,31 +3307,6 @@ def update_enable_subdiv_setup(self, context):
 
     if not height_ch.enable_subdiv_setup and (yp.use_baked or ypup.eevee_next_displacement):
         recover_subsurf_levels()
-
-def update_subdiv_tweak(self, context):
-    mat = get_active_material()
-    tree = self.id_data
-    yp = tree.yp
-    height_ch = self
-    objs = get_all_objects_with_same_materials(mat, True)
-
-    end_max_height = tree.nodes.get(height_ch.end_max_height)
-    end_max_height_tweak = tree.nodes.get(height_ch.end_max_height_tweak)
-    if end_max_height_tweak:
-        end_max_height_tweak.inputs[1].default_value = height_ch.subdiv_tweak
-
-    for obj in objs:
-        displace = get_displace_modifier(obj)
-        if displace and end_max_height:
-            displace.strength = height_ch.subdiv_tweak * end_max_height.outputs[0].default_value
-
-    if yp.enable_baked_outside:
-        frame = get_node(mat.node_tree, yp.baked_outside_frame)
-        disp = get_node(mat.node_tree, height_ch.baked_outside_disp_process, parent=frame)
-        if disp:
-            if is_greater_than_280():
-                disp.inputs['Scale'].default_value = get_displacement_max_height(height_ch) * height_ch.subdiv_tweak
-            else: disp.inputs[1].default_value = get_displacement_max_height(height_ch) * height_ch.subdiv_tweak
 
 def setup_subdiv_to_max_polys(obj, max_polys, subsurf=None):
     

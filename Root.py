@@ -1213,6 +1213,9 @@ class YMoveYPaintChannel(bpy.types.Operator):
         #setattr(ypui, 'show_channel_modifiers_' + str(index), temp_1)
         #setattr(ypui, 'show_channel_modifiers_' + str(new_index), temp_0)
 
+        # Remove props first
+        check_all_channel_ios(yp, reconnect=False, remove_props=True)
+
         # Get IO index
         swap_ch = yp.channels[new_index]
         io_index = channel.io_index
@@ -1331,6 +1334,9 @@ class YRemoveYPaintChannel(bpy.types.Operator):
                 if vcol:
                     vcols.remove(vcol)
                     
+        # Remove props first
+        check_all_channel_ios(yp, reconnect=False, remove_props=True)
+
         # Collapse the UI
         #setattr(ypui, 'show_channel_modifiers_' + str(channel_idx), False)
 
@@ -3005,6 +3011,12 @@ def update_channel_main_uv(self, context):
     if self.type == 'NORMAL':
         self.enable_smooth_bump = self.enable_smooth_bump
 
+def update_enable_height_tweak(self, context):
+    check_start_end_root_ch_nodes(self.id_data)
+
+    reconnect_yp_nodes(self.id_data)
+    rearrange_yp_nodes(self.id_data)
+
 # Prevent vcol name from being null
 def get_channel_vcol_name(self):
     name = self.get('bake_to_vcol_name', '') # May be null
@@ -3277,11 +3289,24 @@ class YPaintChannel(bpy.types.PropertyGroup):
     #        default=1, min=0, max=10, update=Bake.update_subdiv_on_off_level
     #        )
 
+    # Depcrecated
     subdiv_tweak : FloatProperty(
             name = 'Subdiv Tweak',
             description = 'Tweak displacement height',
-            default=1.0, min=0.0, max=1000.0, 
-            update=Bake.update_subdiv_tweak
+            default=1.0, min=-1000.0, max=1000.0
+            )
+
+    height_tweak : FloatProperty(
+            name = 'Height Tweak',
+            description = 'Multiply height value',
+            default=1.0, min=-1000.0, max=1000.0
+            )
+
+    enable_height_tweak : BoolProperty(
+            name = 'Subdiv Tweak',
+            description = 'Tweak displacement height',
+            default=False,
+            update=update_enable_height_tweak
             )
 
     subdiv_global_dicing : FloatProperty(subtype='PIXEL', default=1.0, min=0.5, max=1000,

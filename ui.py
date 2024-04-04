@@ -545,6 +545,31 @@ def draw_inbetween_modifier_mask_props(layer, source, layout):
     elif layer.modifier_type == 'RAMP':
         col.template_color_ramp(source, "color_ramp", expand=True)
 
+def draw_input_prop(layout, entity, prop_name):
+    root_tree = entity.id_data
+    yp = root_tree.yp
+
+    # Get layer
+    m = re.match(r'^yp\.layers\[(\d+)\].*', entity.path_from_id())
+    if m: 
+        layer_index = int(m.group(1))
+        layer = yp.layers[layer_index]
+    else: return
+
+    # Get layer node
+    layer_node = root_tree.nodes.get(layer.group_node)
+
+    # Get path without layer
+    path = entity.path_from_id()
+    path = path.replace('yp.layers[' + str(layer_index) + ']', '')
+    path += '.' + prop_name
+
+    # Try to get input from layer node
+    inp = layer_node.inputs.get(path)
+
+    if inp: layout.prop(inp, 'default_value', text='')
+    else: layout.prop(entity, prop_name, text='')
+
 def draw_mask_modifier_stack(layer, mask, layout, ui):
     ypui = bpy.context.window_manager.ypui
     tree = get_mask_tree(mask)
@@ -1022,6 +1047,23 @@ def draw_root_channels_ui(context, layout, node):
                     brow.prop(yp, 'enable_backface_always_up', text='')
 
                 brow = bcol.row(align=True)
+
+                brow.label(text='', icon_value=lib.get_icon('input'))
+                brow.label(text='Height Tweak:')
+
+                if not yp.use_baked:
+                    if channel.enable_height_tweak:
+                        end_linear = nodes.get(channel.end_linear)
+                        end_max_height_tweak = nodes.get(channel.end_max_height_tweak)
+                        if end_max_height_tweak:
+                            brow.prop(end_max_height_tweak.inputs['Height Tweak'], 'default_value', text='')
+                        else: brow.prop(channel, 'height_tweak', text='')
+
+                    brow.prop(channel, 'enable_height_tweak', text='')
+                else:
+                    brow.label(text='', icon_value=lib.custom_icons['texture'].icon_id)
+
+                brow = bcol.row(align=True)
                 brow.active = not yp.use_baked or ((not channel.enable_subdiv_setup or channel.subdiv_adaptive) and not yp.enable_baked_outside)
 
                 if chui.expand_parallax_settings:
@@ -1072,7 +1114,6 @@ def draw_root_channels_ui(context, layout, node):
                     brow.label(text='Main UV: ' + channel.main_uv)
 
                 brow = bcol.row(align=True)
-                #brow.label(text='', icon_value=lib.get_icon('input'))
 
                 if chui.expand_subdiv_settings:
                     icon_value = lib.custom_icons["uncollapsed_input"].icon_id
@@ -1107,10 +1148,6 @@ def draw_root_channels_ui(context, layout, node):
                         brow = bbcol.row(align=True)
                         brow.label(text='Max Polygons:')
                         brow.prop(channel, 'subdiv_on_max_polys', text='')
-
-                    brow = bbcol.row(align=True)
-                    brow.label(text='Height Tweak:')
-                    brow.prop(channel, 'subdiv_tweak', text='')
 
                     brow = bbcol.row(align=True)
                     brow.active = not channel.subdiv_adaptive
@@ -1347,30 +1384,43 @@ def draw_layer_source(context, layout, layer, layer_tree, source, image, vcol, i
                 row = rcol.row(align=True)
                 row.label(text='', icon='BLANK1')
                 bbox = row.box()
+                boxcol = bbox.column()
                 if image and (image.yia.is_image_atlas or image.yua.is_udim_atlas):
-                    #bbox.label(text="Transform vector with image atlas is not possible!")
+                    #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
                     if layer.type == 'IMAGE' and layer.texcoord_type in {'Generated', 'Object'}:
-                        splits = split_layout(bbox, 0.5, align=True)
+                        splits = split_layout(boxcol, 0.5, align=True)
                         splits.label(text='Projection Blend:')
                         splits.prop(layer, 'projection_blend', text='')
+                    rrow = boxcol.row()
+                    mapping = get_layer_mapping(layer)
+                    rrow.label(text='Offset:')
+                    rrow.prop(mapping, 'vector_type', text='')
+                    if is_greater_than_281():
+                        boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                        boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                        boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    else:
+                        boxcol.prop(mapping, 'translation', text='')
+                        boxcol.prop(mapping, 'rotation')
+                        boxcol.prop(mapping, 'scale')
 
-                    bbox.prop(layer, 'translation', text='Offset')
-                    bbox.prop(layer, 'rotation')
-                    bbox.prop(layer, 'scale')
+                    #boxcol.prop(layer, 'translation', text='')
+                    #boxcol.prop(layer, 'rotation')
+                    #boxcol.prop(layer, 'scale')
 
                     if yp.need_temp_uv_refresh:
-                        rrow = bbox.row(align=True)
+                        rrow = boxcol.row(align=True)
                         rrow.alert = True
                         rrow.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
 
                 # Blur row
-                rrow = bbox.row(align=True)
+                rrow = boxcol.row(align=True)
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if layer.enable_blur_vector:
-                    splits.prop(layer, 'blur_vector_factor', text='')
+                    draw_input_prop(splits, layer, 'blur_vector_factor')
                 rrow.prop(layer, 'enable_blur_vector', text='')
 
     layout.separator()
@@ -1485,7 +1535,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
         elif layer.type != 'BACKGROUND':
             row.prop(ch, 'blend_type', text='')
 
-        row.prop(ch, 'intensity_value', text='')
+        draw_input_prop(row, ch, 'intensity_value')
 
         row.context_pointer_set('parent', ch)
         row.context_pointer_set('layer', layer)
@@ -1533,8 +1583,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 brow.label(text='Transition Bump:')
 
                 if ch.enable_transition_bump and not chui.expand_transition_bump_settings:
-                    #brow.prop(ch, 'transition_bump_value', text='')
-                    brow.prop(ch, 'transition_bump_distance', text='')
+                    draw_input_prop(brow, ch, 'transition_bump_distance')
 
                 brow.context_pointer_set('parent', ch)
                 icon = 'PREFERENCES' if is_greater_than_280() else 'SCRIPTWIN'
@@ -1560,15 +1609,15 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     crow = cccol.row(align=True)
                     crow.label(text='Max Height:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_distance', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_distance')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Edge 1:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_value', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_value')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Edge 2:') #, icon_value=lib.get_icon('input'))
-                    crow.prop(ch, 'transition_bump_second_edge_value', text='')
+                    draw_input_prop(crow, ch, 'transition_bump_second_edge_value')
 
                     crow = cccol.row(align=True)
                     crow.label(text='Affected Masks:') #, icon_value=lib.get_icon('input'))
@@ -1588,20 +1637,18 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     #crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                     crow.active = not ch.transition_bump_flip
                     crow.label(text='Crease:') #, icon_value=lib.get_icon('input'))
-                    #if ch.transition_bump_crease:
-                    #    crow.prop(ch, 'transition_bump_crease_factor', text='')
                     crow.prop(ch, 'transition_bump_crease', text='')
 
                     if ch.transition_bump_crease:
                         crow = cccol.row(align=True)
                         crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                         crow.label(text='Crease Factor:') #, icon_value=lib.get_icon('input'))
-                        crow.prop(ch, 'transition_bump_crease_factor', text='')
+                        draw_input_prop(crow, ch, 'transition_bump_crease_factor')
 
                         crow = cccol.row(align=True)
                         crow.active = layer.type != 'BACKGROUND' and not ch.transition_bump_flip
                         crow.label(text='Crease Power:') #, icon_value=lib.get_icon('input'))
-                        crow.prop(ch, 'transition_bump_crease_power', text='')
+                        draw_input_prop(crow, ch, 'transition_bump_crease_power')
 
                         cccol.separator()
 
@@ -1620,7 +1667,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                             crow = cccol.row(align=True)
                             crow.label(text='Falloff Factor:') #, icon_value=lib.get_icon('input'))
-                            crow.prop(ch, 'transition_bump_falloff_emulated_curve_fac', text='')
+                            draw_input_prop(crow, ch, 'transition_bump_falloff_emulated_curve_fac')
                         
                         elif ch.transition_bump_falloff_type == 'CURVE' and ch.enable_transition_bump and ch.enable:
                             cccol.separator()
@@ -1655,9 +1702,9 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         # Solid color with transition bump always have bump distance value of 0
                         ssrow = srow.row(align=True)
                         ssrow.active = is_bump_distance_relevant(layer, ch)
-                        ssrow.prop(ch, 'bump_distance', text='')
+                        draw_input_prop(ssrow, ch, 'bump_distance')
                     else:
-                        srow.prop(ch, 'normal_strength', text='')
+                        draw_input_prop(srow, ch, 'normal_strength')
 
             #row.label(text='', icon='BLANK1')
 
@@ -1690,7 +1737,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                         brow.active = layer.type != 'COLOR' or not ch.enable_transition_bump
                         brow.label(text='Max Height:') #, icon_value=lib.get_icon('input'))
                         brow.active == is_bump_distance_relevant(layer, ch)
-                        brow.prop(ch, 'bump_distance', text='')
+                        draw_input_prop(brow, ch, 'bump_distance')
                         if root_ch.enable_smooth_bump:
                             brow = cccol.row(align=True)
                             brow.label(text='Smooth Multiplier:') 
@@ -1699,7 +1746,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     if ch.normal_map_type in {'NORMAL_MAP', 'BUMP_NORMAL_MAP'}: 
                         brow = cccol.row(align=True)
                         brow.label(text='Normal Strength:') #, icon_value=lib.get_icon('input'))
-                        brow.prop(ch, 'normal_strength', text='')
+                        draw_input_prop(brow, ch, 'normal_strength')
 
                 #brow = cccol.row(align=True)
                 #brow.label(text='Invert Backface Normal')
@@ -1726,7 +1773,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     row.prop(chui, 'expand_transition_ramp_settings', text='', emboss=False, icon_value=icon_value)
                 row.label(text='Transition Ramp:')
                 if ch.enable_transition_ramp and not chui.expand_transition_ramp_settings:
-                    row.prop(ch, 'transition_ramp_intensity_value', text='')
+                    draw_input_prop(row, ch, 'transition_ramp_intensity_value')
 
                 row.context_pointer_set('parent', ch)
                 icon = 'PREFERENCES' if is_greater_than_280() else 'SCRIPTWIN'
@@ -1743,7 +1790,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Intensity:')
-                    brow.prop(ch, 'transition_ramp_intensity_value', text='')
+                    draw_input_prop(brow, ch, 'transition_ramp_intensity_value')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Blend:')
@@ -1752,7 +1799,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                     brow = bcol.row(align=True)
                     brow.active = bump_ch_found
                     brow.label(text='Transition Factor:')
-                    brow.prop(ch, 'transition_bump_second_fac', text='')
+                    draw_input_prop(brow, ch, 'transition_bump_second_fac')
 
                     if tr_ramp.type == 'GROUP':
                         ramp = tr_ramp.node_tree.nodes.get('_RAMP')
@@ -1772,7 +1819,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 row.prop(chui, 'expand_transition_ao_settings', text='', emboss=False, icon_value=icon_value)
                 row.label(text='Transition AO:')
                 if ch.enable_transition_ao and not chui.expand_transition_ao_settings:
-                    row.prop(ch, 'transition_ao_intensity', text='')
+                    draw_input_prop(row, ch, 'transition_ao_intensity')
 
                 row.context_pointer_set('layer', layer)
                 row.context_pointer_set('parent', ch)
@@ -1790,7 +1837,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Intensity:')
-                    brow.prop(ch, 'transition_ao_intensity', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_intensity')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Blend:')
@@ -1798,16 +1845,15 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
 
                     brow = bcol.row(align=True)
                     brow.label(text='Power:')
-                    brow.prop(ch, 'transition_ao_power', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_power')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Color:')
-                    brow.prop(ch, 'transition_ao_color', text='')
+                    draw_input_prop(brow, ch, 'transition_ao_color')
 
                     brow = bcol.row(align=True)
                     brow.label(text='Inside:')
-                    brow.prop(ch, 'transition_ao_inside_intensity', text='')
-                    #row.label(text='', icon='BLANK1')
+                    draw_input_prop(brow, ch, 'transition_ao_inside_intensity')
 
             # Transition Bump Intensity
             if showed_bump_ch_found:
@@ -1815,7 +1861,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 row.active = bump_ch_found
                 row.label(text='', icon_value=lib.get_icon('input'))
                 row.label(text='Transition Factor')
-                row.prop(ch, 'transition_bump_fac', text='')
+                draw_input_prop(row, ch, 'transition_bump_fac')
 
             extra_separator = True
 
@@ -1864,8 +1910,8 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
             row.context_pointer_set('parent', ch)
             if ch.override and ch.override_type == 'DEFAULT':
                 if root_ch.type == 'VALUE':
-                    row.prop(ch, 'override_value', text='')
-                else: row.prop(ch, 'override_color', text='') #, icon='COLOR')
+                    draw_input_prop(row, ch, 'override_value')
+                else: draw_input_prop(row, ch, 'override_color')
             row.prop(ch, 'override', text='')
 
             icon = 'PREFERENCES' if is_greater_than_280() else 'SCRIPTWIN'
@@ -1921,7 +1967,7 @@ def draw_layer_channels(context, layout, layer, layer_tree, image):
                 #if root_ch.type == 'VALUE':
                 #    row.prop(ch, 'override_value', text='')
                 #else: 
-                row.prop(ch, 'override_1_color', text='') #, icon='COLOR')
+                draw_input_prop(row, ch, 'override_1_color')
 
             if ch.enable and ch.override_1_type == 'IMAGE':
                 row.prop(ch, 'active_edit_1', text='', toggle=True, icon_value=lib.get_icon('image'))
@@ -2225,32 +2271,45 @@ def draw_layer_masks(context, layout, layer):
                 rrow.label(text='', icon='BLANK1')
                 rbox = rrow.box()
                 rbox.active = not mask.use_baked
+                boxcol = rbox.column()
                 if mask_image and (mask_image.yia.is_image_atlas or mask_image.yua.is_udim_atlas):
-                    #rbox.label(text="Transform vector with image atlas is not possible!")
+                    #boxcol.label(text="Transform vector with image atlas is not possible!")
                     pass
                 else:
                     if mask.type == 'IMAGE' and mask.texcoord_type in {'Generated', 'Object'}:
-                        splits = split_layout(rbox, 0.5, align=True)
+                        splits = split_layout(boxcol, 0.5, align=True)
                         splits.label(text='Projection Blend:')
                         splits.prop(mask_src, 'projection_blend', text='')
+                    rrow = boxcol.row()
+                    mapping = get_mask_mapping(mask)
+                    rrow.label(text='Offset:')
+                    rrow.prop(mapping, 'vector_type', text='')
+                    if is_greater_than_281():
+                        boxcol.prop(mapping.inputs[1], 'default_value', text='')
+                        boxcol.prop(mapping.inputs[2], 'default_value', text='Rotation')
+                        boxcol.prop(mapping.inputs[3], 'default_value', text='Scale')
+                    else:
+                        boxcol.prop(mapping, 'translation', text='')
+                        boxcol.prop(mapping, 'rotation')
+                        boxcol.prop(mapping, 'scale')
 
-                    rbox.prop(mask, 'translation', text='Offset')
-                    rbox.prop(mask, 'rotation')
-                    rbox.prop(mask, 'scale')
+                    #boxcol.prop(mask, 'translation', text='Offset')
+                    #boxcol.prop(mask, 'rotation')
+                    #boxcol.prop(mask, 'scale')
 
                     if mask.type == 'IMAGE' and mask.active_edit and (
                             yp.need_temp_uv_refresh
                             ):
-                        rrow = rbox.row(align=True)
+                        rrow = boxcol.row(align=True)
                         rrow.alert = True
                         rrow.operator('node.y_refresh_transformed_uv', icon='FILE_REFRESH', text='Refresh UV')
             
                 # Blur row
-                rrow = rbox.row(align=True)
+                rrow = boxcol.row(align=True)
                 splits = split_layout(rrow, 0.3)
                 splits.label(text='Blur:')
                 if mask.enable_blur_vector:
-                    splits.prop(mask, 'blur_vector_factor', text='')
+                    draw_input_prop(splits, mask, 'blur_vector_factor')
                 rrow.prop(mask, 'enable_blur_vector', text='')
 
         draw_mask_modifier_stack(layer, mask, rrcol, maskui)
@@ -2259,7 +2318,7 @@ def draw_layer_masks(context, layout, layer):
         rrow.label(text='', icon_value=lib.get_icon('blend'))
         rrow.label(text='Blend:')
         rrow.prop(mask, 'blend_type', text='')
-        rrow.prop(mask, 'intensity_value', text='')
+        draw_input_prop(rrow, mask, 'intensity_value')
 
         # Mask Channels row
         rrow = rrcol.row(align=True)
