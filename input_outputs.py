@@ -113,6 +113,14 @@ def create_output(tree, name, socket_type, valid_outputs, index, dirty=False, de
 
     return dirty
 
+def is_normal_input_connected(root_normal_ch):
+    # NOTE: Assuming that the active node is using the input tree
+    node = get_active_ypaint_node()
+    if not node: return False
+    
+    normal_inp = node.inputs.get(root_normal_ch.name)
+    return normal_inp and len(normal_inp.links) > 0
+
 def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
 
     yp = group_tree.yp
@@ -177,8 +185,7 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                 max_height = get_displacement_max_height(channel)
 
                 # Add end linear for converting displacement map to grayscale
-                # NOTE: Since normal input socket can be connected to outside nodes, normal overlay should always be available
-                if True or any_layers_using_normal_map(channel):
+                if is_normal_input_connected(channel) or any_layers_using_normal_map(channel):
                     if channel.enable_smooth_bump:
                         if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
                             lib_name = lib.FINE_BUMP_PROCESS_SUBDIV_ON
@@ -188,10 +195,14 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                             lib_name = lib.BUMP_PROCESS_SUBDIV_ON
                         else: lib_name = lib.BUMP_PROCESS
                 else:
-                    # Unused for now
                     if channel.enable_smooth_bump:
-                        lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY
-                    else: lib_name = lib.BUMP_PROCESS_NO_OVERLAY
+                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
+                            lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
+                        else: lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY
+                    else:
+                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
+                            lib_name = lib.BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
+                        else: lib_name = lib.BUMP_PROCESS_NO_OVERLAY
 
                 end_linear = replace_new_node(group_tree, channel, 'end_linear', 'ShaderNodeGroup', 'Bump Process',
                         lib_name, hard_replace=True)
