@@ -2563,6 +2563,7 @@ def update_enable_baked_outside(self, context):
     node = get_active_ypaint_node()
     mat = get_active_material()
     scene = context.scene
+    ypup = get_user_preferences()
 
     mtree = mat.node_tree
 
@@ -2755,7 +2756,7 @@ def update_enable_baked_outside(self, context):
                         mtree.links.new(tex_disp.outputs[0], disp.inputs[0])
 
                         output_mat = [n for n in mtree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
-                        if output_mat and ch.enable_subdiv_setup and ch.subdiv_adaptive:
+                        if output_mat and ch.enable_subdiv_setup and (ch.subdiv_adaptive or ypup.eevee_next_displacement):
                             mtree.links.new(disp.outputs[0], output_mat[0].inputs['Displacement'])
 
                     if ch.enable_bake_to_vcol:
@@ -3096,7 +3097,7 @@ def check_subdiv_setup(height_ch):
         baked_outside_normal_overlay = get_node(mtree, height_ch.baked_outside_normal_overlay, parent=frame)
 
         if height_ch.enable_subdiv_setup:
-            if height_ch.subdiv_adaptive:
+            if height_ch.subdiv_adaptive or ypup.eevee_next_displacement:
                 if disp:
                     create_link(mtree, disp.outputs[0], output_mat.inputs['Displacement'])
                 if baked_outside and norm:
@@ -3110,7 +3111,7 @@ def check_subdiv_setup(height_ch):
             if baked_outside and norm:
                 create_link(mtree, baked_outside.outputs[0], norm.inputs[1])
         
-        if norm and not baked_outside_normal_overlay and height_ch.enable_subdiv_setup and not height_ch.subdiv_adaptive:
+        if norm and not baked_outside_normal_overlay and height_ch.enable_subdiv_setup and (not height_ch.subdiv_adaptive and not ypup.eevee_next_displacement):
             for l in norm.outputs[0].links:
                 mtree.links.remove(l)
         elif norm:
