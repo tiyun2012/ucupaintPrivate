@@ -1569,8 +1569,13 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
             ### Max Height
 
             # Create target image
-            mh_img = bpy.data.images.new(name='____MAXHEIGHT_TEMP', width=1, height=1, 
-                    alpha=False, tiled=False, float_buffer=True)
+            if UDIM.is_udim_supported():
+                mh_img = bpy.data.images.new(name='____MAXHEIGHT_TEMP', width=1, height=1, 
+                        alpha=False, tiled=False, float_buffer=True)
+            else:
+                mh_img = bpy.data.images.new(name='____MAXHEIGHT_TEMP', width=1, height=1, 
+                        alpha=False, float_buffer=True)
+
             mh_img.colorspace_settings.name = 'Non-Color'
             tex.image = mh_img
 
