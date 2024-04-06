@@ -893,8 +893,7 @@ def draw_root_channels_ui(context, layout, node):
                     row = mcol.row(align=True)
                     row.alert = True
                     row.operator('node.y_optimize_normal_process', icon='ERROR', text='Fix Normal Input')
-
-                if is_height_input_unconnected_but_has_start_process(node, root_normal_ch):
+                elif is_height_input_unconnected_but_has_start_process(node, root_normal_ch):
                     row = mcol.row(align=True)
                     row.alert = True
                     row.operator('node.y_optimize_normal_process', icon='ERROR', text='Fix Height Process')
