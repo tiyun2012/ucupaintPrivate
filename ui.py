@@ -894,6 +894,15 @@ def draw_root_channels_ui(context, layout, node):
                     row.alert = True
                     row.operator('node.y_optimize_normal_process', icon='ERROR', text='Fix Normal Input')
 
+                if is_height_input_unconnected_but_has_start_process(node, root_normal_ch):
+                    row = mcol.row(align=True)
+                    row.alert = True
+                    row.operator('node.y_optimize_normal_process', icon='ERROR', text='Fix Height Process')
+                elif is_height_input_connected_but_has_no_start_process(node, root_normal_ch):
+                    row = mcol.row(align=True)
+                    row.alert = True
+                    row.operator('node.y_optimize_normal_process', icon='ERROR', text='Fix Height Input')
+
             if is_output_unconnected(node, output_index, channel):
                 row = mcol.row(align=True)
                 row.alert = True
@@ -3315,6 +3324,26 @@ def is_normal_input_connected_but_has_wrong_normal_process(node, root_ch):
     end_linear = node.node_tree.nodes.get(root_ch.end_linear)
     if ((connected or any_layers_using_normal_map(root_ch))
         and end_linear and end_linear.type == 'GROUP' and end_linear.node_tree and 'No Overlay' in end_linear.node_tree.name):
+        return True
+    return False
+
+def is_height_input_connected_but_has_no_start_process(node, root_ch):
+    yp = node.node_tree.yp
+    if root_ch.type != 'NORMAL': return False
+    index = root_ch.io_index + 1
+    connected = len(node.inputs[index].links) > 0
+    start_bump_process = node.node_tree.nodes.get(root_ch.start_bump_process)
+    if connected and not start_bump_process:
+        return True
+    return False
+
+def is_height_input_unconnected_but_has_start_process(node, root_ch):
+    yp = node.node_tree.yp
+    if root_ch.type != 'NORMAL': return False
+    index = root_ch.io_index + 1
+    unconnected = len(node.inputs[index].links) == 0
+    start_bump_process = node.node_tree.nodes.get(root_ch.start_bump_process)
+    if unconnected and start_bump_process:
         return True
     return False
 

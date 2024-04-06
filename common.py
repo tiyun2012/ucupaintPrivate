@@ -2405,11 +2405,11 @@ def get_output_index(root_ch):
     output_index = root_ch.io_index
 
     # Check if there's normal channel above current channel because it has extra output
-    for ch in yp.channels:
-        if ch.type == 'NORMAL' and ch != root_ch:
-            output_index += 1
-        if ch == root_ch:
-            break
+    #for ch in yp.channels:
+    #    if ch.type == 'NORMAL' and ch != root_ch:
+    #        output_index += 1
+    #    if ch == root_ch:
+    #        break
 
     return output_index
 
@@ -4468,7 +4468,8 @@ def is_tangent_process_needed(yp, uv_name):
         if height_root_ch.main_uv == uv_name and (
                 #(height_root_ch.enable_smooth_bump and any_layers_using_bump_map(height_root_ch)) or
                 #(not height_root_ch.enable_smooth_bump and any_layers_using_bump_map(height_root_ch) and any_layers_using_normal_map(height_root_ch))
-                any_layers_using_bump_map(height_root_ch)
+                any_layers_using_bump_map(height_root_ch) or
+                (is_normal_height_input_connected(height_root_ch) and height_root_ch.enable_smooth_bump)
                 ):
             return True
 
@@ -4970,6 +4971,15 @@ def get_node(tree, name, parent=None):
         return None
 
     return node
+
+def is_normal_height_input_connected(root_normal_ch):
+    # NOTE: Assuming that the active node is using the input tree
+    node = get_active_ypaint_node()
+    if not node: return False
+
+    io_height_name = root_normal_ch.name + io_suffix['HEIGHT']
+    height_inp = node.inputs[io_height_name]
+    return height_inp and len(height_inp.links) > 0
 
 def is_normal_input_connected(root_normal_ch):
     # NOTE: Assuming that the active node is using the input tree

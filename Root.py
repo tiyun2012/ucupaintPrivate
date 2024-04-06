@@ -54,6 +54,11 @@ def set_input_default_value(group_node, channel, custom_value=None):
         #group_node.inputs[channel.io_index].default_value = (999,999,999)
         group_node.inputs[channel.name].default_value = (999,999,999)
 
+        # Update max height default value
+        io_name = channel.name + io_suffix['MAX_HEIGHT']
+        inp = get_tree_input_by_name(group_node.node_tree, io_name)
+        group_node.inputs[io_name].default_value = inp.default_value
+
     if channel.enable_alpha:
         #group_node.inputs[channel.io_index+1].default_value = 1.0
         group_node.inputs[channel.name + io_suffix['ALPHA']].default_value = 1.0
@@ -1447,6 +1452,8 @@ class YRemoveYPaintChannel(bpy.types.Operator):
         remove_node(group_tree, channel, 'end_max_height')
         remove_node(group_tree, channel, 'end_max_height_tweak')
         remove_node(group_tree, channel, 'start_normal_filter')
+        remove_node(group_tree, channel, 'start_bump_process')
+        remove_node(group_tree, channel, 'start_bump_packs')
         remove_node(group_tree, channel, 'baked')
         remove_node(group_tree, channel, 'baked_vcol')
         remove_node(group_tree, channel, 'baked_normal')
@@ -3336,6 +3343,8 @@ class YPaintChannel(bpy.types.PropertyGroup):
     end_linear : StringProperty(default='')
     clamp : StringProperty(default='')
     start_normal_filter : StringProperty(default='')
+    start_bump_process : StringProperty(default='')
+    start_bump_packs : StringProperty(default='')
     bump_process : StringProperty(default='')
     end_max_height : StringProperty(default='')
     end_max_height_tweak : StringProperty(default='')

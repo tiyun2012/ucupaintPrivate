@@ -1072,6 +1072,8 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
         end_max_height = nodes.get(ch.end_max_height)
         end_max_height_tweak = nodes.get(ch.end_max_height_tweak)
         start_normal_filter = nodes.get(ch.start_normal_filter)
+        start_bump_process = nodes.get(ch.start_bump_process)
+        start_bump_packs = nodes.get(ch.start_bump_packs)
 
         io_name = ch.name
         io_alpha_name = ch.name + io_suffix['ALPHA']
@@ -1093,15 +1095,38 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
 
         if ch.type == 'NORMAL':
             height = start.outputs[io_height_name]
+            max_height = start.outputs[io_max_height_name]
+
             if ch.enable_smooth_bump:
-                height_ons = start.outputs[io_height_name]
-                height_ew = start.outputs[io_height_name]
-                #height = None
+                # Start Bump
+                if start_bump_process and start_bump_packs:
+
+                    create_link(tree, height, start_bump_process.inputs[0])
+                    create_link(tree, max_height, start_bump_process.inputs[3])
+
+                    if tangent and bitangent:
+                        create_link(tree, tangent, start_bump_process.inputs['Tangent'])
+                        create_link(tree, bitangent, start_bump_process.inputs['Bitangent'])
+
+                    create_link(tree, height, start_bump_packs.inputs[0])
+                    create_link(tree, start_bump_process.outputs[0], start_bump_packs.inputs[1])
+                    create_link(tree, start_bump_process.outputs[1], start_bump_packs.inputs[2])
+                    create_link(tree, start_bump_process.outputs[2], start_bump_packs.inputs[3])
+                    create_link(tree, start_bump_process.outputs[3], start_bump_packs.inputs[4])
+
+                    height_ons = start_bump_packs.outputs['ONS']
+                    height_ew = start_bump_packs.outputs['EW']
+
+                else:
+                    height_ons = start.outputs[io_height_name]
+                    height_ew = start.outputs[io_height_name]
             else:
-                #height = start.outputs[io_height_name]
+                if start_bump_process:
+                    height = create_link(tree, height, start_bump_process.inputs[0])[0]
+                    create_link(tree, max_height, start_bump_process.inputs[1])
+
                 height_ons = None
                 height_ew = None
-            max_height = start.outputs[io_height_name]
         else: 
             height = None
             height_ons = None

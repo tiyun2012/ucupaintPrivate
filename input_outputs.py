@@ -184,9 +184,23 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                 start_normal_filter = new_node(group_tree, channel, 'start_normal_filter', 'ShaderNodeGroup', 'Start Normal Filter')
                 start_normal_filter.node_tree = get_node_tree_lib(lib.CHECK_INPUT_NORMAL)
 
+            if is_normal_height_input_connected(channel):
+                if channel.enable_smooth_bump:
+                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                                                            'ShaderNodeGroup', 'Start Bump Process', lib.NEIGHBOR_FAKE, hard_replace=True)
+                    start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
+                else:
+                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                                                            'ShaderNodeMath', 'Start Bump Process')
+                    start_bump_process.operation = 'MULTIPLY'
+                    remove_node(group_tree, channel, 'start_bump_packs')
+            else:
+                remove_node(group_tree, channel, 'start_bump_process')
+                remove_node(group_tree, channel, 'start_bump_packs')
+
             lib_name = ''
 
-            if any_layers_using_channel(channel) and any_layers_using_bump_map(channel):
+            if (any_layers_using_channel(channel) and any_layers_using_bump_map(channel)) or is_normal_height_input_connected(channel):
 
                 # Add end linear for converting displacement map to grayscale
                 if is_normal_input_connected(channel) or any_layers_using_normal_map(channel):
@@ -303,7 +317,7 @@ def check_all_channel_ios(yp, reconnect=True, specific_layer=None, remove_props=
             name = ch.name + io_suffix['HEIGHT']
 
             create_input(group_tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, 
-                    min_value = 0.0, max_value = 1.0, default_value = 0.5)
+                    min_value = 0.0, max_value = 1.0, default_value = 0.0, hide_value=True)
 
             create_output(group_tree, name, 'NodeSocketFloat', valid_outputs, output_index)
 
@@ -311,8 +325,11 @@ def check_all_channel_ios(yp, reconnect=True, specific_layer=None, remove_props=
             output_index += 1
 
             name = ch.name + io_suffix['MAX_HEIGHT']
+
+            create_input(group_tree, name, 'NodeSocketFloat', valid_inputs, input_index, default_value=0.1)
             create_output(group_tree, name, 'NodeSocketFloat', valid_outputs, output_index)
 
+            input_index += 1
             output_index += 1
 
     # Check start and end nodes

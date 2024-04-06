@@ -1745,6 +1745,12 @@ def rearrange_yp_nodes(group_tree):
         if check_set_node_loc(group_tree, channel.start_normal_filter, loc):
             loc.y -= 120
 
+        if check_set_node_loc(group_tree, channel.start_bump_packs, loc):
+            loc.y -= 250
+
+        if check_set_node_loc(group_tree, channel.start_bump_process, loc):
+            loc.y -= 250
+
         if i == num_channels-1:
             if check_set_node_loc(group_tree, ONE_VALUE, loc):
                 loc.y -= 90
