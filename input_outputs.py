@@ -763,6 +763,26 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
                     output_index += 1
 
+                name = root_ch.name + io_suffix['HEIGHT_FLAT']
+                
+                if channel_enabled or force_normal_input:
+                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                if channel_enabled:
+                    dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
+                    output_index += 1
+
+                name = root_ch.name + io_suffix['HEIGHT_FLAT'] + io_suffix['ALPHA']
+                
+                if channel_enabled or force_normal_input:
+                    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
+                    input_index += 1
+
+                if channel_enabled:
+                    dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
+                    output_index += 1
+
                 if has_parent:
 
                     name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA']
