@@ -52,6 +52,7 @@ def update_yp_ui():
             ypui.channel_ui.expand_parallax_settings = channel.expand_parallax_settings
             ypui.channel_ui.expand_alpha_settings = channel.expand_alpha_settings
             ypui.channel_ui.expand_bake_to_vcol_settings = channel.expand_bake_to_vcol_settings
+            ypui.channel_ui.expand_input_bump_settings = channel.expand_input_bump_settings
             ypui.channel_ui.expand_smooth_bump_settings = channel.expand_smooth_bump_settings
             ypui.channel_ui.modifiers.clear()
 
@@ -1023,6 +1024,30 @@ def draw_root_channels_ui(context, layout, node):
             #    brow.label(text='', icon='BLANK1')
 
             if channel.type == 'NORMAL':
+                if len(node.inputs[channel.io_index+1].links)>0:
+
+                    brow = bcol.row(align=True)
+                    if chui.expand_input_bump_settings:
+                        icon_value = lib.custom_icons["uncollapsed_input"].icon_id
+                    else: icon_value = lib.custom_icons["collapsed_input"].icon_id
+                    brow.prop(chui, 'expand_input_bump_settings', text='', emboss=False, icon_value=icon_value)
+
+                    brow.label(text='Input Max Height:')
+                    brow.prop(node.inputs[channel.io_index+2], 'default_value', text='')
+
+                    if chui.expand_input_bump_settings:
+                        brow = bcol.row(align=True)
+                        brow.label(text='', icon='BLANK1')
+                        bbox = brow.box()
+                        bbcol = bbox.column() #align=True)
+
+                        brow = bbcol.row(align=True)
+                        brow.label(text='Input Bump Midlevel:')
+
+                        start_bump_process = nodes.get(channel.start_bump_process)
+                        if start_bump_process and 'Midlevel' in start_bump_process.inputs:
+                            brow.prop(start_bump_process.inputs['Midlevel'], 'default_value', text='')
+
                 brow = bcol.row(align=True)
                 #if channel.enable_smooth_bump:
                 if chui.expand_smooth_bump_settings:
@@ -5023,6 +5048,8 @@ def update_channel_ui(self, context):
         ch.expand_alpha_settings = self.expand_alpha_settings
     if hasattr(ch, 'expand_bake_to_vcol_settings'):
         ch.expand_bake_to_vcol_settings = self.expand_bake_to_vcol_settings
+    if hasattr(ch, 'expand_input_bump_settings'):
+        ch.expand_input_bump_settings = self.expand_input_bump_settings
     if hasattr(ch, 'expand_smooth_bump_settings'):
         ch.expand_smooth_bump_settings = self.expand_smooth_bump_settings
     if hasattr(ch, 'expand_intensity_settings'):
@@ -5110,6 +5137,7 @@ class YChannelUI(bpy.types.PropertyGroup):
     expand_parallax_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_alpha_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_bake_to_vcol_settings : BoolProperty(default=False, update=update_channel_ui)
+    expand_input_bump_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_smooth_bump_settings : BoolProperty(default=False, update=update_channel_ui)
     expand_input_settings : BoolProperty(default=True, update=update_channel_ui)
     expand_source : BoolProperty(default=True, update=update_channel_ui)

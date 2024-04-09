@@ -3377,6 +3377,7 @@ class YPaintChannel(bpy.types.PropertyGroup):
     expand_parallax_settings : BoolProperty(default=False)
     expand_alpha_settings : BoolProperty(default=False)
     expand_bake_to_vcol_settings : BoolProperty(default=False)
+    expand_input_bump_settings : BoolProperty(default=False)
     expand_smooth_bump_settings : BoolProperty(default=False)
 
     # Connection related

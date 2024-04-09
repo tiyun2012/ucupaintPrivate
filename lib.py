@@ -174,6 +174,7 @@ EMULATED_CURVE_SMOOTH_FLIP = '~yPL Emulated Curve Smooth Flip'
 FALLOFF_CURVE = '~yPL Falloff Curve'
 FALLOFF_CURVE_SMOOTH = '~yPL Falloff Curve Smooth'
 
+START_BUMP_PROCESS = '~yPL Start Bump Process'
 FINE_BUMP_PROCESS = '~yPL Fine Bump Process'
 FINE_BUMP_PROCESS_NO_OVERLAY = '~yPL Fine Bump Process No Overlay'
 FINE_BUMP_PROCESS_SUBDIV_ON = '~yPL Fine Bump Process Subdiv On'

@@ -191,8 +191,7 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                     start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
                 else:
                     start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
-                                                            'ShaderNodeMath', 'Start Bump Process')
-                    start_bump_process.operation = 'MULTIPLY'
+                                                            'ShaderNodeGroup', 'Start Bump Process', lib.START_BUMP_PROCESS, hard_replace=True)
                     remove_node(group_tree, channel, 'start_bump_packs')
             else:
                 remove_node(group_tree, channel, 'start_bump_process')
