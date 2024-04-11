@@ -1448,6 +1448,8 @@ class YRemoveYPaintChannel(bpy.types.Operator):
 
         remove_node(group_tree, channel, 'start_linear')
         remove_node(group_tree, channel, 'end_linear')
+        remove_node(group_tree, channel, 'end_normal_overlay')
+        remove_node(group_tree, channel, 'end_normal_engine_filter')
         remove_node(group_tree, channel, 'end_backface')
         remove_node(group_tree, channel, 'end_max_height')
         remove_node(group_tree, channel, 'end_max_height_tweak')
@@ -1859,10 +1861,11 @@ class YOptimizeNormalProcess(bpy.types.Operator):
         if not root_normal_ch:
             return {'CANCELLED'}
 
-        check_start_end_root_ch_nodes(group_tree, specific_channel=root_normal_ch)
+        check_all_channel_ios(yp, reconnect=True)
+        #check_start_end_root_ch_nodes(group_tree, specific_channel=root_normal_ch)
 
-        reconnect_yp_nodes(group_tree)
-        rearrange_yp_nodes(group_tree)
+        #reconnect_yp_nodes(group_tree)
+        #rearrange_yp_nodes(group_tree)
 
         return {'FINISHED'}
 
@@ -3341,6 +3344,8 @@ class YPaintChannel(bpy.types.PropertyGroup):
     # Node names
     start_linear : StringProperty(default='')
     end_linear : StringProperty(default='')
+    end_normal_overlay : StringProperty(default='')
+    end_normal_engine_filter : StringProperty(default='')
     clamp : StringProperty(default='')
     start_normal_filter : StringProperty(default='')
     start_bump_process : StringProperty(default='')

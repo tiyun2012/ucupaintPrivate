@@ -185,44 +185,50 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                 start_normal_filter.node_tree = get_node_tree_lib(lib.CHECK_INPUT_NORMAL)
 
             if is_normal_height_input_connected(channel):
-                if channel.enable_smooth_bump:
-                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
-                                                            'ShaderNodeGroup', 'Start Bump Process', lib.NEIGHBOR_FAKE, hard_replace=True)
-                    start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
-                else:
-                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
-                                                            'ShaderNodeGroup', 'Start Bump Process', lib.START_BUMP_PROCESS, hard_replace=True)
-                    remove_node(group_tree, channel, 'start_bump_packs')
+                #if channel.enable_smooth_bump:
+                #    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                #                                            'ShaderNodeGroup', 'Start Bump Process', lib.NEIGHBOR_FAKE, hard_replace=True)
+                #    start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
+                #else:
+                start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                    'ShaderNodeGroup', 'Start Bump Process', lib.START_BUMP_PROCESS, hard_replace=True)
+                #remove_node(group_tree, channel, 'start_bump_packs')
             else:
                 remove_node(group_tree, channel, 'start_bump_process')
-                remove_node(group_tree, channel, 'start_bump_packs')
+                #remove_node(group_tree, channel, 'start_bump_packs')
 
             lib_name = ''
 
             if (any_layers_using_channel(channel) and any_layers_using_bump_map(channel)) or is_normal_height_input_connected(channel):
 
-                # Add end linear for converting displacement map to grayscale
+                # Add normal overlay node if there's normal map or normal input is connected
                 if is_normal_input_connected(channel) or any_layers_using_normal_map(channel):
-                    if channel.enable_smooth_bump:
-                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
-                            lib_name = lib.FINE_BUMP_PROCESS_SUBDIV_ON
-                        else: lib_name = lib.FINE_BUMP_PROCESS
-                    else: 
-                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
-                            lib_name = lib.BUMP_PROCESS_SUBDIV_ON
-                        else: lib_name = lib.BUMP_PROCESS
+                    end_normal_overlay = replace_new_node(
+                            group_tree, channel, 'end_normal_overlay', 'ShaderNodeGroup', 'End Normal Overlay', lib.OVERLAY_NORMAL)
                 else:
-                    if channel.enable_smooth_bump:
-                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
-                            lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
-                        else: lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY
-                    else:
-                        if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
-                            lib_name = lib.BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
-                        else: lib_name = lib.BUMP_PROCESS_NO_OVERLAY
+                    remove_node(group_tree, channel, 'end_normal_overlay')
+
+                # Add end linear for converting displacement map to grayscale
+                if channel.enable_smooth_bump:
+                    #if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
+                    #    lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
+                    #else: 
+                    lib_name = lib.FINE_BUMP_PROCESS_NO_OVERLAY
+                else:
+                    if channel.enable_subdiv_setup and ypup.eevee_next_displacement:
+                        lib_name = lib.BUMP_PROCESS_NO_OVERLAY_SUBDIV_ON
+                    else: lib_name = lib.BUMP_PROCESS_NO_OVERLAY
 
                 end_linear = replace_new_node(group_tree, channel, 'end_linear', 'ShaderNodeGroup', 'Bump Process',
                         lib_name, hard_replace=True)
+
+                # Engine filter is needed if smooth bump is on and subdiv is on
+                if channel.enable_smooth_bump and channel.enable_subdiv_setup and ypup.eevee_next_displacement:
+                    lib_name = lib.ENGINE_FILTER if is_greater_than_280() else lib.ENGINE_FILTER_LEGACY
+                    end_normal_engine_filter = replace_new_node(
+                            group_tree, channel, 'end_normal_engine_filter', 'ShaderNodeGroup', 'End Normal Overlay', lib_name)
+                else:
+                    remove_node(group_tree, channel, 'end_normal_engine_filter')
 
                 # Create a node to do height tweak
                 if channel.enable_height_tweak:
@@ -763,27 +769,9 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
                     output_index += 1
 
-                name = root_ch.name + io_suffix['HEIGHT_FLAT']
-                
-                if channel_enabled or force_normal_input:
-                    dirty = create_input(tree, name, 'NodeSocketVector', valid_inputs, input_index, dirty)
-                    input_index += 1
+                print('CONNECT', is_normal_height_input_connected(root_ch))
 
-                if channel_enabled:
-                    dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
-                    output_index += 1
-
-                name = root_ch.name + io_suffix['HEIGHT_FLAT'] + io_suffix['ALPHA']
-                
-                if channel_enabled or force_normal_input:
-                    dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
-                    input_index += 1
-
-                if channel_enabled:
-                    dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                    output_index += 1
-
-                if has_parent:
+                if has_parent or is_normal_height_input_connected(root_ch):
 
                     name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA']
 

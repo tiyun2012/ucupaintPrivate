@@ -1086,6 +1086,8 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
         io_height_ons_name = ch.name + io_suffix['HEIGHT_ONS']
         io_height_ew_name = ch.name + io_suffix['HEIGHT_EW']
         io_max_height_name = ch.name + io_suffix['MAX_HEIGHT']
+        io_height_ons_alpha_name = ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA']
+        io_height_ew_alpha_name = ch.name + io_suffix['HEIGHT_EW'] + io_suffix['ALPHA']
 
         rgb = start.outputs[io_name]
         #if ch.enable_alpha and ch.type == 'RGB':
@@ -1093,37 +1095,45 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
             alpha = start.outputs[io_alpha_name]
         else: alpha = get_essential_node(tree, ONE_VALUE)[0]
 
+        height_ons_alpha = None
+        height_ew_alpha = None
+
         if ch.type == 'NORMAL':
             height = start.outputs[io_height_name]
             max_height = start.outputs[io_max_height_name]
 
+            if start_bump_process:
+                height = create_link(tree, height, start_bump_process.inputs[0])[0]
+                create_link(tree, max_height, start_bump_process.inputs[1])
+
             if ch.enable_smooth_bump:
                 # Start Bump
-                if start_bump_process and start_bump_packs:
+                #if start_bump_process and start_bump_packs:
 
-                    create_link(tree, height, start_bump_process.inputs[0])
-                    create_link(tree, max_height, start_bump_process.inputs[3])
+                #    create_link(tree, height, start_bump_process.inputs[0])
+                #    create_link(tree, max_height, start_bump_process.inputs[3])
 
-                    if tangent and bitangent:
-                        create_link(tree, tangent, start_bump_process.inputs['Tangent'])
-                        create_link(tree, bitangent, start_bump_process.inputs['Bitangent'])
+                #    if tangent and bitangent:
+                #        create_link(tree, tangent, start_bump_process.inputs['Tangent'])
+                #        create_link(tree, bitangent, start_bump_process.inputs['Bitangent'])
 
-                    create_link(tree, height, start_bump_packs.inputs[0])
-                    create_link(tree, start_bump_process.outputs[0], start_bump_packs.inputs[1])
-                    create_link(tree, start_bump_process.outputs[1], start_bump_packs.inputs[2])
-                    create_link(tree, start_bump_process.outputs[2], start_bump_packs.inputs[3])
-                    create_link(tree, start_bump_process.outputs[3], start_bump_packs.inputs[4])
+                #    create_link(tree, height, start_bump_packs.inputs[0])
+                #    create_link(tree, start_bump_process.outputs[0], start_bump_packs.inputs[1])
+                #    create_link(tree, start_bump_process.outputs[1], start_bump_packs.inputs[2])
+                #    create_link(tree, start_bump_process.outputs[2], start_bump_packs.inputs[3])
+                #    create_link(tree, start_bump_process.outputs[3], start_bump_packs.inputs[4])
 
-                    height_ons = start_bump_packs.outputs['ONS']
-                    height_ew = start_bump_packs.outputs['EW']
+                #    height_ons = start_bump_packs.outputs['ONS']
+                #    height_ew = start_bump_packs.outputs['EW']
 
-                else:
-                    height_ons = start.outputs[io_height_name]
-                    height_ew = start.outputs[io_height_name]
+                if is_normal_height_input_connected(ch):
+                    height_ons_alpha = get_essential_node(tree, ZERO_VALUE)[0]
+                    height_ew_alpha = get_essential_node(tree, ZERO_VALUE)[0]
+
+                #else:
+                height_ons = start.outputs[io_height_name]
+                height_ew = start.outputs[io_height_name]
             else:
-                if start_bump_process:
-                    height = create_link(tree, height, start_bump_process.inputs[0])[0]
-                    create_link(tree, max_height, start_bump_process.inputs[1])
 
                 height_ons = None
                 height_ew = None
@@ -1307,6 +1317,10 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                 elif io_height_name in node.inputs: 
                     height = create_link(tree, height, node.inputs[io_height_name])[io_height_name]
 
+            if height_ons_alpha:
+                if io_height_ons_alpha_name in node.inputs: height_ons_alpha = create_link(tree, height_ons_alpha, node.inputs[io_height_ons_alpha_name])[io_height_ew_alpha_name]
+                if io_height_ew_alpha_name in node.inputs: height_ew_alpha = create_link(tree, height_ew_alpha, node.inputs[io_height_ew_alpha_name])[io_height_ew_alpha_name]
+
             if max_height and io_max_height_name in node.inputs:
                 max_height = create_link(tree, max_height, node.inputs[io_max_height_name])[io_max_height_name]
 
@@ -1315,9 +1329,27 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
         if end_linear and (end_linear.type != 'GROUP' or end_linear.node_tree):
             if ch.type == 'NORMAL':
 
+                end_normal_overlay = nodes.get(ch.end_normal_overlay)
+                if end_normal_overlay:
+                    create_link(tree, rgb, end_normal_overlay.inputs[2])
+                    if tangent:
+                        create_link(tree, tangent, end_normal_overlay.inputs['Tangent'])
+                        create_link(tree, bitangent, end_normal_overlay.inputs['Bitangent'])
+
+                normal_overlay_only = rgb
+
                 if 'Normal Overlay' in end_linear.inputs:
                     rgb = create_link(tree, rgb, end_linear.inputs['Normal Overlay'])[0]
                 else: rgb = end_linear.outputs[0]
+
+                if end_normal_overlay:
+                    rgb = create_link(tree, rgb, end_normal_overlay.inputs[1])[0]
+
+                end_normal_engine_filter = nodes.get(ch.end_normal_engine_filter)
+                if end_normal_engine_filter:
+                    create_link(tree, rgb, end_normal_engine_filter.inputs[0])
+                    create_link(tree, normal_overlay_only, end_normal_engine_filter.inputs[1])
+                    rgb = create_link(tree, rgb, end_normal_engine_filter.inputs[2])[0]
 
                 #if end_max_height:
                 #    create_link(tree, end_max_height.outputs[0], end_linear.inputs['Max Height'])
@@ -1326,8 +1358,7 @@ def reconnect_yp_nodes(tree, merged_layer_ids = []):
                     if end_max_height_tweak:
                         max_height = create_link(tree, max_height, end_max_height_tweak.inputs['Max Height'])['Max Height']
 
-                    outs = create_link(tree, max_height, end_linear.inputs['Max Height'])
-                    if 'Max Height' in outs: max_height = outs['Max Height']
+                    create_link(tree, max_height, end_linear.inputs['Max Height'])
 
                 if height_ons:
 
@@ -2973,7 +3004,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                     if height_proc: create_link(tree, height_proc.outputs['Height EW'], height_blend.inputs['Height EW'])
                     create_link(tree, height_alpha, height_blend.inputs['Alpha'])
 
-                    if has_parent:
+                    if has_parent or is_normal_height_input_connected(root_ch):
                         if prev_height_alpha_ons: create_link(tree, prev_height_alpha_ons, height_blend.inputs['Prev Height Alpha ONS'])
                         if prev_height_alpha_ew: create_link(tree, prev_height_alpha_ew, height_blend.inputs['Prev Height Alpha EW'])
 
@@ -3043,7 +3074,7 @@ def reconnect_layer_nodes(layer, ch_idx=-1, merge_mask=False):
                 elif prev_height and next_height:
                     create_link(tree, prev_height, next_height)
 
-            if has_parent:
+            if has_parent or is_normal_height_input_connected(root_ch):
 
                 if root_ch.enable_smooth_bump:
 

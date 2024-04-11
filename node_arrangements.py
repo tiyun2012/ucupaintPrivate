@@ -1826,19 +1826,26 @@ def rearrange_yp_nodes(group_tree):
 
     # End nodes
     for i, channel in enumerate(yp.channels):
+
+        if check_set_node_loc(group_tree, channel.end_normal_engine_filter, loc):
+            loc.y -= 170
+
+        if check_set_node_loc(group_tree, channel.end_normal_overlay, loc):
+            loc.y -= 260
+
         if check_set_node_loc(group_tree, channel.end_linear, loc):
             if channel.type == 'RGB':
                 loc.y -= 110
             elif channel.type == 'VALUE':
                 loc.y -= 170
             elif channel.type == 'NORMAL':
-                loc.y -= 320
+                loc.y -= 260
 
         if check_set_node_loc(group_tree, channel.clamp, loc):
             loc.y -= 240
 
         if check_set_node_loc(group_tree, channel.end_max_height_tweak, loc):
-            loc.y -= 160
+            loc.y -= 220
 
         if check_set_node_loc(group_tree, channel.end_max_height, loc):
             loc.y -= 110

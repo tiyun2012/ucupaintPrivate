@@ -1889,7 +1889,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
 
             if ch.normal_blend_type == 'MIX':
 
-                if layer.parent_idx != -1:
+                if layer.parent_idx != -1 or (is_normal_height_input_connected(root_ch) and root_ch.enable_smooth_bump):
                     if root_ch.enable_smooth_bump:
                         lib_name = lib.STRAIGHT_OVER_HEIGHT_MIX_SMOOTH
                     else: lib_name = lib.STRAIGHT_OVER_HEIGHT_MIX
@@ -1915,7 +1915,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
 
             elif ch.normal_blend_type == 'OVERLAY':
 
-                if layer.parent_idx != -1:
+                if layer.parent_idx != -1 or (is_normal_height_input_connected(root_ch) and root_ch.enable_smooth_bump):
                     if root_ch.enable_smooth_bump:
                         lib_name = lib.STRAIGHT_OVER_HEIGHT_ADD_SMOOTH
                     else: lib_name = lib.STRAIGHT_OVER_HEIGHT_ADD
@@ -1941,7 +1941,7 @@ def check_channel_normal_map_nodes(tree, layer, root_ch, ch, need_reconnect=Fals
 
         else:
 
-            if layer.parent_idx != -1:
+            if layer.parent_idx != -1 or (is_normal_height_input_connected(root_ch) and root_ch.enable_smooth_bump):
                 if root_ch.enable_smooth_bump:
                     lib_name = lib.STRAIGHT_OVER_HEIGHT_COMPARE_SMOOTH
                 else: lib_name = lib.STRAIGHT_OVER_HEIGHT_COMPARE
