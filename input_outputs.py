@@ -185,17 +185,17 @@ def check_start_end_root_ch_nodes(group_tree, specific_channel=None):
                 start_normal_filter.node_tree = get_node_tree_lib(lib.CHECK_INPUT_NORMAL)
 
             if is_normal_height_input_connected(channel):
-                #if channel.enable_smooth_bump:
-                #    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
-                #                                            'ShaderNodeGroup', 'Start Bump Process', lib.NEIGHBOR_FAKE, hard_replace=True)
-                #    start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
-                #else:
-                start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
-                    'ShaderNodeGroup', 'Start Bump Process', lib.START_BUMP_PROCESS, hard_replace=True)
-                #remove_node(group_tree, channel, 'start_bump_packs')
+                if channel.enable_smooth_bump:
+                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                                                            'ShaderNodeGroup', 'Start Bump Process', lib.NEIGHBOR_FAKE, hard_replace=True)
+                    start_bump_packs = replace_new_node(group_tree, channel, 'start_bump_packs', 'ShaderNodeGroup', 'Start Bump Packs', lib.PACK_ONSEW)
+                else:
+                    start_bump_process = replace_new_node(group_tree, channel, 'start_bump_process', 
+                        'ShaderNodeGroup', 'Start Bump Process', lib.START_BUMP_PROCESS, hard_replace=True)
+                    remove_node(group_tree, channel, 'start_bump_packs')
             else:
                 remove_node(group_tree, channel, 'start_bump_process')
-                #remove_node(group_tree, channel, 'start_bump_packs')
+                remove_node(group_tree, channel, 'start_bump_packs')
 
             lib_name = ''
 
@@ -723,9 +723,20 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
         # Displacement IO
         if root_ch.type == 'NORMAL':
 
-            if not root_ch.enable_smooth_bump:
 
-                name = root_ch.name + io_suffix['HEIGHT']
+            name = root_ch.name + io_suffix['HEIGHT']
+
+            if channel_enabled or force_normal_input:
+                dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
+                input_index += 1
+
+            if channel_enabled:
+                dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
+                output_index += 1
+
+            if has_parent:
+
+                name = root_ch.name + io_suffix['HEIGHT'] + io_suffix['ALPHA']
 
                 if channel_enabled or force_normal_input:
                     dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
@@ -735,19 +746,31 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
                     output_index += 1
 
-                if has_parent:
+            if root_ch.enable_smooth_bump:
 
-                    name = root_ch.name + io_suffix['HEIGHT'] + io_suffix['ALPHA']
+                for letter in nsew_letters:
 
+                    name = root_ch.name + ' Height ' + letter.upper()
+                    
                     if channel_enabled or force_normal_input:
-                        dirty = create_input(tree, name, 'NodeSocketFloatFactor', valid_inputs, input_index, dirty)
+                        dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
                         input_index += 1
 
                     if channel_enabled:
                         dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
                         output_index += 1
+                        pass
 
-            else:
+                    if has_parent:
+                        name = root_ch.name + ' Height ' + letter.upper() + io_suffix['ALPHA']
+
+                        if channel_enabled or force_normal_input:
+                            dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
+                            input_index += 1
+
+                        if channel_enabled:
+                            dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
+                            output_index += 1
 
                 name = root_ch.name + io_suffix['HEIGHT_ONS']
                 
@@ -769,9 +792,7 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
                     dirty = create_output(tree, name, 'NodeSocketVector', valid_outputs, output_index, dirty)
                     output_index += 1
 
-                print('CONNECT', is_normal_height_input_connected(root_ch))
-
-                if has_parent or is_normal_height_input_connected(root_ch):
+                if has_parent: # or is_normal_height_input_connected(root_ch):
 
                     name = root_ch.name + io_suffix['HEIGHT_ONS'] + io_suffix['ALPHA']
 

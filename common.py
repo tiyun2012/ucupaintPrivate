@@ -450,6 +450,7 @@ limited_mask_blend_types = {
     }
 
 rgba_letters = ['r', 'g', 'b', 'a']
+nsew_letters = ['n', 's', 'e', 'w']
 
 TEXCOORD_IO_PREFIX = 'Texcoord '
 PARALLAX_MIX_PREFIX = 'Parallax Mix '
