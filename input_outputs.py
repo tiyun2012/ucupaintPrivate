@@ -748,30 +748,6 @@ def check_layer_tree_ios(layer, tree=None, remove_props=False):
 
             if root_ch.enable_smooth_bump:
 
-                for letter in nsew_letters:
-
-                    name = root_ch.name + ' Height ' + letter.upper()
-                    
-                    if channel_enabled or force_normal_input:
-                        dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
-                        input_index += 1
-
-                    if channel_enabled:
-                        dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                        output_index += 1
-                        pass
-
-                    if has_parent:
-                        name = root_ch.name + ' Height ' + letter.upper() + io_suffix['ALPHA']
-
-                        if channel_enabled or force_normal_input:
-                            dirty = create_input(tree, name, 'NodeSocketFloat', valid_inputs, input_index, dirty)
-                            input_index += 1
-
-                        if channel_enabled:
-                            dirty = create_output(tree, name, 'NodeSocketFloat', valid_outputs, output_index, dirty)
-                            output_index += 1
-
                 name = root_ch.name + io_suffix['HEIGHT_ONS']
                 
                 if channel_enabled or force_normal_input:
