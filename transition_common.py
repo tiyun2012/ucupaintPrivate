@@ -64,7 +64,7 @@ def set_transition_ao_intensity_link(ch, tree=None, layer=None, tao=None):
     if not tree:
         tree = get_tree(layer)
 
-    if not tao:
+    if tree and not tao:
         tao = tree.nodes.get(ch.tao)
 
     if tao: 
