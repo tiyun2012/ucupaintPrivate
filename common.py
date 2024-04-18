@@ -1025,7 +1025,7 @@ def set_image_paint_canvas(mat=None, image=None):
     context = bpy.context
     scene = context.scene
 
-    if image == None or mat == None or not is_greater_than_280():
+    if image == None or mat == None or not is_greater_than_281():
         scene.tool_settings.image_paint.mode = 'IMAGE'
     elif mat: scene.tool_settings.image_paint.mode = 'MATERIAL'
 
@@ -1042,6 +1042,7 @@ def set_image_paint_canvas(mat=None, image=None):
             img_node = tree.nodes.get(ACTIVE_IMAGE_NODE)
 
         if img_node:
+
             img_node.image = image
 
             for i, img in enumerate(mat.texture_paint_images):

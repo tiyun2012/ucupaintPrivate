@@ -102,10 +102,11 @@ def create_new_group_tree(mat):
     create_essential_nodes(group_tree, True, True, True)
 
     # HACK: First image node is needed to change active material texture paint slot
-    img_node = group_tree.nodes.new('ShaderNodeTexImage')
-    img_node.name = ACTIVE_IMAGE_NODE
-    img_node.label = 'Active Image'
-    img_node.width = 150
+    if is_greater_than_281():
+        img_node = group_tree.nodes.new('ShaderNodeTexImage')
+        img_node.name = ACTIVE_IMAGE_NODE
+        img_node.label = 'Active Image'
+        img_node.width = 150
 
     # Create info nodes
     create_info_nodes(group_tree)
@@ -2349,7 +2350,7 @@ def update_layer_preview_mode(self, context):
 
             # Set gamma
             if 'Gamma' in preview.inputs:
-                if channel.colorspace != 'LINEAR':
+                if channel.colorspace != 'LINEAR' and not yp.use_linear_blending:
                     preview.inputs['Gamma'].default_value = 2.2
                 else: preview.inputs['Gamma'].default_value = 1.0
 
