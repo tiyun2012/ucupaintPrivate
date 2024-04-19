@@ -5,7 +5,6 @@ from bpy_types import bpy_types
 #from .__init__ import bl_info
 
 BLENDER_28_GROUP_INPUT_HACK = False
-ACTIVE_IMAGE_NODE = 'ACTIVE_IMAGE_NODE'
 
 MAX_VERTEX_DATA = 8
 
@@ -997,62 +996,12 @@ def get_first_image_editor_image(context):
     if space: return space.image
     return None
 
-def update_tool_canvas_image(context, image):
-    # HACK: Remember unpinned images to avoid all image editor images being updated
-    unpinned_spaces = []
-    unpinned_images = []
-    for area in context.screen.areas:
-        if area.type == 'IMAGE_EDITOR' and not area.spaces[0].use_image_pin: #and area.spaces[0].image != image:
-            unpinned_spaces.append(area.spaces[0])
-            unpinned_images.append(area.spaces[0].image)
-
-    obj = context.object
-
-    # Update canvas image
-    try: 
-        if obj: set_image_paint_canvas(obj.active_material, image)
-        else: set_image_paint_canvas(None, image)
-    except Exception as e: print(e)
-
-    # Restore original images except for the first index
-    for i, space in enumerate(unpinned_spaces):
-        if i > 0:
-            space.image = unpinned_images[i]
-            # Hack for Blender 2.8 which keep pinning image automatically
-            space.use_image_pin = False
-
-def set_image_paint_canvas(mat=None, image=None):
-    context = bpy.context
-    scene = context.scene
-
-    if image == None or mat == None or not is_greater_than_281():
+def set_image_paint_canvas(image):
+    scene = bpy.context.scene
+    try:
         scene.tool_settings.image_paint.mode = 'IMAGE'
-    elif mat: scene.tool_settings.image_paint.mode = 'MATERIAL'
-
-    if scene.tool_settings.image_paint.mode == 'IMAGE':
         scene.tool_settings.image_paint.canvas = image
-    elif mat and mat.node_tree:
-
-        # HACK: Trying to get active image node inside yp tree
-        img_node = None
-        node = get_active_ypaint_node()
-        if node:
-            tree = node.node_tree
-            yp = tree.yp
-            img_node = tree.nodes.get(ACTIVE_IMAGE_NODE)
-
-        if img_node:
-
-            img_node.image = image
-
-            for i, img in enumerate(mat.texture_paint_images):
-                if img.name == image.name:
-                    mat.paint_active_slot = i
-                    break
-        else:
-            # Use image canvas as fallback if image node is not found
-            scene.tool_settings.image_paint.mode = 'IMAGE'
-            scene.tool_settings.image_paint.canvas = image
+    except Exception as e: print(e)
 
 # Check if name already available on the list
 def get_unique_name(name, items, surname = ''):
@@ -1212,13 +1161,7 @@ def get_nodes_using_yp(mat, yp):
 def safe_remove_image(image, yp_tree=None):
     scene = bpy.context.scene
 
-    img_node = None
-    if yp_tree: img_node = yp_tree.nodes.get(ACTIVE_IMAGE_NODE)
-
-    if (
-        (img_node and img_node.image == image and image.users == 2) or
-        (img_node and img_node.image != image and image.users == 1) or
-        (scene.tool_settings.image_paint.canvas == image and image.users == 2) or
+    if ((scene.tool_settings.image_paint.canvas == image and image.users == 2) or
         (scene.tool_settings.image_paint.canvas != image and image.users == 1) or
         image.users == 0):
         bpy.data.images.remove(image)
@@ -4255,6 +4198,41 @@ def get_relevant_uv(obj, yp):
                 uv_name = mask.uv_name
 
     return uv_name 
+
+def set_active_paint_slot_entity(yp, image):
+    mat = get_active_material()
+    node = get_active_ypaint_node()
+    scene = bpy.context.scene
+
+    # Set material active node 
+    node.select = True
+    mat.node_tree.nodes.active = node
+
+    if len(yp.layers) > 0:
+        # Get layer and yp tree
+        root_tree = yp.id_data
+        layer = yp.layers[yp.active_layer_index]
+        tree = get_tree(layer)
+
+        # Set layer node tree as active
+        layer_node = root_tree.nodes.get(layer.group_node)
+        layer_node.select = True
+        root_tree.nodes.active = layer_node
+        layer_tree = layer_node.node_tree
+
+    if image and is_greater_than_281():
+
+        for idx, img in enumerate(mat.texture_paint_images):
+            if img == image:
+                mat.paint_active_slot = idx
+                break
+
+        scene.tool_settings.image_paint.mode = 'MATERIAL'
+    else:
+        scene.tool_settings.image_paint.mode = 'IMAGE'
+        scene.tool_settings.image_paint.canvas = image
+
+    update_image_editor_image(bpy.context, image)
 
 def get_active_image_and_stuffs(obj, yp):
 
