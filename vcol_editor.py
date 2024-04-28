@@ -135,7 +135,7 @@ class YSelectFacesByVcol(bpy.types.Operator):
     bl_description = "Select faces based on vertex color"
     bl_options = {'REGISTER', 'UNDO'}
 
-    color : FloatVectorProperty(
+    color = FloatVectorProperty(
             name='Color', size=4,
             subtype='COLOR',
             default=(1.0, 0.0, 1.0, 1.0),
