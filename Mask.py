@@ -1822,7 +1822,7 @@ class YLayerMask(bpy.types.PropertyGroup):
             update=update_mask_edge_detect_radius)
 
     # Specific for voronoi
-    voronoi_feature : EnumProperty(
+    voronoi_feature = EnumProperty(
             name = 'Voronoi Feature',
             description = 'The voronoi feature that will be used for compute',
             items = voronoi_feature_items,

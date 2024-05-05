@@ -4730,7 +4730,7 @@ class YLayerChannel(bpy.types.PropertyGroup):
     override_vcol_name = StringProperty(name='Vertex Color Name', description='Channel override vertex color name', default='', update=update_layer_channel_override_vcol_name)
 
     # Specific for voronoi
-    voronoi_feature : EnumProperty(
+    voronoi_feature = EnumProperty(
             name = 'Voronoi Feature',
             description = 'The voronoi feature that will be used for compute',
             items = voronoi_feature_items,
@@ -5158,7 +5158,7 @@ class YLayer(bpy.types.PropertyGroup):
             update=update_projection_blend)
 
     # Specific for voronoi
-    voronoi_feature : EnumProperty(
+    voronoi_feature = EnumProperty(
             name = 'Voronoi Feature',
             description = 'The voronoi feature that will be used for compute',
             items = voronoi_feature_items,
