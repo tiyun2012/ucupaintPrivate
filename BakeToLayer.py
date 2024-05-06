@@ -2061,11 +2061,11 @@ def bake_as_image(objs, mat, entity, name, width=1024, height=1024, hdr=False, s
     # Bake!
     bpy.ops.object.bake()
 
-    if denoise: 
-        denoise_image(image)
     if blur: 
         samples = 4096 if is_greater_than_300() else 128
         blur_image(image, False, bake_device=bake_device, factor=blur_factor, samples=samples)
+    if denoise:
+        denoise_image(image)
     if use_fxaa: fxaa_image(image, False, bake_device=bake_device)
 
     # Remove temp bake nodes
@@ -2277,8 +2277,10 @@ class YBakeEntityToImage(bpy.types.Operator):
                 try: setattr(self, attr, getattr(bi, attr))
                 except: pass
 
-            if self.entity.uv_name in self.uv_map_coll:
-                self.uv_map = self.entity.baked_uv_name if self.entity.baked_uv_name != '' else self.entity.uv_name
+            if self.entity.baked_uv_name != '' and self.entity.baked_uv_name in self.uv_map_coll:
+                self.uv_map = self.entity.baked_uv_name
+            elif self.entity.uv_name in self.uv_map_coll:
+                self.uv_map = self.entity.uv_name
 
         else:
             if len(self.uv_map_coll) > 0:
@@ -2287,6 +2289,18 @@ class YBakeEntityToImage(bpy.types.Operator):
             # Use user preference default image size if input uses default image size
             if self.width == 1234 and self.height == 1234:
                 self.width = self.height = ypup.default_new_image_size
+
+            # Auto set some props for some types
+            if self.entity.type == 'EDGE_DETECT':
+                self.samples = 32
+                self.hdr = True
+                self.fxaa = False
+                self.denoise = True
+            else:
+                self.samples = 1
+                self.hdr = False
+                self.fxaa = True
+                self.denoise = False
 
         return context.window_manager.invoke_props_dialog(self, width=320)
 
@@ -2412,6 +2426,10 @@ class YBakeEntityToImage(bpy.types.Operator):
 
         if self.layer and not self.mask:
             self.report({'ERROR'}, "This feature is not implemented yet!")
+            return {'CANCELLED'}
+
+        if self.uv_map == '':
+            self.report({'ERROR'}, "UV Map cannot be empty!")
             return {'CANCELLED'}
 
         T = time.time()
