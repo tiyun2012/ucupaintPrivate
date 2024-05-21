@@ -750,6 +750,10 @@ def prepare_composite_settings(res_x=1024, res_y=1024, use_hdr=False):
     # Remember original scene
     book['ori_scene_name'] = bpy.context.scene.name
 
+    # Remember active object and view layer
+    book['ori_viewlayer'] = bpy.context.window.view_layer.name if bpy.context.window.view_layer and is_greater_than_280() else ''
+    book['ori_object'] = bpy.context.object.name if bpy.context.object else ''
+
     # Check if original viewport is using camera view
     area = bpy.context.area
     book['ori_camera_view'] = area.type == 'VIEW_3D' and area.spaces[0].region_3d.view_perspective == 'CAMERA'
@@ -809,6 +813,17 @@ def recover_composite_settings(book):
     # Recover camera view
     if book['ori_camera_view']:
         bpy.context.area.spaces[0].region_3d.view_perspective = 'CAMERA'
+
+    # Recover view layer
+    if is_greater_than_280():
+        ori_viewlayer = bpy.context.scene.view_layers.get(book['ori_viewlayer'])
+        if ori_viewlayer and bpy.context.window.view_layer != ori_viewlayer:
+            bpy.context.window.view_layer = ori_viewlayer
+
+    # Recover active object
+    ori_object = bpy.data.objects.get(book['ori_object'])
+    if ori_object and bpy.context.object != ori_object:
+        set_active_object(ori_object)
 
 def denoise_image(image):
     if not is_greater_than_281(): return image
