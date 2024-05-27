@@ -227,6 +227,11 @@ class RefreshBranchesReleasesNow(bpy.types.Operator):
     bl_idname = updater.addon + ".branches_releases_refresh"
     bl_description = "Refresh development releases branches"
     def execute(self, context):
+
+        if not common.is_online():
+            self.report({'ERROR'}, "You need to enable 'Online Access' in Blender Preferences to use this feature!")
+            return {'CANCELLED'}
+
         wm = context.window_manager
         ypui = wm.ypui
         ypui.hide_update = False
@@ -293,6 +298,10 @@ class AddonUpdaterUpdateNow(bpy.types.Operator):
     )
 
     def execute(self, context):
+
+        if not common.is_online():
+            self.report({'ERROR'}, "You need to enable 'Online Access' in Blender Preferences to use this feature!")
+            return {'CANCELLED'}
 
         # in case of error importing updater
         if updater.invalid_updater:
@@ -392,6 +401,7 @@ class AddonUpdaterUpdateTarget(bpy.types.Operator):
         sub_col.prop(self, "target", text="")
 
     def execute(self, context):
+
         # In case of error importing updater.
         if updater.invalid_updater:
             return {'CANCELLED'}
@@ -436,6 +446,8 @@ class AddonUpdaterUpdateBranch(bpy.types.Operator):
         return len(updater.tags) > 0
 
     def invoke(self, context, event):
+        if not common.is_online():
+            return self.execute(context)
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, context):
@@ -448,6 +460,10 @@ class AddonUpdaterUpdateBranch(bpy.types.Operator):
         row.label(text="Do you want to install branch "+self.label+"?")
 
     def execute(self, context):
+
+        if not common.is_online():
+            self.report({'ERROR'}, "You need to enable 'Online Access' in Blender Preferences to use this feature!")
+            return {'CANCELLED'}
 
         # In case of error importing updater.
         if updater.invalid_updater:
@@ -689,6 +705,13 @@ class UpdaterSettingMenu(bpy.types.Menu):
 
     def draw(self, context):
         col = self.layout.column()
+
+        if len(updater.tags) == 0:
+            if common.is_greater_than_420():
+                if common.is_online():
+                    col.label(text="Please do 'Check for update' first to be able to change branch!", icon='ERROR')
+                else: col.label(text="You need to enable 'Online Access' in Blender Preferences to be able to change branch!", icon='ERROR')
+            else: col.label(text="You need to be able to access internet to use be able to change branch!", icon='ERROR')
     
         for index, tg  in enumerate(updater.tags):
             item_icon = "RADIOBUT_ON" if tg[0] == updater.current_branch or (index == 0 and not updater.using_development_build) else "RADIOBUT_OFF"
@@ -1355,7 +1378,7 @@ def register():
     # update. If a pattern file is not found in new update, no action is taken
     # NOTE: This does NOT delete anything proactively, rather only defines what
     # is allowed to be overwritten during an update execution.
-    updater.overwrite_patterns = ["*.png", "*.jpg", "*.blend", "README.md", "LICENSE.txt"]
+    updater.overwrite_patterns = ["*.png", "*.jpg", "*.blend", "README.md", "LICENSE.txt", "*.toml"]
     # updater.overwrite_patterns = []
     # other examples:
     # ["*"] means ALL files/folders will be overwritten by update, was the
@@ -1468,23 +1491,24 @@ def register():
     # Special situation: we just updated the addon, show a popup to tell the
     # user it worked. Could enclosed in try/catch in case other issues arise.
     show_reload_popup()
-    
-    settings = get_user_preferences()
+        
+    if common.is_online():
+        first_time =  "last_check" not in updater._json or updater._json["last_check"] == ""
 
-    first_time =  "last_check" not in updater._json or updater._json["last_check"] == ""
+        if not first_time:
+            settings = get_user_preferences()
+            updater.set_check_interval(
+                enabled=settings.auto_check_update,
+                months=settings.updater_interval_months,
+                days=settings.updater_interval_days,
+                hours=settings.updater_interval_hours,
+                minutes=settings.updater_interval_minutes)
+        
+        if updater.past_interval_timestamp():
+            updater.check_for_branches_releases_now(None)
+        else:
+            print("Aborting check for updated, check interval not reached")
 
-    if not first_time:
-        updater.set_check_interval(
-            enabled=settings.auto_check_update,
-            months=settings.updater_interval_months,
-            days=settings.updater_interval_days,
-            hours=settings.updater_interval_hours,
-            minutes=settings.updater_interval_minutes)
-    
-    if updater.past_interval_timestamp():
-        updater.check_for_branches_releases_now(None)
-    else:
-        print("Aborting check for updated, check interval not reached")
     updater.restore_saved_branches()
 
 
