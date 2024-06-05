@@ -353,6 +353,12 @@ texcoord_type_items = (
         ('Reflection', 'Reflection', ''),
         )
 
+interpolation_type_items = (
+        ('Linear', 'Linear', 'Linear interpolation.'),
+        ('Closest', 'Closest', 'No interpolation (sample closest texel).'),
+        ('Cubic', 'Cubic', 'Cubic interpolation.'),
+        )
+
 channel_socket_input_bl_idnames = {
     'RGB': 'NodeSocketColor',
     'VALUE': 'NodeSocketFloatFactor',
@@ -3163,10 +3169,15 @@ def remove_temp_uv(obj, entity):
     if uv_layers:
         for uv in uv_layers:
             if uv.name == TEMP_UV or uv.name.startswith(TEMP_UV):
-                uv_layers.remove(uv)
+                try: uv_layers.remove(uv)
+                except: print('EXCEPTIION: Cannot remove temp uv!')
                 #break
 
-    if not entity: return
+    if not entity: 
+        if uv_layers and len(uv_layers) > 0:
+            try: uv_layers.active = uv_layers[0]
+            except: print('EXCEPTIION: Cannot set active uv!')
+        return
 
     m1 = re.match(r'^yp\.layers\[(\d+)\]$', entity.path_from_id())
     m2 = re.match(r'^yp\.layers\[(\d+)\]\.masks\[(\d+)\]$', entity.path_from_id())
@@ -3196,7 +3207,6 @@ def remove_temp_uv(obj, entity):
             mirror.offset_v = obj.yp.ori_offset_v
 
 def refresh_temp_uv(obj, entity): 
-
     if obj.type != 'MESH':
         return False
 
@@ -5017,8 +5027,8 @@ def check_yp_entities_images_segments_in_lists(entity, image, segment_name, segm
 
         similar_ids = [i for i, s in enumerate(segment_names) if s == segment.name and images[i] == image]
         if len(similar_ids) > 0:
-            entities[idx].append(similar_ids[0])
-            segment_name_props[idx].append(segment_name_prop)
+            entities[similar_ids[0]].append(entity)
+            segment_name_props[similar_ids[0]].append(segment_name_prop)
         else:
             images.append(image)
             segment_names.append(segment.name)
