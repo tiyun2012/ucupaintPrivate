@@ -425,7 +425,7 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
             description = 'Use more accurate linear color blending (it will behave differently than Photoshop)',
             default = True)
 
-    switch_to_material_view : BoolProperty(
+    switch_to_material_view = BoolProperty(
             name = 'Switch to Material View',
             description = 'Switch to material view so the node setup is automatically visible',
             default = True)
