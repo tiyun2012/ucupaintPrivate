@@ -3,7 +3,7 @@ schema_version = "1.0.0"
 # Example of manifest file for a Blender extension
 # Change the values according to your extension
 id = "ucupaint"
-version = "1.2.8"
+version = "1.2.9"
 name = "Ucupaint"
 tagline = "Layer based painting for Eevee and Cycles"
 maintainer = "Yusuf Umar <yusufumaris@gmail.com>"
@@ -15,7 +15,7 @@ type = "add-on"
 # * "network" (for internet access)
 # * "camera" (to capture photos and videos)
 # * "microphone" (to capture audio)
-permissions = { "files" = "true", "network" = "true" }
+permissions = { "files" = "Access to filesystem for loading and saving images", "network" = "Access to the network for updating or changing branch of the addon" }
 
 # Optional link to documentation, support, source files, etc
 # website = "http://extensions.blender.org/add-ons/my-example-package/"
