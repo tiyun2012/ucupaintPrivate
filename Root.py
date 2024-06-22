@@ -446,14 +446,12 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
 
         # Get target bsdf
         self.target_bsdf_name = ''
-        if mat and mat.node_tree: # and is_greater_than_280():
-            output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
-            if output:
-                bsdf_node = get_closest_bsdf_backward(output[0], valid_bsdf_types)
-                if bsdf_node:
-                    self.type = bsdf_node.type
-                    self.target_bsdf_name = bsdf_node.name
-                    #print(bsdf_node)
+        output = get_material_output(mat)
+        if output:
+            bsdf_node = get_closest_bsdf_backward(output, valid_bsdf_types)
+            if bsdf_node:
+                self.type = bsdf_node.type
+                self.target_bsdf_name = bsdf_node.name
 
         # Normal channel does not works to non mesh object
         if obj.type != 'MESH':
@@ -549,10 +547,8 @@ class YQuickYPaintNodeSetup(bpy.types.Operator):
             for l in main_bsdf.outputs[0].links:
                 outsoc = l.to_socket
 
-        # Get active output
-        output = [n for n in nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
-        if output: 
-            output = output[0]
+        # Get active material output
+        output = get_material_output(mat)
 
         loc = Vector((0, 0))
 
@@ -3454,11 +3450,17 @@ class YPaint(bpy.types.PropertyGroup):
 
     # Channels
     channels = CollectionProperty(type=YPaintChannel)
-    active_channel_index = IntProperty(default=0, update=update_active_yp_channel)
+    active_channel_index = IntProperty(
+            name = 'Active Channel Index',
+            description = 'Active channel index',
+            default=0, update=update_active_yp_channel)
 
     # Layers
     layers = CollectionProperty(type=Layer.YLayer)
-    active_layer_index = IntProperty(default=0, update=update_layer_index)
+    active_layer_index = IntProperty(
+            name = 'Active Layer Index',
+            description = 'Active layer index',
+            default=0, update=update_layer_index)
 
     # UVs
     uvs = CollectionProperty(type=YPaintUV)

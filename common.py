@@ -472,6 +472,12 @@ limited_mask_blend_types = {
     'LINEAR_LIGHT',
     }
 
+eraser_names = {
+        'TEXTURE_PAINT' : 'Eraser Tex',
+        'VERTEX_PAINT' : 'Eraser Vcol',
+        'SCULPT' : 'Eraser Paint',
+        }
+
 rgba_letters = ['r', 'g', 'b', 'a']
 
 TEXCOORD_IO_PREFIX = 'Texcoord '
@@ -737,6 +743,12 @@ def get_active_material():
         return None
 
     return mat
+
+def get_material_output(mat):
+    if mat != None and mat.node_tree:
+        output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
+        if output: return output[0]
+    return None
 
 def get_list_of_ypaint_nodes(mat):
 
@@ -4469,12 +4481,14 @@ def set_active_paint_slot_entity(yp):
 
     if image and is_greater_than_281():
 
+        scene.tool_settings.image_paint.mode = 'MATERIAL'
+
         for idx, img in enumerate(mat.texture_paint_images):
-            if img == image:
+            if img == None: continue
+            if img.name == image.name:
                 mat.paint_active_slot = idx
                 break
 
-        scene.tool_settings.image_paint.mode = 'MATERIAL'
     else:
         scene.tool_settings.image_paint.mode = 'IMAGE'
         scene.tool_settings.image_paint.canvas = image

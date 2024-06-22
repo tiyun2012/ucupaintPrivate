@@ -837,10 +837,12 @@ def draw_root_channels_ui(context, layout, node):
     #rcol.context_pointer_set('node', node)
 
     if is_greater_than_280():
-        rcol.operator_menu_enum("node.y_add_new_ypaint_channel", 'type', icon='ADD', text='')
+        rcol.menu("NODE_MT_y_new_channel_menu", text='', icon='ADD')
+        #rcol.operator_menu_enum("node.y_add_new_ypaint_channel", 'type', icon='ADD', text='')
         rcol.operator("node.y_remove_ypaint_channel", icon='REMOVE', text='')
     else: 
-        rcol.operator_menu_enum("node.y_add_new_ypaint_channel", 'type', icon='ZOOMIN', text='')
+        rcol.menu("NODE_MT_y_new_channel_menu", text='', icon='ZOOMIN')
+        #rcol.operator_menu_enum("node.y_add_new_ypaint_channel", 'type', icon='ZOOMIN', text='')
         rcol.operator("node.y_remove_ypaint_channel", icon='ZOOMOUT', text='')
 
     rcol.operator("node.y_move_ypaint_channel", text='', icon='TRIA_UP').direction = 'UP'
@@ -2330,13 +2332,14 @@ def draw_layers_ui(context, layout, node):
             baked = nodes.get(root_ch.baked)
             baked_vcol_node = nodes.get(root_ch.baked_vcol)
 
+            icon_name = lib.channel_custom_icon_dict[root_ch.type]
+            icon_value = lib.custom_icons[icon_name].icon_id
+
             if not baked or not baked.image or root_ch.no_layer_using:
-                col.label(text="This channel hasn't been baked yet!")
+                col.label(text=root_ch.name + " channel hasn't been baked yet!", icon_value=icon_value)
             else:
                 row = col.row(align=True)
                 title = 'Baked ' + root_ch.name + ':'
-                icon_name = lib.channel_custom_icon_dict[root_ch.type]
-                icon_value = lib.custom_icons[icon_name].icon_id
                 row.label(text=title, icon_value=icon_value)
 
                 row.context_pointer_set('root_ch', root_ch)
@@ -2889,7 +2892,7 @@ def draw_layers_ui(context, layout, node):
         ve = context.scene.ve_edit
         if obj.mode == 'TEXTURE_PAINT':
             brush = context.tool_settings.image_paint.brush
-            if ((mask_image and mask.source_input == 'RGB') or override_image) and brush.blend == 'ERASE_ALPHA':
+            if ((mask_image and mask.source_input == 'RGB') or override_image) and brush.name == eraser_names[obj.mode]:
                 bbox = col.box()
                 row = bbox.row(align=True)
                 row.alert = True
@@ -2898,7 +2901,7 @@ def draw_layers_ui(context, layout, node):
 
         elif obj.mode == 'VERTEX_PAINT' and is_greater_than_280(): 
             brush = context.tool_settings.vertex_paint.brush
-            if mask_vcol and mask.source_input == 'RGB' and brush.blend == 'ERASE_ALPHA':
+            if mask_vcol and mask.source_input == 'RGB' and brush.name == eraser_names[obj.mode]:
                 bbox = col.box()
                 row = bbox.row(align=True)
                 row.alert = True
@@ -2907,7 +2910,7 @@ def draw_layers_ui(context, layout, node):
 
         elif obj.mode == 'SCULPT' and is_greater_than_320(): 
             brush = context.tool_settings.sculpt.brush
-            if mask_vcol and mask.source_input == 'RGB' and brush.blend == 'ERASE_ALPHA':
+            if mask_vcol and mask.source_input == 'RGB' and brush.name == eraser_names[obj.mode]:
                 bbox = col.box()
                 row = bbox.row(align=True)
                 row.alert = True
@@ -3436,13 +3439,13 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
             row = master.row(align=True)
             row.active = is_hidden
             if image and (image.yia.is_image_atlas or image.yua.is_udim_atlas): 
-                if ypup.use_image_preview: 
-                    if not image.preview: image.preview_ensure()
+                if ypup.use_image_preview and image.preview: 
+                    #if not image.preview: image.preview_ensure()
                     row.prop(layer, 'name', text='', emboss=False, icon_value=image.preview.icon_id)
                 else: row.prop(layer, 'name', text='', emboss=False, icon_value=lib.get_icon('image'))
             elif image: 
-                if ypup.use_image_preview: 
-                    if not image.preview: image.preview_ensure()
+                if ypup.use_image_preview and image.preview: 
+                    #if not image.preview: image.preview_ensure()
                     row.prop(image, 'name', text='', emboss=False, icon_value=image.preview.icon_id)
                 else: row.prop(image, 'name', text='', emboss=False, icon_value=lib.get_icon('image'))
             elif layer.type == 'VCOL': 
@@ -3462,8 +3465,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     ae_prop = 'active_edit_1'
                 row.active = False
                 if image: 
-                    if ypup.use_image_preview: 
-                        if not image.preview: image.preview_ensure()
+                    if ypup.use_image_preview and image.preview:
+                        #if not image.preview: image.preview_ensure()
                         row.prop(active_override, ae_prop, text='', emboss=False, icon_value=image.preview.icon_id)
                     else: row.prop(active_override, ae_prop, text='', emboss=False, icon_value=lib.get_icon('image'))
                 elif layer.type == 'VCOL': 
@@ -3480,8 +3483,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     row.prop(active_override, ae_prop, text='', emboss=False, icon_value=lib.get_icon('texture'))
             else:
                 if image: 
-                    if ypup.use_image_preview: 
-                        if not image.preview: image.preview_ensure()
+                    if ypup.use_image_preview and image.preview: 
+                        #if not image.preview: image.preview_ensure()
                         row.label(text='', icon_value=image.preview.icon_id)
                     else: row.label(text='', icon_value=lib.get_icon('image'))
                 elif layer.type == 'VCOL': 
@@ -3510,8 +3513,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     override_ch = c
                     if src and c.override_type == 'IMAGE':
                         active_override_image = src.image
-                        if ypup.use_image_preview: 
-                            if not src.image.preview: src.image.preview_ensure()
+                        if ypup.use_image_preview and src.image.preview: 
+                            #if not src.image.preview: src.image.preview_ensure()
                             row.label(text='', icon_value=src.image.preview.icon_id)
                         else: row.label(text='', icon_value=lib.get_icon('image'))
                     elif c.override_type == 'VCOL':
@@ -3523,8 +3526,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     if c.override_type == 'IMAGE':
                         src = get_channel_source(c, layer)
                         if src: 
-                            if ypup.use_image_preview: 
-                                if not src.image.preview: src.image.preview_ensure()
+                            if ypup.use_image_preview and src.image.preview: 
+                                #if not src.image.preview: src.image.preview_ensure()
                                 row.prop(c, 'active_edit', text='', emboss=False, icon_value=src.image.preview.icon_id)
                             else: row.prop(c, 'active_edit', text='', emboss=False, icon_value=lib.get_icon('image'))
                     elif c.override_type == 'VCOL':
@@ -3540,16 +3543,16 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                     override_ch = c
                     if src and c.override_1_type == 'IMAGE':
                         active_override_image = src.image
-                        if ypup.use_image_preview: 
-                            if not src.image.preview: src.image.preview_ensure()
+                        if ypup.use_image_preview and src.image.preview: 
+                            #if not src.image.preview: src.image.preview_ensure()
                             row.label(text='', icon_value=src.image.preview.icon_id)
                         else: row.label(text='', icon_value=lib.get_icon('image'))
                 else:
                     if c.override_1_type == 'IMAGE':
                         src = get_channel_source_1(c, layer)
                         if src: 
-                            if ypup.use_image_preview: 
-                                if not src.image.preview: src.image.preview_ensure()
+                            if ypup.use_image_preview and src.image.preview: 
+                                #if not src.image.preview: src.image.preview_ensure()
                                 row.prop(c, 'active_edit_1', text='', emboss=False, icon_value=src.image.preview.icon_id)
                             else: row.prop(c, 'active_edit_1', text='', emboss=False, icon_value=lib.get_icon('image'))
 
@@ -3566,8 +3569,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
                 src = mask_tree.nodes.get(m.source)
                 if m.type == 'IMAGE':
                     active_mask_image = src.image
-                    if ypup.use_image_preview: 
-                        if not src.image.preview: src.image.preview_ensure()
+                    if ypup.use_image_preview and src.image.preview: 
+                        #if not src.image.preview: src.image.preview_ensure()
                         row.label(text='', icon_value=src.image.preview.icon_id)
                     else: 
                         if m.source_input == 'ALPHA':
@@ -3595,8 +3598,8 @@ class NODE_UL_YPaint_layers(bpy.types.UIList):
             else:
                 if m.type == 'IMAGE':
                     src = mask_tree.nodes.get(m.source)
-                    if ypup.use_image_preview: 
-                        if not src.image.preview: src.image.preview_ensure()
+                    if ypup.use_image_preview and src.image.preview: 
+                        #if not src.image.preview: src.image.preview_ensure()
                         row.prop(m, 'active_edit', text='', emboss=False, icon_value=src.image.preview.icon_id)
                     else: 
                         if m.source_input == 'ALPHA':
@@ -3894,6 +3897,28 @@ class YBakeTargetMenu(bpy.types.Menu):
                 col.operator('node.y_save_as_image', text='Unpack As Image', icon='UGLYPACKAGE').unpack = True
             else: col.operator('node.y_save_as_image', text='Save As Image')
 
+class YNewChannelMenu(bpy.types.Menu):
+    bl_idname = "NODE_MT_y_new_channel_menu"
+    bl_description = 'Add New Channel'
+    bl_label = "New Channel Menu"
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node()
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.label(text='Add New Channel')
+
+        icon_value = lib.custom_icons[lib.channel_custom_icon_dict['VALUE']].icon_id
+        col.operator("node.y_add_new_ypaint_channel", icon_value=icon_value, text='Value').type = 'VALUE'
+
+        icon_value = lib.custom_icons[lib.channel_custom_icon_dict['RGB']].icon_id
+        col.operator("node.y_add_new_ypaint_channel", icon_value=icon_value, text='RGB').type = 'RGB'
+
+        icon_value = lib.custom_icons[lib.channel_custom_icon_dict['NORMAL']].icon_id
+        col.operator("node.y_add_new_ypaint_channel", icon_value=icon_value, text='Normal').type = 'NORMAL'
+
 class YNewLayerMenu(bpy.types.Menu):
     bl_idname = "NODE_MT_y_new_layer_menu"
     bl_description = 'Add New Layer'
@@ -3981,7 +4006,7 @@ class YNewLayerMenu(bpy.types.Menu):
         #c.make_image_blank = True
 
         col = row.column()
-        #col.label(text='Generated:')
+        col.label(text='Generated Layer:')
         #col.operator("node.y_new_layer", icon='TEXTURE', text='Brick').type = 'BRICK'
         col.operator("node.y_new_layer", icon_value=lib.get_icon('texture'), text='Brick').type = 'BRICK'
         col.operator("node.y_new_layer", text='Checker').type = 'CHECKER'
@@ -3996,6 +4021,7 @@ class YNewLayerMenu(bpy.types.Menu):
         col.operator("node.y_new_layer", icon_value=lib.get_icon('hemi'), text='Fake Lighting').type = 'HEMI'
 
         col = row.column()
+        col.label(text='Bake as Layer:')
         c = col.operator("node.y_bake_to_layer", icon_value=lib.get_icon('bake'), text='Ambient Occlusion')
         c.type = 'AO'
         c.target_type = 'LAYER'
@@ -5263,6 +5289,7 @@ def register():
     else: bpy.utils.register_class(YPaintAboutPopover)
 
     bpy.utils.register_class(YPaintSpecialMenu)
+    bpy.utils.register_class(YNewChannelMenu)
     bpy.utils.register_class(YNewLayerMenu)
     bpy.utils.register_class(YBakeTargetMenu)
     bpy.utils.register_class(YBakedImageMenu)
@@ -5319,6 +5346,7 @@ def unregister():
     else: bpy.utils.unregister_class(YPaintAboutPopover)
 
     bpy.utils.unregister_class(YPaintSpecialMenu)
+    bpy.utils.unregister_class(YNewChannelMenu)
     bpy.utils.unregister_class(YNewLayerMenu)
     bpy.utils.unregister_class(YBakeTargetMenu)
     bpy.utils.unregister_class(YBakedImageMenu)

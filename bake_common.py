@@ -70,9 +70,8 @@ def is_join_objects_problematic(yp, mat=None):
             return True
 
     if mat:
-        output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
+        output = get_material_output(mat)
         if output: 
-            output = output[0]
             if search_join_problematic_texcoord(mat.node_tree, output):
                 return True
 
@@ -281,10 +280,9 @@ def prepare_other_objs_channels(yp, other_objs):
                 if mat in mats: continue
                 if not mat.use_nodes: continue
 
-                # Get output
-                output = [n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output]
+                # Get material output
+                output = get_material_output(mat)
                 if not output: continue
-                output = output[0]
 
                 socket = None
                 default = None
@@ -1287,7 +1285,7 @@ def get_valid_filepath(img, use_hdr):
 
     return img.filepath
 
-def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_layer=None, use_hdr=False, aa_level=1, force_use_udim=False, tilenums=[]):
+def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_layer=None, use_hdr=False, aa_level=1, force_use_udim=False, tilenums=[], interpolation='Linear'):
 
     print('BAKE CHANNEL: Baking', root_ch.name + ' channel...')
 
@@ -1390,6 +1388,7 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
             if root_ch.colorspace == 'LINEAR' or root_ch.type == 'NORMAL':
                 baked.color_space = 'NONE'
             else: baked.color_space = 'COLOR'
+        baked.interpolation = interpolation
         
         # Normal related nodes
         if root_ch.type == 'NORMAL':
@@ -1616,6 +1615,9 @@ def bake_channel(uv_map, mat, node, root_ch, width=1024, height=1024, target_lay
                 baked_disp.image.name = '____DISP_TEMP'
             else:
                 disp_img_name = tree.name + ' Displacement'
+
+            # Set interpolation to cubic
+            baked_disp.interpolation = 'Cubic'
 
             disp_img = img.copy()
             disp_img.name = disp_img_name
