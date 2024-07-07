@@ -8,6 +8,7 @@ from distutils.version import LooseVersion #, StrictVersion
 from .node_arrangements import *
 from .node_connections import *
 from .input_outputs import *
+from . import Bake
 
 def flip_tangent_sign():
     meshes = []
@@ -77,14 +78,23 @@ def convert_mix_nodes(tree):
         elif n.type == 'GROUP' and n.node_tree:
             convert_mix_nodes(n.node_tree)
 
-def update_tangent_process_300():
+def remove_tangent_sign_vcols(objs=None):
+    if not objs: objs = bpy.data.objects
+
+    for ob in objs:
+        vcols = get_vertex_colors(ob)
+        for vcol in reversed(vcols):
+            if vcol.name.startswith(TANGENT_SIGN_PREFIX):
+                print('INFO:', 'Vertex color "' + vcol.name + '" in', ob.name, 'is deleted!')
+                vcols.remove(vcol)
+
+def update_tangent_process(tree, lib_name):
 
     node_groups = []
 
-    for group in bpy.data.node_groups:
-        for node in group.nodes:
-            if node.type == 'GROUP' and node.node_tree and TANGENT_PROCESS in node.node_tree.name:
-                node_groups.append(node)
+    for node in tree.nodes:
+        if node.type == 'GROUP' and node.node_tree and node.node_tree.name.startswith(TANGENT_PROCESS):
+            node_groups.append(node)
 
     for ng in node_groups:
 
@@ -92,7 +102,7 @@ def update_tangent_process_300():
         ori_tree = ng.node_tree
 
         # Duplicate lib tree
-        ng.node_tree = get_node_tree_lib(TANGENT_PROCESS_300)
+        ng.node_tree = get_node_tree_lib(lib_name)
         duplicate_lib_node_tree(ng)
 
         print('INFO:', ori_tree.name, 'is replaced to', ng.node_tree.name + '!')
@@ -102,7 +112,11 @@ def update_tangent_process_300():
             if n.name.startswith('_'):
                 # Try to get the node on original tree
                 ori_n = ori_tree.nodes.get(n.name)
-                if ori_n: copy_node_props(ori_n, n)
+                if ori_n: 
+                    copy_node_props(ori_n, n)
+                    # There's need to manually copy uv_map prop because the node type can be different
+                    if hasattr(ori_n, 'uv_map') and hasattr(n, 'uv_map'):
+                        n.uv_map = ori_n.uv_map
 
         # Delete original tree
         bpy.data.node_groups.remove(ori_tree)
@@ -110,19 +124,14 @@ def update_tangent_process_300():
         # Create info frames
         create_info_nodes(ng.node_tree)
 
-    # Remove tangent sign vertex colors
-    for ob in bpy.data.objects:
-        vcols = get_vertex_colors(ob)
-        for vcol in reversed(vcols):
-            if vcol.name.startswith(TANGENT_SIGN_PREFIX):
-                print('INFO:', 'Vertex color "' + vcol.name + '" in', ob.name, 'is deleted!')
-                vcols.remove(vcol)
-
 def update_yp_tree(tree):
     cur_version = get_current_version_str()
     yp = tree.yp
 
-    update_happened = False
+    updated_to_tangent_process_300 = False
+    updated_to_yp_200_displacement = False
+
+    # SECTION I: Update based on yp version
 
     # Version 0.9.1 and above will fix wrong bake type stored on images bake type
     if LooseVersion(yp.version) < LooseVersion('0.9.1'):
@@ -137,23 +146,22 @@ def update_yp_tree(tree):
                         if label in source.image.name and source.image.y_bake_info.bake_type != type_name:
                             source.image.y_bake_info.bake_type = type_name
                             print('INFO: Bake type of', source.image.name, 'is fixed by setting it to', label + '!')
-                            update_happened = True
 
     # Version 0.9.2 and above will move mapping outside source group
     if LooseVersion(yp.version) < LooseVersion('0.9.2'):
 
         for layer in yp.layers:
-            tree = get_tree(layer)
+            ltree = get_tree(layer)
 
             mapping_replaced = False
 
             # Move layer mapping
             if layer.source_group != '':
-                group = tree.nodes.get(layer.source_group)
+                group = ltree.nodes.get(layer.source_group)
                 if group:
                     mapping_ref = group.node_tree.nodes.get(layer.mapping)
                     if mapping_ref:
-                        mapping = new_node(tree, layer, 'mapping', 'ShaderNodeMapping')
+                        mapping = new_node(ltree, layer, 'mapping', 'ShaderNodeMapping')
                         copy_node_props(mapping_ref, mapping)
                         group.node_tree.nodes.remove(mapping_ref)
                         set_uv_neighbor_resolution(layer) #, mapping=mapping)
@@ -163,11 +171,11 @@ def update_yp_tree(tree):
             # Move mask mapping
             for mask in layer.masks:
                 if mask.group_node != '':
-                    group = tree.nodes.get(mask.group_node)
+                    group = ltree.nodes.get(mask.group_node)
                     if group:
                         mapping_ref = group.node_tree.nodes.get(mask.mapping)
                         if mapping_ref:
-                            mapping = new_node(tree, mask, 'mapping', 'ShaderNodeMapping')
+                            mapping = new_node(ltree, mask, 'mapping', 'ShaderNodeMapping')
                             copy_node_props(mapping_ref, mapping)
                             group.node_tree.nodes.remove(mapping_ref)
                             set_uv_neighbor_resolution(mask) #, mapping=mapping)
@@ -177,7 +185,6 @@ def update_yp_tree(tree):
             if mapping_replaced:
                 reconnect_layer_nodes(layer)
                 rearrange_layer_nodes(layer)
-                update_happened = True
 
     # Version 0.9.3 and above will replace override color modifier with newer override system
     if LooseVersion(yp.version) < LooseVersion('0.9.3'):
@@ -192,7 +199,7 @@ def update_yp_tree(tree):
 
                 for j in reversed(mod_ids):
                     mod = ch.modifiers[j]
-                    tree = get_mod_tree(ch)
+                    mtree = get_mod_tree(ch)
 
                     ch.override = True
                     if root_ch.type == 'VALUE':
@@ -204,13 +211,19 @@ def update_yp_tree(tree):
                         ch.override_type = 'DEFAULT'
 
                     # Delete the nodes and modifier
-                    remove_node(tree, mod, 'oc')
+                    remove_node(mtree, mod, 'oc')
                     ch.modifiers.remove(j)
 
                 if mod_ids:
+
+                    # Update input value for version 2.0+
+                    if cur_version >= LooseVersion('2.0.0'):
+                        if root_ch.type == 'VALUE':
+                            set_entity_prop_value(ch, 'override_value', ch.override_value)
+                        else: set_entity_prop_value(ch, 'override_color', ch.override_color)
+
                     reconnect_layer_nodes(layer)
                     rearrange_layer_nodes(layer)
-                    update_happened = True
 
     # Version 0.9.4 and above will replace multipier modifier with math modifier
     if LooseVersion(yp.version) < LooseVersion('0.9.4'):
@@ -248,12 +261,12 @@ def update_yp_tree(tree):
             parent = parents[i]
             ch_type = types[i]
 
-            tree = get_mod_tree(parent)
+            mtree = get_mod_tree(parent)
 
             mod.name = 'Math'
             mod.type = 'MATH'
-            remove_node(tree, mod, 'multiplier')
-            math = new_node(tree, mod, 'math', 'ShaderNodeGroup', 'Math')
+            remove_node(mtree, mod, 'multiplier')
+            math = new_node(mtree, mod, 'math', 'ShaderNodeGroup', 'Math')
 
             if ch_type == 'VALUE':
                 math.node_tree = get_node_tree_lib(MOD_MATH_VALUE)
@@ -281,7 +294,6 @@ def update_yp_tree(tree):
                 rearrange_layer_nodes(layer)
             reconnect_yp_nodes(tree)
             rearrange_yp_nodes(tree)
-            update_happened = True
 
     # Version 0.9.5 and above have ability to use vertex color alpha on layer
     if LooseVersion(yp.version) < LooseVersion('0.9.5'):
@@ -299,7 +311,6 @@ def update_yp_tree(tree):
 
                 reconnect_layer_nodes(layer)
                 rearrange_layer_nodes(layer)
-                update_happened = True
 
     # Version 0.9.8 and above will use sRGB images by default
     if LooseVersion(yp.version) < LooseVersion('0.9.8'):
@@ -346,7 +357,6 @@ def update_yp_tree(tree):
             if image_found:
                 rearrange_layer_nodes(layer)
                 reconnect_layer_nodes(layer)
-                update_happened = True
 
     # Version 0.9.9 have separate normal and bump override
     if LooseVersion(yp.version) < LooseVersion('0.9.9'):
@@ -374,8 +384,6 @@ def update_yp_tree(tree):
                     # Copy active edit
                     ch.active_edit_1 = ch.active_edit
 
-                    update_happened = True
-
                     print('INFO:', layer.name, root_ch.name, 'now has separate override properties!')
 
     # Version 1.0.11 will make sure divider alpha node is connected correctly
@@ -387,7 +395,6 @@ def update_yp_tree(tree):
 
     # Version 1.2 will have mask inputs
     if LooseVersion(yp.version) < LooseVersion('1.2.0'):
-        update_happened = True
         for layer in yp.layers:
             for mask in layer.masks:
                 # Voronoi and noise default is using alpha/value input
@@ -396,7 +403,6 @@ def update_yp_tree(tree):
 
     # Version 1.2.4 has voronoi feature prop
     if LooseVersion(yp.version) < LooseVersion('1.2.4'):
-        update_happened = True
         for layer in yp.layers:
             if layer.type == 'VORONOI':
                 source = get_layer_source(layer)
@@ -428,7 +434,6 @@ def update_yp_tree(tree):
 
     # Version 1.2.5 fix end normal process
     if LooseVersion(yp.version) < LooseVersion('1.2.5'):
-        update_happened = True
         height_root_ch = get_root_height_channel(yp)
         if height_root_ch:
             check_start_end_root_ch_nodes(tree, height_root_ch)
@@ -443,7 +448,6 @@ def update_yp_tree(tree):
 
     # Version 1.2.9 will use cubic interpolation for bump map
     if LooseVersion(yp.version) < LooseVersion('1.2.9'):
-        update_happened = True
         height_root_ch = get_root_height_channel(yp)
         if height_root_ch:
             for layer in yp.layers:
@@ -451,84 +455,289 @@ def update_yp_tree(tree):
                 if height_ch and height_ch.enable:
                     update_layer_images_interpolation(layer, 'Cubic')
 
+    # Version 2.0 won't use custom prop for mapping and intensity
+    if LooseVersion(yp.version) < LooseVersion('2.0.0'):
+
+        # Update input outputs
+        check_all_channel_ios(yp)
+
+        height_root_ch = get_root_height_channel(yp)
+        if height_root_ch and height_root_ch.enable_subdiv_setup:
+
+            if height_root_ch.subdiv_adaptive:
+
+                # Set max height value
+                end_max_height = tree.nodes.get(height_root_ch.end_max_height)
+                if end_max_height:
+                    end_max_height.outputs[0].default_value /= 5.0
+
+                # Set normal scale
+                if height_root_ch.enable_smooth_bump:
+                    height_root_ch.enable_smooth_normal_tweak = True
+                    set_entity_prop_value(height_root_ch, 'smooth_normal_tweak', 5.0)
+
+            # Set displacement method
+            if not height_root_ch.subdiv_adaptive:
+                mats = get_all_materials_with_tree(tree)
+                for mat in mats:
+                    if hasattr(mat, 'displacement_method'):
+                        mat.displacement_method = 'BOTH'
+
+                    if is_greater_than_280():
+                        mat.cycles.displacement_method = 'BOTH'
+                    else: mat.cycles.displacement_method = 'TRUE'
+
+                # Update displacement connection
+                Bake.check_subdiv_setup(height_root_ch)
+
+                updated_to_yp_200_displacement = True
+
+        for layer in yp.layers:
+
+            # Update height distance since the scale is divided by 5 to match closer to blender bump node value
+            if height_root_ch:
+                height_ch = get_height_channel(layer)
+                if height_ch:
+                    if not yp.use_baked and not height_root_ch.enable_subdiv_setup:
+                        set_entity_prop_value(height_ch, 'bump_distance', height_ch.bump_distance*5.0)
+                        set_entity_prop_value(height_ch, 'normal_bump_distance', height_ch.normal_bump_distance*5.0)
+                        set_entity_prop_value(height_ch, 'transition_bump_distance', height_ch.transition_bump_distance*5.0)
+                    elif height_root_ch.subdiv_adaptive:
+                        set_entity_prop_value(height_ch, 'bump_distance', height_ch.bump_distance/5.0)
+                        set_entity_prop_value(height_ch, 'normal_bump_distance', height_ch.normal_bump_distance/5.0)
+                        set_entity_prop_value(height_ch, 'transition_bump_distance', height_ch.transition_bump_distance/5.0)
+
+            # Transfer channel intensity value to layer intensity value if there's only one enabled channel
+            enabled_channels = [c for c in layer.channels if c.enable]
+            if len(enabled_channels) == 1:
+                ch = enabled_channels[0]
+                ch_idx = get_layer_channel_index(layer, ch)
+                root_ch = yp.channels[ch_idx]
+
+                set_entity_prop_value(layer, 'intensity_value', ch.intensity_value)
+                set_entity_prop_value(ch, 'intensity_value', 1.0)
+
+                if len(ch.modifiers) == 0:
+                    layer.expand_channels = False
+
+                # Transfer fcurve
+                if tree.animation_data and tree.animation_data.action:
+                    fcs = tree.animation_data.action.fcurves
+                    for fc in fcs:
+                        m = re.match(r'yp\.layers\[(\d+)\]\.channels\[(\d+)\]\.intensity_value', fc.data_path)
+                        if m:
+                            mlayer = yp.layers[int(m.group(1))]
+                            mch = mlayer.channels[int(m.group(2))]
+                            if mch != ch: continue
+                            fc.data_path = 'yp.layers[' + m.group(1) + '].intensity_value'
+
+        # Subdiv tweak is no longer used
+        height_root_ch = get_root_height_channel(yp)
+        if height_root_ch and hasattr(height_root_ch, 'subdiv_tweak') and height_root_ch.subdiv_tweak != 1.0:
+            height_root_ch.enable_height_tweak = True
+            height_root_ch.height_tweak = height_root_ch.subdiv_tweak
+
+        # Check for mapping actions
+        if tree.animation_data and tree.animation_data.action:
+            fcs = tree.animation_data.action.fcurves
+            new_fcs = []
+            for fc in fcs:
+                #print(fc.data_path)
+
+                # New fcurve
+                nfc = None
+
+                # Get entity
+                mlayer = re.match(r'yp\.layers\[(\d+)\]\.+', fc.data_path)
+                mmask = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]\.+', fc.data_path)
+
+                if mlayer: entity = yp.layers[int(mlayer.group(1))]
+                if mmask: entity = yp.layers[int(mmask.group(1))].masks[int(mmask.group(2))]
+
+                # Match data path
+                m1 = re.match(r'yp\.layers\[(\d+)\]\.translation', fc.data_path)
+                m2 = re.match(r'yp\.layers\[(\d+)\]\.rotation', fc.data_path)
+                m3 = re.match(r'yp\.layers\[(\d+)\]\.scale', fc.data_path)
+                m4 = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]\.translation', fc.data_path)
+                m5 = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]\.rotation', fc.data_path)
+                m6 = re.match(r'yp\.layers\[(\d+)\]\.masks\[(\d+)\]\.scale', fc.data_path)
+
+                # Mapping
+                if m1 or m2 or m3 or m4 or m5 or m6:
+                    mapping = get_entity_mapping(entity)
+                    parent_node = mapping.id_data
+
+                    # Translation
+                    if m1 or m4:
+                        if is_greater_than_281():
+                            new_data_path = 'nodes["' + mapping.name + '"].inputs[1].default_value'
+                        else: new_data_path = 'nodes["' + mapping.name + '"].translation'
+
+                    # Rotation
+                    elif m2 or m5:
+                        if is_greater_than_281():
+                            new_data_path = 'nodes["' + mapping.name + '"].inputs[2].default_value'
+                        else: new_data_path = 'nodes["' + mapping.name + '"].rotation'
+
+                    # Scale
+                    else: #elif m3 or m6:
+                        if is_greater_than_281():
+                            new_data_path = 'nodes["' + mapping.name + '"].inputs[3].default_value'
+                        else: new_data_path = 'nodes["' + mapping.name + '"].scale'
+
+                    for i, kp in enumerate(fc.keyframe_points):
+
+                        # Set current frame and value
+                        #mapping.inputs[1].default_value[fc.array_index] = fc.evaluate(int(kp.co[0]))
+                        bpy.context.scene.frame_set(int(kp.co[0]))
+                        if m1 or m4: # Translation
+                            mapping.inputs[1].default_value[fc.array_index] = entity.translation[fc.array_index]
+                        elif m2 or m5: # Rotation
+                            mapping.inputs[2].default_value[fc.array_index] = entity.rotation[fc.array_index]
+                        elif m3 or m6: # Scale
+                            mapping.inputs[3].default_value[fc.array_index] = entity.scale[fc.array_index]
+
+                        # Insert keyframe
+                        parent_node.keyframe_insert(data_path=new_data_path, frame=int(kp.co[0]))
+
+                        # Get new fcurve
+                        if not nfc:
+                            nfc = [f for f in parent_node.animation_data.action.fcurves if f.data_path == new_data_path and f.array_index == fc.array_index][0]
+
+                        # Get new keyframe point
+                        nkp = nfc.keyframe_points[i]
+
+                        # Copy keyframe props
+                        copy_id_props(kp, nkp)
+
+                new_fcs.append(nfc)
+
+            for i, fc in reversed(list(enumerate(fcs))):
+
+                # Get new fcurve
+                nfc = new_fcs[i]
+                if not nfc: continue
+
+                # Copy modifiers
+                for mod in fc.modifiers:
+                    nmod = nfc.modifiers.new(type=mod.type)
+                    copy_id_props(mod, nmod)
+
+                # Copy fcurve props
+                #copy_id_props(fc, nfc)
+                nfc.mute = fc.mute
+                nfc.hide = fc.hide
+                nfc.extrapolation = fc.extrapolation
+                nfc.lock = fc.lock
+
+                # Remove original fcurve
+                fcs.remove(fc)
+
+    # SECTION II: Updates based on the blender version
+
+    # Blender 2.92 can finally access it's vertex color alpha
+    if is_greater_than_292() and (is_created_before_292() or LooseVersion(yp.blender_version) < LooseVersion('2.9.2')):
+        show_message = False
+        for layer in yp.layers:
+            # Update vcol layer to use alpha by reconnection
+            if layer.type == 'VCOL':
+                reconnect_layer_nodes(layer)
+                rearrange_layer_nodes(layer)
+                show_message = True
+
+        if show_message:
+            print("INFO: Now " + get_addon_title() + " is capable to use vertex paint alpha since Blender 2.92, Enjoy!")
+
+    # Blender 4.1 no longer has musgrave node
+    if is_greater_than_410() and (is_created_before_410() or LooseVersion(yp.blender_version) < LooseVersion('4.1.0')):
+        show_message = False
+            
+        for layer in yp.layers:
+            if layer.type == 'MUSGRAVE':
+                layer.type = 'NOISE'
+                show_message = True
+            for ch in layer.channels:
+                if ch.override_type == 'MUSGRAVE':
+                    ch.override_type = 'NOISE'
+                if ch.override_1_type == 'MUSGRAVE':
+                    ch.override_1_type = 'NOISE'
+            for mask in layer.masks:
+                if mask.type == 'MUSGRAVE':
+                    mask.type = 'NOISE'
+                    show_message = True
+
+        if show_message:
+            print("INFO: 'Musgrave' node is no longer available since Blender 4.1, converting it to 'Noise'..")
+
+    # SECTION III: Updates based on the blender version and yp version
+
+    # Version 1.1.0 and Blender 2.90 can hide default normal input
+    if is_greater_than_290() and (is_created_before_290() or 
+                                  LooseVersion(yp.blender_version) < LooseVersion('2.9.0') or 
+                                  LooseVersion(yp.version) < LooseVersion('1.1.0')
+                                  ):
+        height_root_ch = get_root_height_channel(yp)
+        if height_root_ch:
+            inp = get_tree_input_by_name(tree, height_root_ch.name)
+            if inp: 
+                inp.hide_value = True
+                print("INFO: " + tree.name + " Normal input is hidden since Blender 2.90!")
+
+    # Blender 3.4 and version 1.0.9 will make sure all mix node using the newest type
+    if LooseVersion(yp.version) < LooseVersion('1.0.9') and is_greater_than_340():
+        print('INFO:', 'Converting old mix rgb nodes to newer ones...')
+        convert_mix_nodes(tree)
+
+    # Version 1.0.12 will use newer tangent process nodes on Blender 3.0 or above
+    if is_greater_than_300() and (
+            LooseVersion(yp.version) < LooseVersion('1.0.12') or is_created_before_300() or LooseVersion(yp.blender_version) < LooseVersion('3.0.0')
+        ):
+        update_tangent_process(tree, TANGENT_PROCESS_300)
+        updated_to_tangent_process_300 = True
+
+    # Update tangent process from Blender 2.79 to 2.8x and 2.9x
+    if not is_greater_than_300() and is_greater_than_280() and (is_created_using_279() or LooseVersion(yp.blender_version) < LooseVersion('2.80.0')):
+        update_tangent_process(tree, TANGENT_PROCESS)
+
+    # Update blender version
+    if LooseVersion(yp.blender_version) < get_current_blender_version_str():
+        yp.blender_version = get_current_blender_version_str()
+
     # Update version
-    if update_happened or LooseVersion(yp.version) < LooseVersion(cur_version):
+    if LooseVersion(yp.version) < LooseVersion(cur_version):
         yp.version = cur_version
         print('INFO:', tree.name, 'is updated to version', cur_version)
+
+    return updated_to_tangent_process_300, updated_to_yp_200_displacement
 
 @persistent
 def update_routine(name):
     T = time.time()
 
-    # Flag to check mix nodes
-    need_to_check_mix_nodes = False
-    need_to_update_tangent_process_300 = False
+    # Flags
+    updated_to_tangent_process_300 = False
+    updated_to_yp_200_displacement = False
 
     for ng in bpy.data.node_groups:
         if not hasattr(ng, 'yp'): continue
         if not ng.yp.is_ypaint_node: continue
 
-        # Blender 3.4 and version 1.0.9 will make sure all mix node using the newest type
-        if LooseVersion(ng.yp.version) < LooseVersion('1.0.9') and is_greater_than_340():
-            need_to_check_mix_nodes = True
-
-        # Version 1.0.12 will use newer tangent process nodes on Blender 3.0 or above
-        if LooseVersion(ng.yp.version) < LooseVersion('1.0.12') and is_greater_than_300():
-            need_to_update_tangent_process_300 = True
-
         # Update yp trees
-        update_yp_tree(ng)
+        flag1, flag2 = update_yp_tree(ng)
+        if flag1: updated_to_tangent_process_300 = True
+        if flag2: updated_to_yp_200_displacement = True
 
-    # Actually check and convert old mix nodes
-    if need_to_check_mix_nodes:
-        print('INFO:', 'Converting old mix rgb nodes to newer ones...')
-        for mat in bpy.data.materials:
-            if mat.node_tree: convert_mix_nodes(mat.node_tree)
+    # Remove tangent sign vertex colors for Blender 3.0+
+    if updated_to_tangent_process_300:
+        remove_tangent_sign_vcols()
 
-    # Actually update tangent process
-    if need_to_update_tangent_process_300:
-        update_tangent_process_300()
-
-    # Special update for opening Blender below 2.92 file
-    if is_created_before_292() and is_greater_than_292():
-        show_message = False
-        for ng in bpy.data.node_groups:
-            if not hasattr(ng, 'yp'): continue
-            if not ng.yp.is_ypaint_node: continue
-            show_message = True
-            
-            for layer in ng.yp.layers:
-                # Update vcol layer to use alpha by reconnection
-                if layer.type == 'VCOL':
-                    reconnect_layer_nodes(layer)
-                    rearrange_layer_nodes(layer)
-
-        if show_message:
-            print("INFO: Now " + get_addon_title() + " capable to use vertex paint alpha since Blender 2.92, Enjoy!")
-
-    # Blender 4.10 no longer has musgrave node
-    if is_created_before_410() and is_greater_than_410():
-        show_message = False
-        for ng in bpy.data.node_groups:
-            if not hasattr(ng, 'yp'): continue
-            if not ng.yp.is_ypaint_node: continue
-            
-            for layer in ng.yp.layers:
-                if layer.type == 'MUSGRAVE':
-                    layer.type = 'NOISE'
-                    show_message = True
-                for ch in layer.channels:
-                    if ch.override_type == 'MUSGRAVE':
-                        ch.override_type = 'NOISE'
-                    if ch.override_1_type == 'MUSGRAVE':
-                        ch.override_1_type = 'NOISE'
-                for mask in layer.masks:
-                    if mask.type == 'MUSGRAVE':
-                        mask.type = 'NOISE'
-                        show_message = True
-
-        if show_message:
-            print("INFO: 'Musgrave' node is no longer available since Blender 4.1, converting it to 'Noise'..")
+    # Remove old displace modifiers from all objects
+    if updated_to_yp_200_displacement:
+        for obj in bpy.data.objects:
+            for mod in reversed(obj.modifiers):
+                if mod.type == 'DISPLACE' and mod.name.startswith('yP_Displace'):
+                    set_active_object(obj)
+                    bpy.ops.object.modifier_remove(modifier=mod.name)
 
     # Special update for opening Blender 2.79 file
     filepath = get_addon_filepath() + "lib.blend"
@@ -645,12 +854,7 @@ def update_routine(name):
         for ng in copied_groups:
             bpy.data.node_groups.remove(ng)
 
-    # Update to newer tangent process for files created using Blender 2.93 or older
-    if not is_created_using_279() and is_created_before_300() and is_greater_than_300():
-        update_tangent_process_300()
-
     print('INFO: ' + get_addon_title() + ' update routine are done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
-
 
 def get_inside_group_update_names(tree, update_names):
 
@@ -1009,10 +1213,29 @@ def update_node_tree_libs(name):
 
     print('INFO: ' + get_addon_title() + ' Node group libraries are checked at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
 
+class YUpdateYPTrees(bpy.types.Operator):
+    bl_idname = "node.y_update_yp_trees"
+    bl_label = "Update " + get_addon_title() + " Node Groups"
+    bl_description = "Update " + get_addon_title() + " node groups to newest version"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node()
+
+    def execute(self, context):
+        update_node_tree_libs('')
+        update_routine('')
+        return {'FINISHED'}
+
 def register():
+    bpy.utils.register_class(YUpdateYPTrees)
+
     bpy.app.handlers.load_post.append(update_node_tree_libs)
     bpy.app.handlers.load_post.append(update_routine)
 
 def unregister():
+    bpy.utils.unregister_class(YUpdateYPTrees)
+
     bpy.app.handlers.load_post.remove(update_node_tree_libs)
     bpy.app.handlers.load_post.remove(update_routine)
