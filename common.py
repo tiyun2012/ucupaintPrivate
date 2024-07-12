@@ -750,14 +750,15 @@ def get_node_input_index(node, inp):
 
     return index
 
-def get_active_material():
+def get_active_material(obj=None):
     scene = bpy.context.scene
     engine = scene.render.engine
-    obj = None
-    if hasattr(bpy.context, 'object'):
-        obj = bpy.context.object
-    elif is_greater_than_280():
-        obj = bpy.context.view_layer.objects.active
+
+    if not obj:
+        if hasattr(bpy.context, 'object'):
+            obj = bpy.context.object
+        elif is_greater_than_280():
+            obj = bpy.context.view_layer.objects.active
 
     if not obj: return None
 
@@ -1156,11 +1157,11 @@ def get_active_node():
 
 # Specific methods for this addon
 
-def get_active_ypaint_node():
+def get_active_ypaint_node(obj=None):
     ypui = bpy.context.window_manager.ypui
 
     # Get material UI prop
-    mat = get_active_material()
+    mat = get_active_material(obj)
     if not mat or not mat.node_tree: 
         ypui.active_mat = ''
         return None
@@ -3275,22 +3276,29 @@ def refresh_temp_uv(obj, entity):
     else: return False
 
     uv_layers = get_uv_layers(obj)
+    layer_uv_name = layer.baked_uv_name if layer.use_baked and layer.baked_uv_name != '' else layer.uv_name
+    layer_uv = uv_layers.get(layer_uv_name)
 
-    if m3:
-        entity_uv = uv_layers.get(layer.uv_name)
+    if m1 or m3:
+        entity_uv = layer_uv
     else:
         uv_name = entity.baked_uv_name if entity.use_baked and entity.baked_uv_name != '' else entity.uv_name
         entity_uv = uv_layers.get(uv_name)
 
         if not entity_uv: 
-            return False
+            entity_uv = layer_uv
+
+    if not entity_uv: 
+        return False
 
     # Set active uv
     if uv_layers.active != entity_uv:
-        try: uv_layers.active = entity_uv
-        except: print('EXCEPTIION: Cannot set active uv!')
-        try: entity_uv.active_render = True
-        except: print('EXCEPTIION: Cannot set active uv render!')
+        if uv_layers.active != entity_uv:
+            try: uv_layers.active = entity_uv
+            except: print('EXCEPTIION: Cannot set active uv!')
+        if not entity_uv.active_render:
+            try: entity_uv.active_render = True
+            except: print('EXCEPTIION: Cannot set active uv render!')
 
     if m3 and entity.override_type != 'IMAGE':
         remove_temp_uv(obj, entity)
@@ -4430,8 +4438,11 @@ def set_active_vertex_color(obj, vcol):
             # HACK: Baking to vertex color still use active legacy vertex colors data
             if hasattr(obj.data, 'vertex_colors'):
                 v = obj.data.vertex_colors.get(vcol.name)
-                obj.data.vertex_colors.active = v
-        else: obj.data.vertex_colors.active = vcol
+                if obj.data.vertex_colors.active != v:
+                    obj.data.vertex_colors.active = v
+        else: 
+            if obj.data.vertex_colors.active != vcol:
+                obj.data.vertex_colors.active = vcol
     except Exception as e: print(e)
 
 def new_vertex_color(obj, name, data_type='BYTE_COLOR', domain='CORNER'):
@@ -4461,15 +4472,15 @@ def get_default_uv_name(obj, yp=None):
 
 def get_relevant_uv(obj, yp):
     try: layer = yp.layers[yp.active_layer_index]
-    except: return None
+    except: return ''
 
-    uv_name = layer.uv_name
+    uv_name = layer.baked_uv_name if layer.use_baked and layer.baked_uv_name != '' else layer.uv_name
 
     for mask in layer.masks:
         if mask.active_edit:
-            if mask.type == 'IMAGE':
+            if is_mask_using_vector(mask):
                 active_mask = mask
-                uv_name = mask.uv_name
+                uv_name = mask.baked_uv_name if mask.use_baked and mask.baked_uv_name != '' else mask.uv_name
 
     return uv_name 
 
@@ -4618,6 +4629,7 @@ def get_active_image_and_stuffs(obj, yp):
     uv_name = ''
     vcol = None
     src_of_img = None
+    entity = None
     mapping = None
 
     vcols = get_vertex_colors(obj)
@@ -4632,6 +4644,7 @@ def get_active_image_and_stuffs(obj, yp):
 
             uv_name = mask.uv_name if not mask.use_baked or mask.baked_uv_name == '' else mask.baked_uv_name
             mapping = get_mask_mapping(mask, get_baked=mask.use_baked)
+            entity = mask
 
             if mask.use_baked and baked_source:
                 if baked_source.image:
@@ -4653,6 +4666,7 @@ def get_active_image_and_stuffs(obj, yp):
         if ch.active_edit and ch.override and ch.override_type != 'DEFAULT':
             #source = tree.nodes.get(ch.source)
             source = get_channel_source(ch, layer)
+            entity = ch
 
             if ch.override_type == 'IMAGE':
                 uv_name = layer.uv_name
@@ -4665,6 +4679,7 @@ def get_active_image_and_stuffs(obj, yp):
 
         if ch.active_edit_1 and ch.override_1 and ch.override_1_type != 'DEFAULT':
             source = tree.nodes.get(ch.source_1)
+            entity = ch
 
             if ch.override_1_type == 'IMAGE':
                 uv_name = layer.uv_name
@@ -4672,6 +4687,9 @@ def get_active_image_and_stuffs(obj, yp):
                 image = source_1.image
                 src_of_img = ch
                 mapping = get_layer_mapping(layer)
+
+    if not entity: 
+        entity = layer
 
     if not image and layer.type == 'IMAGE':
         uv_name = layer.uv_name
@@ -4684,7 +4702,7 @@ def get_active_image_and_stuffs(obj, yp):
         source = get_layer_source(layer, tree)
         vcol = vcols.get(get_source_vcol_name(source))
 
-    return image, uv_name, src_of_img, mapping, vcol
+    return image, uv_name, src_of_img, entity, mapping, vcol
 
 def set_active_uv_layer(obj, uv_name):
     uv_layers = get_uv_layers(obj)
@@ -5311,6 +5329,12 @@ def is_layer_using_vector(layer):
     for ch in layer.channels:
         if ch.override and ch.override_type not in {'VCOL', 'DEFAULT'}:
             return True
+
+    return False
+
+def is_mask_using_vector(mask):
+    if mask.use_baked or mask.type not in {'VCOL', 'BACKGROUND', 'COLOR', 'COLOR_ID', 'HEMI', 'OBJECT_INDEX', 'BACKFACE', 'EDGE_DETECT', 'MODIFIER'}:
+        return True
 
     return False
 
