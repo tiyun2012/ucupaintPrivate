@@ -2544,7 +2544,9 @@ def update_active_yp_channel(self, context):
             baked_uv_map = uv_layers.get(yp.baked_uv_name)
             if baked_uv_map: 
                 uv_layers.active = baked_uv_map
-                baked_uv_map.active_render = True
+                # NOTE: Blender 2.90 or lower need to use active render so the UV in image editor paint mode is updated
+                if not is_greater_than_291():
+                    baked_uv_map.active_render = True
 
 def update_layer_index(self, context):
     #T = time.time()
@@ -3709,6 +3711,8 @@ class YPaintObjectProps(bpy.types.PropertyGroup):
     ori_mirror_offset_v = FloatProperty(default=0.0)
     ori_offset_u = FloatProperty(default=0.0)
     ori_offset_v = FloatProperty(default=0.0)
+
+    mesh_hash = StringProperty(default='')
 
 #class YPaintMeshProps(bpy.types.PropertyGroup):
 #    parallax_scale_min = FloatProperty(default=0.0)

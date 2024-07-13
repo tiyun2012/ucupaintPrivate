@@ -1,4 +1,4 @@
-import bpy, numpy
+import bpy, numpy, time
 from . import lib
 from .common import *
 from .bake_common import *
@@ -220,7 +220,7 @@ def bake_multires_image(obj, image, uv_name, intensity=1.0):
     node = get_active_ypaint_node(obj)
     if node:
         yp = node.node_tree.yp
-        if is_multi_vdm_used(yp):
+        if is_multi_disp_used(yp):
             layer_disabled_vdm_image = get_combined_vdm_image(obj, uv_name, width=image.size[0], height=image.size[1], disable_current_layer=True)
 
     set_active_object(obj)
@@ -231,6 +231,18 @@ def bake_multires_image(obj, image, uv_name, intensity=1.0):
         bpy.ops.object.select_all(action='DESELECT')
     if not obj.select_get():
         set_object_select(obj, True)
+
+    # Disable other modifiers
+    ori_mod_show_viewport = []
+    ori_mod_show_render = []
+    for mod in obj.modifiers:
+        if mod.type == 'MULTIRES' or mod.type == 'SUBSURF': continue
+        if mod.show_viewport:
+            mod.show_viewport = False
+            ori_mod_show_viewport.append(mod.name)
+        if mod.show_render:
+            mod.show_render = False
+            ori_mod_show_render.append(mod.name)
 
     # Temp object 0: Base
     temp0 = obj.copy()
@@ -324,13 +336,20 @@ def bake_multires_image(obj, image, uv_name, intensity=1.0):
     remove_mesh_obj(temp0)
     remove_mesh_obj(temp2)
     if temp1: remove_mesh_obj(temp1)
-    bpy.data.images.remove(tanimage)
-    bpy.data.images.remove(bitimage)
+    #bpy.data.images.remove(tanimage)
+    #bpy.data.images.remove(bitimage)
     if layer_disabled_vdm_image:
         bpy.data.images.remove(layer_disabled_vdm_image)
 
     # Remove material
     if mat.users <= 1: bpy.data.materials.remove(mat, do_unlink=True)
+
+    # Recover disabled modifiers
+    for mod in obj.modifiers:
+        if mod.name in ori_mod_show_viewport:
+            mod.show_viewport = True
+        if mod.name in ori_mod_show_render:
+            mod.show_render = True
 
     # Set back object to active
     set_active_object(obj)
@@ -464,6 +483,18 @@ def get_tangent_bitangent_images(obj, uv_name):
     tanimage = bpy.data.images.get(tanimage_name)
     bitimage = bpy.data.images.get(bitimage_name)
 
+    # Check mesh hash
+    mh = get_mesh_hash(obj)
+    if obj.yp.mesh_hash != mh:
+        obj.yp.mesh_hash = mh
+
+        # Remove current images if hash doesn't match
+        if tanimage: bpy.data.images.remove(tanimage)
+        if bitimage: bpy.data.images.remove(bitimage)
+
+        tanimage = None
+        bitimage = None
+
     if not tanimage or not bitimage:
         context = bpy.context
         scene = context.scene 
@@ -565,10 +596,9 @@ def get_tangent_bitangent_images(obj, uv_name):
             # Remove temp mat
             if mat.users <= 1: bpy.data.materials.remove(mat, do_unlink=True)
 
-        # Pack tangent and bitangent images
-        #tanimage.pack()
-        #bitimage.pack()
-
+        # Pack tangent and bitangent images so they won't lost their data
+        tanimage.pack()
+        bitimage.pack()
         #tanimage.use_fake_user=True
         #bitimage.use_fake_user=True
 
@@ -590,7 +620,7 @@ def get_vdm_intensity(layer, ch):
     ch_strength = get_entity_prop_value(ch, 'vdisp_strength')
     return layer_intensity * ch_intensity * ch_strength
 
-def is_multi_vdm_used(yp):
+def is_multi_disp_used(yp):
 
     num_disps = 0
 
@@ -614,6 +644,8 @@ class YSculptImage(bpy.types.Operator):
         return get_active_ypaint_node() and context.object and context.object.type == 'MESH' and hasattr(context, 'image') and context.image
 
     def execute(self, context):
+        T = time.time()
+
         mat = get_active_material()
         obj = context.object
         scene = context.scene
@@ -649,7 +681,7 @@ class YSculptImage(bpy.types.Operator):
 
         # Get combined VDM image
         combined_vdm_image = None
-        if is_multi_vdm_used(yp):
+        if is_multi_disp_used(yp):
             combined_vdm_image = get_combined_vdm_image(obj, uv_name, width=image.size[0], height=image.size[1])
 
         # Enable sculpt mode to disable all vector displacement layers
@@ -745,8 +777,8 @@ class YSculptImage(bpy.types.Operator):
 
         # Remove temp data
         remove_mesh_obj(temp) 
-        bpy.data.images.remove(tanimage)
-        bpy.data.images.remove(bitimage)
+        #bpy.data.images.remove(tanimage)
+        #bpy.data.images.remove(bitimage)
         bpy.data.node_groups.remove(vdm_loader)
         if combined_vdm_image:
             bpy.data.images.remove(combined_vdm_image)
@@ -765,6 +797,8 @@ class YSculptImage(bpy.types.Operator):
 
         bpy.ops.object.mode_set(mode='SCULPT')
 
+        print('INFO: Sculpt mode is entered at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+
         return {'FINISHED'}
 
 class YApplySculptToImage(bpy.types.Operator):
@@ -778,6 +812,8 @@ class YApplySculptToImage(bpy.types.Operator):
         return get_active_ypaint_node()
 
     def execute(self, context):
+        T = time.time()
+
         obj = context.object
         node = get_active_ypaint_node()
         tree = node.node_tree
@@ -824,6 +860,8 @@ class YApplySculptToImage(bpy.types.Operator):
         if space.type == 'VIEW_3D' and space.shading.type not in {'MATERIAL', 'RENDERED'}:
             space.shading.type = 'MATERIAL'
 
+        print('INFO: Applying sculpt to VDM is done at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
+
         return {'FINISHED'}
 
 class YCancelSculptToImage(bpy.types.Operator):
@@ -867,12 +905,41 @@ class YCancelSculptToImage(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class YFixVDMMismatchUV(bpy.types.Operator):
+    bl_idname = "object.y_fix_vdm_missmatch_uv"
+    bl_label = "Fix Missmatch VDM UV"
+    bl_description = "Active VDM layer has different UV than the active render UV, use this operator to fix it"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_active_ypaint_node()
+
+    def execute(self, context):
+        obj = context.object
+        mat = get_active_material(obj)
+        node = get_active_ypaint_node()
+        yp = node.node_tree.yp
+        layer = yp.layers[yp.active_layer_index]
+
+        # Set uv map active render
+        objs = get_all_objects_with_same_materials(mat)
+        for obj in objs:
+            uv_layers = get_uv_layers(obj)
+            uv = uv_layers.get(layer.uv_name)
+            if uv and not uv.active_render:
+                uv.active_render = True
+
+        return {'FINISHED'}
+
 def register():
     bpy.utils.register_class(YSculptImage)
     bpy.utils.register_class(YApplySculptToImage)
     bpy.utils.register_class(YCancelSculptToImage)
+    bpy.utils.register_class(YFixVDMMismatchUV)
 
 def unregister():
     bpy.utils.unregister_class(YSculptImage)
     bpy.utils.unregister_class(YApplySculptToImage)
     bpy.utils.unregister_class(YCancelSculptToImage)
+    bpy.utils.unregister_class(YFixVDMMismatchUV)

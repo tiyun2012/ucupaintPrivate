@@ -106,7 +106,7 @@ def add_new_layer(group_tree, layer_name, layer_type, channel_idx,
     # Add layer to group
     layer = yp.layers.add()
     layer.type = layer_type
-    layer.name = layer_name
+    layer.name = get_unique_name(layer_name, yp.layers)
     layer.uv_name = uv_name
     check_uvmap_on_other_objects_with_same_mat(mat, uv_name)
 
@@ -539,7 +539,8 @@ class YNewVDMLayer(bpy.types.Operator):
             description='Enable Displacement Setup on Normal channel',
             default=True)
 
-    uv_map = StringProperty(default='', update=update_new_layer_uv_map)
+    # NOTE: UDIM is not supported yet, so no UDIM checking
+    uv_map = StringProperty(default='') #, update=update_new_layer_uv_map)
     uv_map_coll = CollectionProperty(type=bpy.types.PropertyGroup)
 
     @classmethod
@@ -561,7 +562,8 @@ class YNewVDMLayer(bpy.types.Operator):
             self.width = self.height = ypup.default_new_image_size
 
         # Set default UV name
-        uv_name = get_default_uv_name(obj, yp)
+        #uv_name = get_default_uv_name(obj, yp)
+        uv_name = get_active_render_uv(obj)
         self.uv_map = uv_name
 
         # UV Map collections update
@@ -575,6 +577,7 @@ class YNewVDMLayer(bpy.types.Operator):
     def draw(self, context):
 
         yp = self.yp
+        first_vdm = get_first_vdm_layer(yp)
 
         row = split_layout(self.layout, 0.4)
 
@@ -592,9 +595,15 @@ class YNewVDMLayer(bpy.types.Operator):
         col.prop(self, 'width', text='')
         col.prop(self, 'height', text='')
         col.prop(self, 'blend_type', text='')
-        col.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
+        if not first_vdm:
+            col.prop_search(self, "uv_map", self, "uv_map_coll", text='', icon='GROUP_UVS')
+        else:
+            col.label(text=self.uv_map + '*') # + ' (used by other VDM)')
+            self.layout.label(text='* Only one UV Map is currently supported')
 
-        col.prop(self, 'use_udim')
+        # NOTE: UDIM is not supported yet
+        if False:
+            col.prop(self, 'use_udim')
 
         height_root_ch = get_root_height_channel(yp)
         if height_root_ch and not height_root_ch.enable_subdiv_setup:
@@ -609,6 +618,9 @@ class YNewVDMLayer(bpy.types.Operator):
         node = self.node
         yp = self.yp
 
+        mat = get_active_material()
+        objs = get_all_objects_with_same_materials(mat)
+
         height_root_ch = get_root_height_channel(yp)
         if not height_root_ch:
             self.report({'ERROR'}, "There should be a normal channel!")
@@ -619,8 +631,6 @@ class YNewVDMLayer(bpy.types.Operator):
         color = (0,0,0,0)
 
         if self.use_udim:
-            mat = get_active_material()
-            objs = get_all_objects_with_same_materials(mat)
             tilenums = UDIM.get_tile_numbers(objs, self.uv_map)
 
             img = bpy.data.images.new(name=self.name, width=self.width, height=self.height, 
@@ -668,6 +678,13 @@ class YNewVDMLayer(bpy.types.Operator):
         ch = layer.channels[channel_idx]
         ch.expand_content = True
         ypui.need_update = True
+
+        # Set uv map active render
+        for obj in objs:
+            uv_layers = get_uv_layers(obj)
+            uv = uv_layers.get(self.uv_map)
+            if uv and not uv.active_render:
+                uv.active_render = True
 
         print('INFO: VDM Layer', layer.name, 'is created at', '{:0.2f}'.format((time.time() - T) * 1000), 'ms!')
         wm.yptimer.time = str(time.time())
@@ -4488,6 +4505,9 @@ def update_uv_name(self, context):
         else:
             uv_layers = get_uv_layers(obj)
             uv_layers.active = uv_layers.get(layer.uv_name)
+
+            if is_layer_vdm(layer):
+                uv_layers.active.active_render = True
 
         # Check for other objects with same material
         check_uvmap_on_other_objects_with_same_mat(mat, layer.uv_name)
