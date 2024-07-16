@@ -492,6 +492,9 @@ PARALLAX_DELTA_PREFIX = 'Parallax Delta '
 PARALLAX_CURRENT_PREFIX = 'Parallax Current '
 PARALLAX_CURRENT_MIX_PREFIX = 'Parallax Current Mix '
 
+CACHE_TANGENT_IMAGE_SUFFIX = '_YP_CACHE_TANGENT'
+CACHE_BITANGENT_IMAGE_SUFFIX = '_YP_CACHE_BITANGENT'
+
 GAMMA = 2.2
 
 def versiontuple(v):
@@ -5029,6 +5032,17 @@ def any_layers_using_bump_map(root_ch):
     for layer in yp.layers:
         if is_layer_using_bump_map(layer, root_ch):
             return True
+
+    return False
+
+def any_layers_using_displacement(root_ch):
+    if any_layers_using_bump_map(root_ch):
+        return True
+
+    yp = root_ch.id_data.yp
+    vdm_layer = get_first_vdm_layer(yp)
+    if vdm_layer: 
+        return True
 
     return False
 
